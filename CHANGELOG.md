@@ -10,6 +10,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 
 ### Added
 
+#### Slice B, Step B3: Geometric Spot Diagrams & Transverse Ray Aberration Fans (`optics-core`, `optics-zemax`)
+- **Pupil Distribution Sampling (`optics-core::analysis`):**
+  - `PupilPattern` supporting `Hexapolar`, `Rectangular`, and `Cross` sampling grids in normalized pupil coordinates $(P_x, P_y) \in [-1, 1]$ with $P_x^2 + P_y^2 \le 1$.
+  - Exact hexapolar ring count formulation ($N = 1 + 3 R (R + 1)$) generating uniformly distributed hexagonal rings with 6-fold radial symmetry.
+  - `launch_pupil_ray` launching real 3D rays from field angles $(H_x, H_y)$ through normalized pupil coordinates $(P_x, P_y)$ targeted at the paraxial entrance pupil.
+- **Geometric Spot Diagram Analyzer (`optics-core::analysis`):**
+  - `trace_spot_diagram` tracing multi-ring pupil grids through sequential systems to the image sensor plane.
+  - Statistical spot metrics via `spot_diagram_metrics`: centroid coordinates $(\bar{x}, \bar{y})$, RMS blur radius $\sigma_r = \sqrt{\frac{1}{N} \sum (x_i - \bar{x})^2 + (y_i - \bar{y})^2}$, geometric 100% enclosure radius, and Airy disk diffraction limit ($r_{\text{Airy}} = 1.22 \lambda F/\#$).
+  - Diffraction-limited criterion check ($\text{RMS} \le r_{\text{Airy}}$).
+- **Transverse Ray Aberration Fans (`optics-core::analysis`):**
+  - `trace_ray_fan` evaluating transverse ray aberration errors $\epsilon_y(P_y)$ (tangential fan, $P_x = 0$) and $\epsilon_x(P_x)$ (sagittal fan, $P_y = 0$) relative to the chief ray in micrometers ($\mu\text{m}$).
+  - Chief ray intersection determination and per-ray aperture vignetting detection.
+- **Analytical & System Invariant Validations:**
+  - Plano-hyperbolic Cartesian aplanat ($k = -n^2$): verified exact geometric stigmatism with spot RMS radius $< 10^{-6}\,\mu\text{m}$ and zero transverse ray aberration.
+  - Spherical singlet cubic aberration scaling: verified odd tangential symmetry ($\epsilon_y(-P_y) = -\epsilon_y(P_y)$) and cubic $P_y^3$ scaling ($\approx 8\times$ ratio between $P_y = 1.0$ and $P_y = 0.5$).
+  - Chromatic ray fan slope difference: verified blue Fraunhofer F ($486.13\,\text{nm}$) ray fan lands below red Fraunhofer C ($656.27\,\text{nm}$) on paraxial d-focus, confirming positive longitudinal chromatic aberration.
+  - Cooke Triplet F/4.5 ($f = 50\,\text{mm}$): verified on-axis RMS blur ($\approx 19.5\,\mu\text{m}$) and off-axis ($14^\circ$) spot diagram with physical vignetting ($83 / 127$ hexapolar rays passing without barrel clipping, $\approx 65.4\%$ transmission).
+
 #### Slice B, Step B2: Zemax `.zmx` Parser & Canonical Presets (`optics-zemax`, `optics-glass`)
 - **Zemax .zmx Format Parser (`optics-zemax::parser`):**
   - Robust parser `parse_zmx` supporting standard Zemax operands: `NAME`, `ENPD`, `FNUM`, `WAVL`, `WAVM`, `PWAV`, `FTYP`, `YFLD`, `YFLN`, `SURF`, `TYPE`, `CURV`, `DISZ`, `GLAS`, `DIAM`, `CONI`, `STOP`.
