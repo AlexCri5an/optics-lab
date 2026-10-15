@@ -1,6 +1,6 @@
 # OpticsLab — Master Implementation Plan & Task List
 
-> **Status:** Phase 1 ✅ complete. Phase 2.1–2.3, 2.8, 2.9 ✅ complete. Phase 3.1–3.2, 3.4 ✅ complete. Phase 4.1–4.3 (embedded catalog & verified presets) ✅ complete.
+> **Status:** Phase 1 ✅ complete. Phase 2.1–2.3, 2.8, 2.9 ✅ complete. Phase 3.1–3.2, 3.4 ✅ complete. Phase 4.1–4.3 ✅ complete. Slice A UI Step A1 (9.1 theme, 9.3 2D canvas, 9.4 tool strip, 9.5 ray inspector, native app, local web build via trunk) ✅ complete.
 >
 > Legend: `[ ]` = todo · `[x]` = done · `[~]` = in progress · `[-]` = deferred
 
@@ -388,11 +388,11 @@
 > Source: RE Doc 06, `vectorcraft/crates/ui-egui/`
 
 ### 9.1 Design Tokens (Theme System)
-- [ ] `struct OpticsTokens { panel_bg, canvas_bg, text_primary, text_dim, ray_primary, ray_reflection, ray_refraction, ray_tir, bvh_heat_cold, bvh_heat_hot, border, accent }` (egui `Color32`)
-- [ ] `enum ThemeBrightness { Dark, MediumDark, MediumLight, Light }`
-- [ ] `fn tokens_for_brightness(b: ThemeBrightness) -> OpticsTokens` — 4 complete palettes
-- [ ] Default: `MediumDark` — dark slate `#1a1f2e`, vivid cyan accent `#00d4f5`, amber highlights `#f5a623`
-- [ ] `fn apply_tokens(ctx: &egui::Context, tokens: &OpticsTokens)` — push `egui::Style`
+- [x] `struct OpticsTokens { panel_bg, canvas_bg, text_primary, text_dim, border, accent, amber, ... }` (egui `Color32`)
+- [ ] `enum ThemeBrightness { Dark, MediumDark, MediumLight, Light }` (deferred to Slice D)
+- [ ] `fn tokens_for_brightness(b: ThemeBrightness) -> OpticsTokens` — 4 complete palettes (deferred to Slice D)
+- [x] Default: `MediumDark` — dark slate `#1a1f2e`, canvas `#11141a`, vivid cyan accent `#00d4f5`, amber highlights `#f5a623` (WCAG AA compliant)
+- [x] `fn apply_tokens(ctx: &egui::Context, tokens: &OpticsTokens)` — push `egui::Style`
 
 ### 9.2 Dockable Panel System
 - [ ] `struct DockState { layout: DockLayout, active_panel: Option<PanelId> }`
@@ -402,25 +402,25 @@
 - [ ] Collapsible panels with animated open/close transition
 
 ### 9.3 Central Canvas Widget (Slice A: 2D Canvas via egui Painter)
-- [ ] `struct CanvasState { pan_offset: egui::Vec2, zoom: f32, dragging: bool, selected_ray_index: Option<usize>, hovered_ray_index: Option<usize> }`
-- [ ] 2D scene canvas (prism, light, rays) drawn directly with egui's `Painter` (zero wgpu texture, no 3D viewer in Slice A)
-- [ ] Pan: middle-mouse drag or Alt+drag; Zoom: scroll wheel (smooth logarithmic zoom centered on cursor)
-- [ ] Click-to-select a ray by nearest-segment hit test; hover to highlight trajectory
+- [x] `struct CanvasState` / `ViewTransform` (world <-> screen, pan, cursor-anchored zoom, margin auto-fit)
+- [x] 2D scene canvas (prism, light, rays) drawn directly with egui's `Painter` (zero wgpu texture, no 3D viewer in Slice A)
+- [x] Pan: middle-mouse drag or Alt+drag; Zoom: scroll wheel (smooth zoom centered on cursor)
+- [x] Click-to-select a ray by nearest-segment hit test; hover to highlight trajectory; Esc to deselect
 - [ ] Diagnostic overlay selector: Normal 2D / Spectral view
 - [ ] [Slice C] Blit GPU texture from wgpu path tracer to egui `Image` with 3D camera and BVH heatmap overlay
 
 ### 9.4 Left Tool Palette
-- [ ] Select tool (S)
-- [ ] Ray Inspector Probe tool (I) — click-to-inspect single ray
+- [x] Select tool (S)
+- [x] Ray Inspector Probe tool (I) — click-to-inspect single ray (active by default; planned tools disabled with tooltip "Coming later")
 - [ ] Lens Surface tool (L) — add/move lens elements in 2D paraxial view
 - [ ] Light Source tool (E) — add point/area/directional emitters
 - [ ] Measure tool (M) — distance, angle, focal point probe
 - [ ] Tool palette icons — SVG inline or egui `TextureId` bitmaps
 
 ### 9.5 Right Inspector Panel Tabs
-- [ ] **Tab: Single-Ray Inspector (Slice A)**
-  - [ ] Per-bounce table from `RayBounce`: Surface #, Snell angle θi/θt (°), n1/n2, Rs, Rp, R total, T total, TIR flag
-  - [ ] Wavelength readout, color swatch (via `display_color_for_wavelength`), and total angular deviation
+- [x] **Tab: Single-Ray Inspector (Slice A)**
+  - [x] Per-bounce table from `RayBounce`: Surface #, Snell angle θi/θt (°), n1/n2, Rs, Rp, R total, T total, TIR flag
+  - [x] Wavelength readout, color swatch (via `display_color_for_wavelength`), and total angular deviation
   - [ ] [Slice C] 3D trajectory mini-viewer (embedded wgpu sub-view) and energy pie chart
 - [ ] **Tab: Lens Prescription Editor**
   - [ ] Editable data table: Surface, Type, Radius (mm), Thickness (mm), Glass, Semi-Diam (mm), Stop
@@ -663,11 +663,11 @@
 - [x] Phase 3.1–3.2: Sellmeier formula 1 & Abbe Vd
 - [x] Phase 3.4: CIE 1931 XYZ, piecewise IEC 61966-2-1 sRGB, D65 SPD, `display_color_for_wavelength`
 - [x] Phase 4.1–4.3: Embedded glass catalog (646 glasses) & verified presets (N-BK7, SF11, F2, Fused Silica, Air)
-- [ ] Phase 9.1: Design tokens & theme palette
-- [ ] Phase 9.3: Central 2D scene canvas (prism, light, rays) via egui `Painter`
-- [ ] Phase 9.5: Single-Ray Inspector tab (click-to-select ray by nearest segment, per-bounce table from `RayBounce`, angle readouts)
-- [ ] Phase 12.1 & 12.1b: WebAssembly deployment via `trunk` & GitHub Pages deployment
-- [ ] Phase 15.5 & 15.5b: Slice A public release `v0.1.0-alpha` and macOS `.app`/`.dmg` packaging
+- [x] Phase 9.1: Design tokens & theme palette (MediumDark, WCAG AA verified)
+- [x] Phase 9.3: Central 2D scene canvas (prism, light, rays) via egui `Painter`
+- [x] Phase 9.5: Single-Ray Inspector tab (click-to-select ray by nearest segment, per-bounce table from `RayBounce`, angle readouts)
+- [~] Phase 12.1: Local WebAssembly build via `trunk` (verified locally; release wasm: 3.20 MB raw / 1.44 MB gzip; GitHub Pages deployment deferred per rules)
+- [ ] Phase 15.5 & 15.5b: Slice A public release `v0.1.0-alpha` and macOS `.app`/`.dmg` packaging (deferred to final release phase per rules)
 
 ### Slice B — Lens Systems & Sequential Diagnostics
 > Goal: Load Zemax Cooke Triplet and Double Gauss prescriptions, trace marginal/chief paraxial rays, and render 2D spot diagrams and ray fans.
@@ -697,5 +697,5 @@
 
 ---
 
-> **Next action:** Implement Slice A UI: Phase 9.1 (design tokens & theme palette) + Phase 9.3 (2D scene canvas via egui Painter) + Phase 9.5 (Single-Ray Inspector with per-bounce table).
+> **Next action:** Slice A Step A2: Deepen edge states, polish UI interactions, and add visual regression checks.
 

@@ -8,7 +8,36 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 
 ## [Unreleased]
 
-> Work in progress — tracked in [`TODO.md`](TODO.md).
+### Added
+
+#### Slice A: Interactive Prism Dispersion UI (`optics-ui`, `optics-lab`, `optics-web`)
+- **Theme & Design Tokens (`optics-ui::theme`):**
+  - `OpticsTokens` with MediumDark palette (canvas `#11141a`, panels `#1a1f2e`, accent `#00d4f5`, amber `#f5a623`, dim text `#8b93a7`, text `#e6e9f0`).
+  - `apply_tokens(ctx, tokens)` configuring typography, spacing, widget interactions (hover/active/selection), and separators.
+  - Unit tests verifying WCAG AA contrast ratio ($\ge 4.5:1$) for both primary and dim text against panels and canvas.
+- **Pure View Transform (`optics-ui::view_transform`):**
+  - `ViewTransform` supporting world-to-screen and screen-to-world conversions, panning, cursor-anchored zoom, and bounds fitting.
+  - Comprehensive unit tests covering round-trip conversions, cursor-invariance during zoom, and margin-padded bounds fitting.
+- **Hit Testing & Ray Selection (`optics-ui::hit_test`):**
+  - Pure screen-space `point_to_segment_distance` and `find_hovered_ray_index` with configurable pixel threshold.
+  - Unit tests covering segment endpoints, interior projections, degenerate segments, and ties.
+- **Formatting Helpers (`optics-ui::formatting`):**
+  - Pure string formatters for angles (2 decimals), percentages (1 decimal), refractive indices (6 decimals), and wavelengths (1 decimal).
+- **Prism Simulation & Validation (`optics-ui::sim`):**
+  - `PrismSimulation` calculating 2D prism geometry, apex and incidence angle modifications, and tracing spectral fans across glass presets (`N-BK7`, `SF11`, `F2`, `Fused Silica`).
+  - Unit test verifying the UI's deviation helper for 587.56 nm equals the two-surface analytic Snell deviation within $10^{-9}$ and matches the CLI reference output ($38.9567^\circ$).
+- **OpticsLabApp (`optics-ui::app`):**
+  - Top menu bar: `File > Quit`, `View > Reset view`, `Help > About`.
+  - Left tool strip: Select (S) and Ray probe (I, active by default); planned tools disabled with "Coming later" tooltips.
+  - 2D Canvas: rendered exclusively via `egui::Painter` with subtle prism fill, outline, incoming D65 ray with label, and spectral fan colored by wavelength.
+  - Right Inspector Panel: Glass dropdown, apex angle slider ($20^\circ$–$90^\circ$), incidence angle slider ($0^\circ$–$80^\circ$), sample count slider ($8$–$64$), $n_d$/$V_d$ readouts, angular spread readout, and per-bounce `RayBounce` inspection table.
+  - Hover highlights nearest ray; left-click selects with interaction dots; Esc deselects; double-click resets view.
+  - Empty state handling: Displays guidance message when TIR prevents rays from exiting prism; TIR events marked in inspector.
+- **Native Desktop Application (`apps/optics-lab`):**
+  - Configured `eframe::run_native` runner with window title "OpticsLab", minimum size 900x600, default size 1200x800.
+- **WebAssembly & Trunk Setup (`apps/optics-web`):**
+  - Configured `Trunk.toml` and `index.html` with full-window canvas, animated loading spinner, and plain-text WebGL/WebAssembly availability checks.
+  - Built and verified release WASM bundle (`3.20 MB` raw, `1.44 MB` gzip).
 
 ---
 
