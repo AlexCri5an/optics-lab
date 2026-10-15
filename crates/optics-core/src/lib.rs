@@ -15,6 +15,7 @@
 #![deny(missing_docs)]
 #![deny(unsafe_code)]
 
+pub mod conic;
 pub mod error;
 pub mod fresnel;
 pub mod geometry;
@@ -23,6 +24,7 @@ pub mod snell;
 pub mod types;
 
 // Re-export primary types and functions at the crate root
+pub use conic::{ConicSurface, conic_normal, conic_sag, intersect_conic};
 pub use error::OpticsError;
 pub use fresnel::{fresnel_dielectric, fresnel_unpolarized, schlick_approx};
 pub use geometry::{Air, ConstantIndex, RefractiveIndex, Triangle};
