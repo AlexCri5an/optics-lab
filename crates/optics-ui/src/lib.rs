@@ -4,16 +4,19 @@
 #![deny(missing_docs)]
 #![deny(unsafe_code)]
 
+pub mod analytics;
 pub mod app;
 pub mod formatting;
 pub mod hit_test;
 pub mod icons;
+pub mod inspector;
 pub mod legend;
 pub mod lens_sim;
 pub mod lens_view;
 pub mod sim;
 pub mod theme;
 pub mod view_transform;
+pub mod viewport_3d;
 
 pub use app::{ActiveTool, AppMode, OpticsLabApp};
 pub use formatting::{
