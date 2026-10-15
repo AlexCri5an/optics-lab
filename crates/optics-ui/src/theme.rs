@@ -8,48 +8,66 @@ use egui::{Color32, Context, CornerRadius, FontFamily, FontId, Margin, Stroke, T
 /// OpticsLab UI theme tokens defining the color palette and interaction states.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OpticsTokens {
-    /// Background color for the 2D ray tracing canvas.
+    /// Background color for the 3D/2D viewport canvas (#080D13).
     pub canvas: Color32,
-    /// Background color for dock panels, sidebars, and dialog windows.
+    /// Background color for main panels and sidebars (#0D141C).
     pub panel_bg: Color32,
-    /// High-contrast primary text color.
+    /// Secondary background for nested cards and docks (#101820).
+    pub panel_secondary: Color32,
+    /// High-contrast primary text color (#D8DEE6).
     pub text_primary: Color32,
-    /// Secondary muted text color for labels, hints, and readouts.
+    /// Secondary muted text color for labels and readouts (#8995A3).
+    pub text_secondary: Color32,
+    /// Extra-muted text color (#5E6A76).
+    pub text_muted: Color32,
+    /// Backwards-compatible alias for text_secondary.
     pub text_dim: Color32,
-    /// Vivid cyan primary accent color for active tools, selection highlights, and links.
+    /// Selected item background highlight (#202B36).
+    pub selected: Color32,
+    /// Technical silver/steel accent color (#A9B8C8).
     pub accent: Color32,
-    /// Amber highlight color for warnings, critical angles, and special indicators.
+    /// Scientific amber highlight color (#F5A623).
     pub amber: Color32,
-    /// Border and separator stroke color.
+    /// Scientific cyan highlight color (#00D4F5).
+    pub cyan: Color32,
+    /// Standard border stroke color (#26313B).
     pub border: Color32,
-    /// Background color for hovered interactive elements.
+    /// Subtle nested border stroke color (#1B252E).
+    pub border_subtle: Color32,
+    /// Background color for hovered interactive elements (#18222C).
     pub hover_bg: Color32,
-    /// Background color for actively pressed interactive elements.
+    /// Background color for actively pressed interactive elements (#202B36).
     pub active_bg: Color32,
 }
 
 impl OpticsTokens {
-    /// Canonical MediumDark theme palette specified in Slice A.
-    ///
-    /// - Canvas: `#11141a`
-    /// - Panels: `#1a1f2e`
-    /// - Accent: `#00d4f5`
-    /// - Amber: `#f5a623`
-    /// - Dim text: `#8b93a7`
-    /// - Text primary: `#e6e9f0`
+    /// Canonical scientific dark theme palette matching the reference image.
+    #[must_use]
+    pub fn dark_scientific() -> Self {
+        let text_secondary = Color32::from_rgb(0x89, 0x95, 0xa3);
+        Self {
+            canvas: Color32::from_rgb(0x08, 0x0d, 0x13),
+            panel_bg: Color32::from_rgb(0x0d, 0x14, 0x1c),
+            panel_secondary: Color32::from_rgb(0x10, 0x18, 0x20),
+            text_primary: Color32::from_rgb(0xd8, 0xde, 0xe6),
+            text_secondary,
+            text_muted: Color32::from_rgb(0x5e, 0x6a, 0x76),
+            text_dim: text_secondary,
+            selected: Color32::from_rgb(0x20, 0x2b, 0x36),
+            accent: Color32::from_rgb(0xa9, 0xb8, 0xc8),
+            amber: Color32::from_rgb(0xf5, 0xa6, 0x23),
+            cyan: Color32::from_rgb(0x00, 0xd4, 0xf5),
+            border: Color32::from_rgb(0x26, 0x31, 0x3b),
+            border_subtle: Color32::from_rgb(0x1b, 0x25, 0x2e),
+            hover_bg: Color32::from_rgb(0x18, 0x22, 0x2c),
+            active_bg: Color32::from_rgb(0x20, 0x2b, 0x36),
+        }
+    }
+
+    /// Legacy constructor alias for compatibility.
     #[must_use]
     pub fn medium_dark() -> Self {
-        Self {
-            canvas: Color32::from_rgb(0x11, 0x14, 0x1a),
-            panel_bg: Color32::from_rgb(0x1a, 0x1f, 0x2e),
-            text_primary: Color32::from_rgb(0xe6, 0xe9, 0xf0),
-            text_dim: Color32::from_rgb(0x8b, 0x93, 0xa7),
-            accent: Color32::from_rgb(0x00, 0xd4, 0xf5),
-            amber: Color32::from_rgb(0xf5, 0xa6, 0x23),
-            border: Color32::from_rgb(0x2d, 0x35, 0x48),
-            hover_bg: Color32::from_rgb(0x26, 0x2e, 0x42),
-            active_bg: Color32::from_rgb(0x2f, 0x39, 0x52),
-        }
+        Self::dark_scientific()
     }
 }
 

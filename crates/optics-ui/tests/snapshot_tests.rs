@@ -172,3 +172,35 @@ fn test_lens_system_prescription_table_harness() {
         );
     harness.run();
 }
+
+#[test]
+fn test_scientific_3d_viewport_reference_layout_1x_and_2x() {
+    let app = OpticsLabApp::default();
+
+    // 1. Minimum window size 900x600 at 1x DPI
+    let mut harness_1x = Harness::builder()
+        .with_size(egui::Vec2::new(900.0, 600.0))
+        .with_pixels_per_point(1.0)
+        .build_state(
+            |ctx, state| {
+                let mut frame = eframe::Frame::_new_kittest();
+                state.update(ctx, &mut frame);
+            },
+            app,
+        );
+    harness_1x.run();
+
+    // 2. Full desktop resolution 1920x1080 at 2x DPI (HiDPI / Retina)
+    let app_hidpi = OpticsLabApp::default();
+    let mut harness_2x = Harness::builder()
+        .with_size(egui::Vec2::new(1920.0, 1080.0))
+        .with_pixels_per_point(2.0)
+        .build_state(
+            |ctx, state| {
+                let mut frame = eframe::Frame::_new_kittest();
+                state.update(ctx, &mut frame);
+            },
+            app_hidpi,
+        );
+    harness_2x.run();
+}

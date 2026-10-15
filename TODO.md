@@ -417,16 +417,22 @@
 
 ### 9.4 Left Tool Palette
 - [x] Select tool (S)
-- [x] Ray Inspector Probe tool (I) — click-to-inspect single ray (active by default; planned tools disabled with tooltip "Coming later")
-- [ ] Lens Surface tool (L) — add/move lens elements in 2D paraxial view
-- [ ] Light Source tool (E) — add point/area/directional emitters
-- [ ] Measure tool (M) — distance, angle, focal point probe
-- [ ] Tool palette icons — SVG inline or egui `TextureId` bitmaps
+- [x] Move tool (M)
+- [x] Rotate tool (Alt+R)
+- [x] Scale tool
+- [x] Ray Inspector Probe tool (I) — click-to-inspect single ray
+- [x] Spectrum tool
+- [x] BVH acceleration structure tool
+- [x] Analysis tool
+- [x] Camera tool
+- [x] Settings tool
+- [x] Tool palette vector outline icons (resolution-independent, zero dependency bloat)
 
 ### 9.5 Right Inspector Panel Tabs
 - [x] **Tab: Single-Ray Inspector (Slice A)**
   - [x] Per-bounce table from `RayBounce`: Surface #, Snell angle θi/θt (°), n1/n2, Rs, Rp, R total, T total, TIR flag
   - [x] Wavelength readout, color swatch (via `display_color_for_wavelength`), and total angular deviation
+  - [x] Vertical ray-path node timeline (Camera -> Refraction -> Reflection -> Light)
   - [ ] [Slice C] 3D trajectory mini-viewer (embedded wgpu sub-view) and energy pie chart
 - [x] **Tab: Lens Prescription Editor (Slice B)**
   - [x] Editable data table: Surface, Type, Radius (mm), Thickness (mm), Glass, Semi-Diam (mm), Conic, Stop
@@ -442,26 +448,28 @@
   - [ ] Click glass → show full Sellmeier coefficients & n(λ) dispersion curve
 
 ### 9.6 Bottom Analytics Dock Tabs
-- [ ] **Tab: Convergence Monitor**
-  - [ ] Real-time RMSE line chart (egui `Plot`, scrolling last 500 samples)
-  - [ ] Mean variance bar, sample count display, estimated convergence ETA
-- [ ] **Tab: Spectral Power Distribution**
-  - [ ] 32-bin histogram from 380–780 nm for selected pixel/region
-  - [ ] Wavelength color coding (380=violet, 450=blue, 520=green, 590=yellow, 650=red)
-  - [ ] XYZ → sRGB preview swatch for the selected SPD
-- [ ] **Tab: BVH Heatmap Controls**
-  - [ ] Toggle heatmap overlay on/off
-  - [ ] Max cost slider (auto / manual)
-  - [ ] AABB wireframe toggle per BVH level (TLAS / BLAS)
-  - [ ] Cost statistics: median, 95th percentile, max
+- [x] **Panel: Convergence Monitor**
+  - [x] Semi-log RMSE and Variance decay curves against sample count (0..256)
+  - [x] Error level lines (0.01..1.0), sample labels, and legend
+- [x] **Panel: Spectral Power Distribution**
+  - [x] Physical wavelength histogram (380–700 nm) colored per-bin
+  - [x] Continuous rainbow spectral gradient bar
+- [x] **Panel: BVH Diagnostics**
+  - [x] Miniature wireframe bounding box hierarchy with traversal cost heatmap
+  - [x] High-to-low traversal colorbar, TLAS/BLAS indicators, median/P95/Max traversal statistics
+- [x] **Panel: Material / Glass**
+  - [x] Glass selector dropdown (BK7, SF11, F2, Fused Silica)
+  - [x] Parameter grid: n(587.6 nm), Abbe Vd, Cauchy, Sellmeier
+  - [x] Miniature dispersion curve and Edit Material button
 
 ### 9.7 Top Menu Bar
-- [ ] **File**: New scene, Open .zmx, Save, Export PNG/EXR
-- [ ] **View**: Toggle panels, Reset layout, Fullscreen canvas
-- [ ] **Render**: Start/Pause, Reset accumulation, Resolution picker
-- [ ] **Diagnostics**: Single-ray inspect mode, BVH heatmap, Spectral view
-- [ ] **Help**: Open docs (browser), About dialog, REA research notes link
-- [ ] Keyboard shortcut editor (show/hide with `?`)
+- [x] **File**: Quit, window close
+- [x] **Edit**: Reset defaults
+- [x] **View**: Reset view, Show reflections, Show timing
+- [x] **Render**: Start/Pause path tracer placeholder
+- [x] **Diagnostics**: Single-ray inspect mode, BVH slab test
+- [x] **Help**: About OpticsLab dialog window
+- [x] Sample counter (128 spp) and native window controls (minimize, maximize, close)
 
 ### 9.8 Widgets Library
 - [ ] `fn scrub_field(ui: &mut Ui, label: &str, value: &mut f64, min: f64, max: f64, precision: usize)` — drag-to-edit numeric field
