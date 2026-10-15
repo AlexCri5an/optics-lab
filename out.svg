@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 700" width="1000" height="700" style="background-color: #11141a;">
+  <text x="30" y="40" font-family="system-ui, sans-serif" font-size="20" font-weight="600" fill="#e0e8f5">OpticsLab — Prism Spectral Dispersion</text>
+  <text x="30" y="65" font-family="system-ui, sans-serif" font-size="13" fill="#8899aa">Wavelength spectrum: 380 nm (violet) → 780 nm (red)</text>
+  <!-- Prism Body -->
+  <polygon points="319.37,497.03 489.15,202.97 658.93,497.03" fill="rgba(80, 140, 220, 0.12)" stroke="#4a80c0" stroke-width="2" stroke-linejoin="round"/>
+  <!-- Dispersed Rays -->
+  <polyline points="141.87,420.31 404.26,350.00 578.51,357.75 854.11,489.80" fill="none" stroke="rgb(114,0,255)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 578.45,357.63 854.48,488.77" fill="none" stroke="rgb(113,0,255)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 578.38,357.53 854.81,487.85" fill="none" stroke="rgb(112,0,255)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 578.33,357.43 855.10,487.01" fill="none" stroke="rgb(110,0,255)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 578.28,357.35 855.36,486.26" fill="none" stroke="rgb(104,0,255)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 578.23,357.27 855.60,485.57" fill="none" stroke="rgb(91,0,255)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 578.19,357.19 855.81,484.95" fill="none" stroke="rgb(49,0,255)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 578.15,357.13 856.01,484.38" fill="none" stroke="rgb(0,48,255)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 578.12,357.07 856.18,483.85" fill="none" stroke="rgb(0,163,255)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 578.09,357.01 856.35,483.37" fill="none" stroke="rgb(0,255,201)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 578.06,356.96 856.49,482.92" fill="none" stroke="rgb(0,255,84)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 578.03,356.91 856.63,482.51" fill="none" stroke="rgb(0,255,0)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 578.00,356.87 856.76,482.12" fill="none" stroke="rgb(0,255,0)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 577.98,356.82 856.88,481.76" fill="none" stroke="rgb(0,255,0)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 577.96,356.79 856.99,481.43" fill="none" stroke="rgb(158,255,0)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 577.94,356.75 857.09,481.11" fill="none" stroke="rgb(255,227,0)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 577.92,356.71 857.18,480.82" fill="none" stroke="rgb(255,142,0)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 577.90,356.68 857.27,480.54" fill="none" stroke="rgb(255,74,0)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 577.88,356.65 857.36,480.28" fill="none" stroke="rgb(255,0,0)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 577.86,356.62 857.44,480.04" fill="none" stroke="rgb(255,0,0)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 577.85,356.59 857.51,479.80" fill="none" stroke="rgb(255,0,0)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 577.83,356.57 857.58,479.58" fill="none" stroke="rgb(255,0,0)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 577.82,356.54 857.65,479.37" fill="none" stroke="rgb(255,0,0)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 577.80,356.52 857.71,479.17" fill="none" stroke="rgb(255,0,0)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 577.79,356.50 857.78,478.98" fill="none" stroke="rgb(255,0,0)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 577.78,356.48 857.83,478.80" fill="none" stroke="rgb(255,0,0)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 577.77,356.45 857.89,478.62" fill="none" stroke="rgb(255,0,0)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 577.75,356.44 857.94,478.45" fill="none" stroke="rgb(255,0,0)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 577.74,356.42 857.99,478.29" fill="none" stroke="rgb(255,0,0)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 577.73,356.40 858.04,478.14" fill="none" stroke="rgb(255,0,0)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 577.72,356.38 858.09,477.99" fill="none" stroke="rgb(255,0,0)" stroke-width="1.8" opacity="0.85"/>
+  <polyline points="141.87,420.31 404.26,350.00 577.71,356.36 858.13,477.85" fill="none" stroke="rgb(255,0,0)" stroke-width="1.8" opacity="0.85"/>
+</svg>
