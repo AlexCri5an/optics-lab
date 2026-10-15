@@ -12,6 +12,7 @@ rust-version.workspace = true
 optics-core     = { workspace = true }
 optics-spectral = { workspace = true }
 optics-glass    = { workspace = true }
+optics-zemax    = { workspace = true }
 egui            = { workspace = true }
 eframe          = { workspace = true, features = ["accesskit"] }
 serde           = { workspace = true }

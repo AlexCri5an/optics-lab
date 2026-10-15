@@ -1,11 +1,15 @@
 //! `optics-cli` — headless diagnostic runner, batch renderer, and optical CLI tools.
 
 use clap::{Parser, Subcommand};
+use optics_core::analysis::{PupilPattern, trace_ray_fan, trace_spot_diagram};
+use optics_core::prescription::calculate_paraxial_properties;
 use optics_core::{
     Air, PathRecord, Ray, RayBranchPolicy, RefractiveIndex, Scene, Triangle, Vec3, spectral_fan,
 };
 use optics_glass::{GlassCatalogDb, GlassMaterial};
 use optics_spectral::display_color_for_wavelength;
+use optics_zemax::parse_zmx_bytes;
+use optics_zemax::presets::{cooke_triplet_f4_5, double_gauss_50mm, plano_convex_100mm};
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
@@ -41,6 +45,37 @@ enum Commands {
         #[arg(long, default_value = "out.svg")]
         svg: PathBuf,
     },
+
+    /// Analyzes a sequential lens system: paraxial properties, spot diagram, and ray fans.
+    Analyze {
+        /// Preset lens name: "cooke", "double-gauss", or "plano-convex"
+        #[arg(long, default_value = "cooke")]
+        preset: String,
+
+        /// Path to a Zemax .zmx prescription file (overrides --preset)
+        #[arg(long)]
+        zmx: Option<PathBuf>,
+
+        /// Field angle in degrees
+        #[arg(long, default_value_t = 0.0)]
+        field: f64,
+
+        /// Evaluation wavelength in nanometers (Fraunhofer d=587.56, F=486.13, C=656.27)
+        #[arg(long, default_value_t = 587.56)]
+        wavelength: f64,
+
+        /// Number of hexapolar rings for spot diagram
+        #[arg(long, default_value_t = 6)]
+        rings: usize,
+
+        /// Number of sampling points along ray aberration fan
+        #[arg(long, default_value_t = 41)]
+        fan_points: usize,
+
+        /// Output diagnostic metrics as JSON
+        #[arg(long, default_value_t = false)]
+        json: bool,
+    },
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -54,6 +89,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             samples,
             svg,
         } => run_prism_command(&glass, apex, incidence, samples, &svg),
+        Commands::Analyze {
+            preset,
+            zmx,
+            field,
+            wavelength,
+            rings,
+            fan_points,
+            json,
+        } => run_analyze_command(
+            &preset,
+            zmx.as_ref(),
+            field,
+            wavelength,
+            rings,
+            fan_points,
+            json,
+        ),
     }
 }
 
@@ -308,6 +360,165 @@ fn generate_prism_svg(
     }
 
     writeln!(svg_out, "</svg>")?;
+
+    Ok(())
+}
+
+fn run_analyze_command(
+    preset_name: &str,
+    zmx_path: Option<&PathBuf>,
+    field_deg: f64,
+    wavelength_nm: f64,
+    rings: usize,
+    fan_points: usize,
+    json: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let (name, prescription) = if let Some(path) = zmx_path {
+        let bytes = std::fs::read(path)?;
+        let p = parse_zmx_bytes(&bytes)?.to_optical_prescription();
+        let fname = path
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or("Zemax System")
+            .to_string();
+        (fname, p)
+    } else {
+        match preset_name.to_lowercase().replace('_', "-").as_str() {
+            "cooke" | "cooke-triplet" => ("Cooke Triplet F/4.5".to_string(), cooke_triplet_f4_5()?),
+            "double-gauss" | "doublegauss" => {
+                ("Double Gauss F/2.0".to_string(), double_gauss_50mm()?)
+            }
+            "plano-convex" | "singlet" => {
+                ("Plano-Convex Singlet".to_string(), plano_convex_100mm()?)
+            }
+            other => {
+                return Err(format!(
+                    "Unknown preset '{other}'. Valid options: cooke, double-gauss, plano-convex"
+                )
+                .into());
+            }
+        }
+    };
+
+    let catalog = GlassCatalogDb::load_bundled()?;
+    let resolved = prescription.resolve(&catalog)?;
+
+    let paraxial = calculate_paraxial_properties(&resolved, wavelength_nm)?;
+    let spot = trace_spot_diagram(
+        &resolved,
+        (0.0, field_deg),
+        wavelength_nm,
+        PupilPattern::Hexapolar { num_rings: rings },
+    )?;
+    let fan = trace_ray_fan(&resolved, (0.0, field_deg), wavelength_nm, fan_points)?;
+
+    if json {
+        let output = serde_json::json!({
+            "prescription_name": name,
+            "field_angle_deg": field_deg,
+            "wavelength_nm": wavelength_nm,
+            "paraxial": {
+                "efl_mm": paraxial.efl_mm,
+                "bfl_mm": paraxial.bfl_mm,
+                "f_number": paraxial.f_number,
+                "entrance_pupil_pos_mm": paraxial.entrance_pupil_pos_mm,
+                "exit_pupil_pos_mm": paraxial.exit_pupil_pos_mm
+            },
+            "spot_diagram": {
+                "total_rays_traced": spot.metrics.total_rays_traced,
+                "passed_rays_count": spot.metrics.passed_rays_count,
+                "vignetting_factor": spot.metrics.vignetting_factor,
+                "centroid_x_mm": spot.metrics.centroid_x_mm,
+                "centroid_y_mm": spot.metrics.centroid_y_mm,
+                "rms_radius_um": spot.metrics.rms_radius_um,
+                "geo_radius_um": spot.metrics.geo_radius_um,
+                "airy_radius_um": spot.metrics.airy_radius_um,
+                "is_diffraction_limited": spot.metrics.is_diffraction_limited
+            },
+            "tangential_fan": fan.tangential,
+            "sagittal_fan": fan.sagittal
+        });
+        println!("{}", serde_json::to_string_pretty(&output)?);
+    } else {
+        println!("============================================================");
+        println!("OpticsLab Sequential Lens Diagnostics");
+        println!("============================================================");
+        println!("Prescription: {name}");
+        println!("Evaluation:   Field = {field_deg:.2}°, λ = {wavelength_nm:.2} nm");
+        println!();
+        println!("1. Paraxial First-Order Properties:");
+        println!(
+            "   Effective Focal Length (EFL): {:>8.3} mm",
+            paraxial.efl_mm
+        );
+        println!(
+            "   Back Focal Length (BFL):      {:>8.3} mm",
+            paraxial.bfl_mm
+        );
+        println!(
+            "   Working F-number:             F/{:>6.2}",
+            paraxial.f_number
+        );
+        println!(
+            "   Entrance Pupil Position:      {:>8.3} mm",
+            paraxial.entrance_pupil_pos_mm
+        );
+        println!(
+            "   Exit Pupil Position:          {:>8.3} mm",
+            paraxial.exit_pupil_pos_mm
+        );
+        println!();
+        println!("2. Geometric Spot Diagram:");
+        println!(
+            "   Total Rays Traced:            {:>8}",
+            spot.metrics.total_rays_traced
+        );
+        println!(
+            "   Passed Rays:                  {:>8} ({:.1}% transmitted)",
+            spot.metrics.passed_rays_count,
+            spot.metrics.vignetting_factor * 100.0
+        );
+        println!(
+            "   Centroid Coordinates:         ({:.2} µm, {:.2} µm)",
+            spot.metrics.centroid_x_mm * 1000.0,
+            spot.metrics.centroid_y_mm * 1000.0
+        );
+        println!(
+            "   RMS Blur Radius:              {:>8.2} µm",
+            spot.metrics.rms_radius_um
+        );
+        println!(
+            "   GEO Enclosure Radius:         {:>8.2} µm",
+            spot.metrics.geo_radius_um
+        );
+        println!(
+            "   Airy Disk Radius:             {:>8.2} µm",
+            spot.metrics.airy_radius_um
+        );
+        println!(
+            "   Diffraction Limited:          {}",
+            if spot.metrics.is_diffraction_limited {
+                "Yes (Diffraction Limited)"
+            } else {
+                "No (Aberration Dominated)"
+            }
+        );
+        println!();
+        println!("3. Transverse Ray Aberrations (Tangential Fan Samples):");
+        for p in [-1.0, -0.5, 0.0, 0.5, 1.0] {
+            if let Some(pt) = fan
+                .tangential
+                .iter()
+                .find(|pt| (pt.pupil_coord - p).abs() < 1e-3)
+            {
+                println!(
+                    "   Py = {:>5.2}: {:>8.2} µm",
+                    pt.pupil_coord, pt.aberration_um
+                );
+            }
+        }
+        println!("============================================================");
+    }
 
     Ok(())
 }

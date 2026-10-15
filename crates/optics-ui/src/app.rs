@@ -7,6 +7,8 @@ use crate::formatting::{
 use crate::hit_test::find_hovered_ray_index;
 use crate::icons::{ToolIcon, draw_tool_icon};
 use crate::legend::{draw_wavelength_legend, find_closest_ray_by_x};
+use crate::lens_sim::{LensPreset, LensSimulation};
+use crate::lens_view::render_lens_system_panel;
 use crate::sim::{EdgeState, PrismSimulation, TracedRay2D};
 use crate::theme::{OpticsTokens, apply_tokens};
 use crate::view_transform::ViewTransform;
@@ -50,8 +52,20 @@ pub enum ActiveTool {
     RayProbe,
 }
 
+/// High-level mode of the OpticsLab application workbench.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AppMode {
+    /// Interactive 2D prism spectral dispersion experiment (Slice A).
+    #[default]
+    PrismDispersion,
+    /// Canonical lens systems and optical aberration analysis (Slice B).
+    LensSystem,
+}
+
 /// The top-level OpticsLab application state.
 pub struct OpticsLabApp {
+    /// Active high-level workbench mode.
+    pub app_mode: AppMode,
     /// UI theme design tokens.
     pub tokens: OpticsTokens,
     /// Currently active tool.
@@ -60,6 +74,10 @@ pub struct OpticsLabApp {
     pub view: ViewTransform,
     /// Optical prism simulation model.
     pub sim: PrismSimulation,
+    /// Lens system simulation and aberration analysis model.
+    pub lens_sim: Option<LensSimulation>,
+    /// Dedicated view transform for lens cross-section layout.
+    pub lens_view: ViewTransform,
     /// Index of currently selected ray in `sim.rays`.
     pub selected_ray_index: Option<usize>,
     /// Index of currently hovered ray in `sim.rays`.
@@ -79,10 +97,13 @@ pub struct OpticsLabApp {
 impl Default for OpticsLabApp {
     fn default() -> Self {
         Self {
+            app_mode: AppMode::PrismDispersion,
             tokens: OpticsTokens::medium_dark(),
             active_tool: ActiveTool::RayProbe,
             view: ViewTransform::default(),
             sim: PrismSimulation::default(),
+            lens_sim: LensSimulation::new(LensPreset::CookeTriplet).ok(),
+            lens_view: ViewTransform::default(),
             selected_ray_index: None,
             hovered_ray_index: None,
             show_reflections: true,
@@ -157,6 +178,26 @@ impl OpticsLabApp {
                         self.show_about = true;
                         ui.close();
                     }
+                });
+
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    ui.add_space(8.0);
+                    let is_lens = self.app_mode == AppMode::LensSystem;
+                    if ui
+                        .selectable_label(is_lens, "Lens System & Aberrations")
+                        .clicked()
+                    {
+                        self.app_mode = AppMode::LensSystem;
+                    }
+                    let is_prism = self.app_mode == AppMode::PrismDispersion;
+                    if ui.selectable_label(is_prism, "Prism Dispersion").clicked() {
+                        self.app_mode = AppMode::PrismDispersion;
+                    }
+                    ui.label(
+                        egui::RichText::new("Workbench:")
+                            .small()
+                            .color(self.tokens.text_dim),
+                    );
                 });
             });
         });
@@ -267,19 +308,19 @@ impl OpticsLabApp {
         };
 
         if bg_fill != Color32::TRANSPARENT {
-            painter.rect_filled(rect, CornerRadius::same(6), bg_fill);
+            painter.rect_filled(rect, CornerRadius::same(2), bg_fill);
         }
         if is_selected {
             painter.rect_stroke(
                 rect,
-                CornerRadius::same(6),
+                CornerRadius::same(2),
                 Stroke::new(1.0, Color32::WHITE),
                 StrokeKind::Inside,
             );
         } else if is_enabled && response.hovered() {
             painter.rect_stroke(
                 rect,
-                CornerRadius::same(6),
+                CornerRadius::same(2),
                 Stroke::new(1.0, tokens.accent),
                 StrokeKind::Inside,
             );
@@ -963,14 +1004,30 @@ impl eframe::App for OpticsLabApp {
 
         self.handle_keyboard_shortcuts(ctx);
         self.render_top_menu(ctx);
-        self.render_tool_strip(ctx);
-        self.render_right_panel(ctx);
 
-        egui::CentralPanel::default()
-            .frame(Frame::NONE)
-            .show(ctx, |ui| {
-                self.render_canvas(ui);
-            });
+        match self.app_mode {
+            AppMode::PrismDispersion => {
+                self.render_tool_strip(ctx);
+                self.render_right_panel(ctx);
+
+                egui::CentralPanel::default()
+                    .frame(Frame::NONE)
+                    .show(ctx, |ui| {
+                        self.render_canvas(ui);
+                    });
+            }
+            AppMode::LensSystem => {
+                egui::CentralPanel::default()
+                    .frame(Frame::NONE)
+                    .show(ctx, |ui| {
+                        if let Some(sim) = &mut self.lens_sim {
+                            render_lens_system_panel(ui, sim, &mut self.lens_view, &self.tokens);
+                        } else {
+                            ui.label("Lens simulation could not be initialized");
+                        }
+                    });
+            }
+        }
 
         self.render_about_dialog(ctx);
     }

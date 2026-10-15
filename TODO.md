@@ -1,6 +1,6 @@
 # OpticsLab — Master Implementation Plan & Task List
 
-> **Status:** Phase 1 ✅ complete. Phase 2.1–2.6, 2.8–2.10 ✅ complete. Phase 3.1–3.2, 3.4 ✅ complete. Phase 4.1–4.3 ✅ complete. Phase 5.1–5.3, 5.5 ✅ complete (Zemax .zmx parser, serializer, presets). Phase 8.1–8.2 ✅ complete (Spot diagrams & ray fans). Slice A UI Step A1 & Step A2 ✅ complete. Slice B Step B1 (Sequential Core), Step B2 (Zemax Parser & Presets) & Step B3 (Aberrations & Spot Diagrams) ✅ complete.
+> **Status:** Phase 1 ✅ complete. Phase 2.1–2.6, 2.8–2.10 ✅ complete. Phase 3.1–3.2, 3.4 ✅ complete. Phase 4.1–4.3 ✅ complete. Phase 5.1–5.3, 5.5 ✅ complete (Zemax .zmx parser, serializer, presets). Phase 8.1–8.2 ✅ complete (Spot diagrams & ray fans). Slice A UI Step A1 & Step A2 ✅ complete. Slice B (Sequential Core, Zemax Parser & Presets, Aberrations & Spot Diagrams, Prescription Editor & Aberration UI, optics-cli analyze) ✅ COMPLETE.
 >
 > Legend: `[ ]` = todo · `[x]` = done · `[~]` = in progress · `[-]` = deferred
 
@@ -428,13 +428,13 @@
   - [x] Per-bounce table from `RayBounce`: Surface #, Snell angle θi/θt (°), n1/n2, Rs, Rp, R total, T total, TIR flag
   - [x] Wavelength readout, color swatch (via `display_color_for_wavelength`), and total angular deviation
   - [ ] [Slice C] 3D trajectory mini-viewer (embedded wgpu sub-view) and energy pie chart
-- [ ] **Tab: Lens Prescription Editor**
-  - [ ] Editable data table: Surface, Type, Radius (mm), Thickness (mm), Glass, Semi-Diam (mm), Stop
-  - [ ] Add/remove surface row buttons
-  - [ ] Live re-trace on any cell edit
-  - [ ] "Load .zmx file" button → file dialog → parse → update table
-  - [ ] "Export .zmx" button → save dialog → write_zmx
-  - [ ] Lens preset selector (dropdown): Cooke Triplet, Double Gauss, Plano-Convex, Custom
+- [x] **Tab: Lens Prescription Editor (Slice B)**
+  - [x] Editable data table: Surface, Type, Radius (mm), Thickness (mm), Glass, Semi-Diam (mm), Conic, Stop
+  - [x] Add/remove surface row buttons
+  - [x] Live re-trace on any cell edit
+  - [ ] "Load .zmx file" button → file dialog → parse → update table (Slice D native file dialogs)
+  - [ ] "Export .zmx" button → save dialog → write_zmx (Slice D native file dialogs)
+  - [x] Lens preset selector (dropdown): Cooke Triplet, Double Gauss, Plano-Convex, Custom
 - [ ] **Tab: Glass Catalog Browser**
   - [ ] Search field (filter by name substring)
   - [ ] Abbe diagram (Vd on X, nd on Y) — egui `Plot` with colored dots
@@ -523,12 +523,12 @@
 
 ### 11.1 Commands
 - [ ] `optics-cli render --zmx <file> --output <png> --spp <N>` — headless render
-- [ ] `optics-cli analyze --zmx <file>` — print paraxial properties + Seidel coefficients to stdout
+- [x] `optics-cli analyze --preset <preset> [--zmx <file>] [--field <deg>] [--wavelength <nm>] [--rings <N>] [--fan-points <N>]` — print paraxial properties, spot diagram metrics, and ray fan to stdout
 - [ ] `optics-cli glass --name <name>` — print glass n(λ) table + Abbe diagram text
 - [ ] `optics-cli benchmark --scene <scene>` — MRAYS/s throughput benchmark
 
 ### 11.2 Output Formats
-- [ ] JSON output with `--json` flag for all analysis commands
+- [x] JSON output with `--json` flag for analyze command
 - [ ] CSV export for spot diagram data (`--csv`)
 
 ---
@@ -684,13 +684,13 @@
 - [x] Phase 12.1: Local WebAssembly build via `trunk` (verified locally; release wasm: 3.20 MB raw / 1.44 MB gzip)
 - [x] Step A2: UI visual and interaction polish (glyphs, bounds auto-fit, translucent prism, Fresnel reflection branches, legend, sentence case, chrome fix)
 
-### Slice B — Lens Systems & Sequential Diagnostics
+### Slice B — Lens Systems & Sequential Diagnostics ✅ COMPLETE
 > Goal: Load Zemax Cooke Triplet and Double Gauss prescriptions, trace marginal/chief paraxial rays, and render 2D spot diagrams and ray fans.
 - [x] Phase 2.4–2.6, 2.10: Conic surfaces, Citardauque intersection solver, prescriptions, paraxial tracer, sequential ray tracer
 - [x] Phase 5: Zemax `.zmx` parser, serializer, and bundled lens presets
 - [x] Phase 8.1–8.2: Geometric spot diagrams & transverse ray aberration fans
-- [ ] Phase 9.5: Lens prescription editor table with live edit & re-trace
-- [ ] Phase 11: `optics-cli analyze` CLI command
+- [x] Phase 9.5: Lens prescription editor table with live edit & re-trace
+- [x] Phase 11: `optics-cli analyze` CLI command
 
 ### Slice C — Acceleration, GPU Path Tracing & Full Analytics
 > Goal: wgpu compute path tracer with 2-level BVH, traversal cost heatmap, and real-time convergence tracking.
@@ -712,5 +712,5 @@
 
 ---
 
-> **Next action:** Slice B, Step B4: Prescription Editor UI & Ray Fan / Spot Diagram Plots (Phase 9.5) or CLI analyze (Phase 11).
+> **Next action:** Slice C, Step C1: Hero-wavelength spectral sampling & GPU path tracer preparations (Phase 3.3).
 

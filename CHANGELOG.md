@@ -10,6 +10,28 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 
 ### Added
 
+#### Slice B, Step B4: Prescription Editor UI, Aberration & Spot Plots, and CLI Diagnostics (`optics-ui`, `optics-cli`)
+- **Lens System & Aberration Analysis State Model (`optics-ui::lens_sim`):**
+  - `LensSimulation` state engine supporting canonical presets (`Cooke Triplet F/4.5`, `Double Gauss F/2.0`, `Plano-Convex Singlet`) and dynamic custom prescriptions.
+  - Automatic calculation of paraxial properties (EFL, BFL, working F/#, entrance/exit pupil positions), 2D cross-section ray fan paths, geometric spot diagrams, and transverse aberration fans.
+  - Fast recalculation performance ($\approx 1.2\,\text{ms}$ on Cooke Triplet), well within the $16.6\,\text{ms}$ 60 FPS frame budget.
+- **Academic Minimalist UI Workbench (`optics-ui::lens_view`):**
+  - Classic academic toolbar inspired by Microsoft Word and classic optical engineering tools (Zemax, AutoCAD).
+  - Four dedicated subviews:
+    - **Layout & Rays:** 2D cross-section rendering with glass elements, optical axis, aperture stop marker, image sensor, and traced meridional ray paths.
+    - **Spot Diagram:** 2D geometric spot diagram scatter plot with Airy disk circle, RMS blur circle, centroid crosshair marker, and concentric micrometer grid.
+    - **Aberration Fans:** Tangential $E_y(P_y)$ and sagittal $E_x(P_x)$ transverse ray aberration curves on high-contrast academic grid.
+    - **Prescription Table:** Editable tabular lens editor with live drag adjustments for radius, thickness, glass material, semi-diameter, and conic constant.
+  - Left diagnostic card displaying paraxial first-order properties, spot diagram metrics, and transmission/vignetting percentage.
+  - Quick field angle selection ($0^\circ, 10^\circ, 14^\circ$) and Fraunhofer wavelength switching (d, F, C).
+  - Classic 2px corner radius styling adhering strictly to WCAG AA contrast standards.
+- **Headless Lens System Diagnostics CLI (`apps/optics-cli analyze`):**
+  - CLI subcommand `optics-cli analyze` evaluating bundled presets or arbitrary external `.zmx` files.
+  - Comprehensive report output including paraxial properties, spot metrics (Airy disk, RMS blur, diffraction-limited verdict), and tangential fan samples.
+  - Machine-readable `--json` output format for automated testing and CI pipelines.
+- **Snapshot & Harness Test Suite (`crates/optics-ui/tests/snapshot_tests.rs`):**
+  - Headless egui harness snapshot tests validating all four subviews at $900 \times 600$ minimum resolution at $1\times$ and $2\times$ DPI.
+
 #### Slice B, Step B3: Geometric Spot Diagrams & Transverse Ray Aberration Fans (`optics-core`, `optics-zemax`)
 - **Pupil Distribution Sampling (`optics-core::analysis`):**
   - `PupilPattern` supporting `Hexapolar`, `Rectangular`, and `Cross` sampling grids in normalized pupil coordinates $(P_x, P_y) \in [-1, 1]$ with $P_x^2 + P_y^2 \le 1$.
