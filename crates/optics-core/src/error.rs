@@ -30,7 +30,9 @@ pub enum OpticsError {
     GeometryOutsideAperture,
 
     /// Ray was vignetted / clipped by an aperture stop or surface clear semi-diameter.
-    #[error("Ray vignetted at surface {surface_index}: radius {r:.4} mm exceeds semi-diameter {max_r:.4} mm")]
+    #[error(
+        "Ray vignetted at surface {surface_index}: radius {r:.4} mm exceeds semi-diameter {max_r:.4} mm"
+    )]
     RayVignetted {
         /// Surface index where clipping occurred.
         surface_index: usize,
@@ -48,4 +50,3 @@ pub enum OpticsError {
     #[error("Material not found: {0}")]
     MaterialNotFound(String),
 }
-
