@@ -122,9 +122,12 @@ impl GlassCatalogDb {
     }
 
     /// Case-insensitive lookup of an optical glass by designation (e.g. "N-BK7", "n-bk7", "SF11", "Fused Silica").
+    ///
+    /// Also supports automatic prefix/strip resolution for lead-free `N-` glass aliases
+    /// (e.g. looking up "SK16" resolves to "N-SK16", and "N-F2" resolves to "F2").
     #[must_use]
     pub fn lookup(&self, name: &str) -> Option<&GlassMaterial> {
-        let key = name.to_uppercase();
+        let key = name.trim().to_uppercase();
         if let Some(glass) = self.glasses_by_name.get(&key) {
             return Some(glass);
         }
@@ -132,6 +135,19 @@ impl GlassCatalogDb {
         // Aliases for fused silica
         if key == "FUSED SILICA" || key == "FUSED_SILICA" || key == "SILICA" {
             return self.glasses_by_name.get("LITHOSIL-Q");
+        }
+
+        // Try N- prefix for classic Schott designations (e.g. "SK16" -> "N-SK16")
+        if !key.starts_with("N-") {
+            let n_key = format!("N-{key}");
+            if let Some(glass) = self.glasses_by_name.get(&n_key) {
+                return Some(glass);
+            }
+        } else if let Some(stripped) = key.strip_prefix("N-") {
+            // Try stripping N- prefix (e.g. "N-F2" -> "F2")
+            if let Some(glass) = self.glasses_by_name.get(stripped) {
+                return Some(glass);
+            }
         }
 
         None
@@ -147,5 +163,19 @@ impl GlassCatalogDb {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.glasses_by_name.is_empty()
+    }
+}
+
+impl optics_core::MaterialResolver for GlassCatalogDb {
+    fn resolve(
+        &self,
+        name: &str,
+    ) -> Result<std::sync::Arc<dyn optics_core::RefractiveIndex + Send + Sync>, OpticsError> {
+        self.lookup(name)
+            .map(|g| {
+                std::sync::Arc::new(g.clone())
+                    as std::sync::Arc<dyn optics_core::RefractiveIndex + Send + Sync>
+            })
+            .ok_or_else(|| OpticsError::MaterialNotFound(name.to_string()))
     }
 }

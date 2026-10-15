@@ -1,6 +1,6 @@
 # OpticsLab — Master Implementation Plan & Task List
 
-> **Status:** Phase 1 ✅ complete. Phase 2.1–2.3, 2.8, 2.9 ✅ complete. Phase 3.1–3.2, 3.4 ✅ complete. Phase 4.1–4.3 ✅ complete. Slice A UI Step A1 & Step A2 (Theme, CAD icons, 2D canvas, translucent prism, Fresnel branches, legend bar, ray inspector, controls, edge states, native app, local web build via trunk) ✅ complete.
+> **Status:** Phase 1 ✅ complete. Phase 2.1–2.6, 2.8–2.10 ✅ complete. Phase 3.1–3.2, 3.4 ✅ complete. Phase 4.1–4.3 ✅ complete. Phase 5.1–5.3, 5.5 ✅ complete (Zemax .zmx parser, serializer, presets). Slice A UI Step A1 & Step A2 ✅ complete. Slice B Step B1 (Sequential Core) & Step B2 (Zemax Parser & Presets) ✅ complete.
 >
 > Legend: `[ ]` = todo · `[x]` = done · `[~]` = in progress · `[-]` = deferred
 
@@ -93,21 +93,22 @@
 - [x] `fn schlick_approx(cos_theta: f64, n1: f64, n2: f64) -> f64` — fast unpolarized approximation
 
 ### 2.4 Conic Surface Geometry (Citardauque Method)
-- [ ] `struct ConicSurface { radius_mm: f64, conic_constant: f64, semi_diam_mm: f64 }`
-- [ ] `fn intersect_conic(ray: &Ray, surface: &ConicSurface) -> Result<f64, OpticsError>` — Citardauque solver
-- [ ] `fn conic_normal(hit_point: Vec3, surface: &ConicSurface) -> Vec3` — analytical normal
-- [ ] `fn conic_sag(r: f64, c: f64, k: f64) -> f64` — sag equation z(r)
+- [x] `struct ConicSurface { radius_mm: f64, conic_constant: f64, semi_diam_mm: f64 }`
+- [x] `fn intersect_conic(ray: &Ray, surface: &ConicSurface, surface_index: usize) -> Result<HitRecord, OpticsError>` — Citardauque solver
+- [x] `fn conic_normal(hit_point: Vec3, surface: &ConicSurface) -> Result<Vec3, OpticsError>` — analytical normal
+- [x] `fn conic_sag(r: f64, c: f64, k: f64) -> Result<f64, OpticsError>` — sag equation z(r)
 
 ### 2.5 Optical Surface & Prescription Types
-- [ ] `struct OpticalSurface { surface_index, radius_mm, conic_constant, thickness_mm, clear_aperture_radius_mm, glass, is_aperture_stop }`
-- [ ] `struct OpticalPrescription { name, entrance_pupil_diameter_mm, surfaces }`
-- [ ] Impl `Default` for both (flat plane, no glass)
+- [x] `struct OpticalSurface { surface_index, radius_mm, conic_constant, thickness_mm, semi_diameter_mm, material_name, is_stop }`
+- [x] `struct OpticalPrescription { name, entrance_pupil_diameter_mm, field_angles_deg, wavelengths_nm, surfaces }`
+- [x] `struct ResolvedPrescription` with decoupled `trait MaterialResolver`
+- [x] Impl `Default` for both (flat plane, no glass)
 
 ### 2.6 Paraxial Ray Tracer
-- [ ] `fn trace_paraxial_marginal(prescription: &OpticalPrescription) -> ParaxialRay`
-- [ ] `fn trace_paraxial_chief(prescription: &OpticalPrescription, field_angle_deg: f64) -> ParaxialRay`
-- [ ] `struct ParaxialProperties { efl_mm, bfl_mm, f_number, entrance_pupil_pos_mm, exit_pupil_pos_mm }`
-- [ ] `fn calculate_paraxial_properties(prescription: &OpticalPrescription) -> ParaxialProperties`
+- [x] `fn trace_paraxial_marginal(prescription: &ResolvedPrescription, wavelength_nm: f64) -> Result<Vec<ParaxialRay>, OpticsError>`
+- [x] `fn trace_paraxial_chief(prescription: &ResolvedPrescription, field_angle_deg: f64, wavelength_nm: f64) -> Result<Vec<ParaxialRay>, OpticsError>`
+- [x] `struct ParaxialProperties { efl_mm, bfl_mm, f_number, entrance_pupil_pos_mm, exit_pupil_pos_mm }`
+- [x] `fn calculate_paraxial_properties(prescription: &ResolvedPrescription, wavelength_nm: f64) -> Result<ParaxialProperties, OpticsError>`
 
 ### 2.7 Tests (unit)
 - [x] Test Snell's law with N-BK7 at 587.56 nm (nd=1.5168) — verify refraction angles at 30° and 45°
@@ -122,10 +123,10 @@
 - [x] Test Fresnel energy conservation (R_total + T_total == 1.0) and TIR ((1.0, 1.0))
 - [x] Test Fresnel Stokes symmetry between conjugate Snell angles (n1 -> n2 vs n2 -> n1)
 - [x] Test Schlick approximation against exact unpolarized Fresnel (exact at normal/grazing, stated tolerance)
-- [ ] Test conic sag: sphere k=0, parabola k=-1 at r=0 → sag=0
-- [ ] Test Citardauque solver against analytical root for sphere
-- [ ] Test paraxial EFL for a single thin lens (1/f = (n-1)(1/R1 - 1/R2))
-- [ ] Test Cooke Triplet paraxial EFL = ~50 mm
+- [x] Test conic sag: sphere k=0, parabola k=-1 at r=0 → sag=0; parabola sag known value r^2/(2R)
+- [x] Test Citardauque solver against analytical root for sphere
+- [x] Test paraxial EFL for a single thin lens (1/f = (n-1)(1/R1 - 1/R2))
+- [x] Test Cooke Triplet paraxial EFL = ~50 mm (Step B2)
 
 ### 2.8 Non-Sequential Single-Ray Path Tracer (Slice A Milestone)
 - [x] `trait RefractiveIndex { fn n(&self, wavelength_nm: f64) -> f64 }` in `optics-core` (zero dependency on `optics-glass`)
@@ -138,6 +139,11 @@
 ### 2.9 Spectral Fan & Headless SVG (Slice A Milestone)
 - [x] `fn spectral_fan(scene: &Scene, ray_template: &Ray, wavelengths_nm: &[f64], policy: RayBranchPolicy, max_bounces: usize) -> Vec<(f64, PathRecord)>`
 - [x] `optics-cli prism --glass N-BK7 --apex 60 --incidence 45 --samples 32 --svg out.svg` draws the prism outline and colored rays (via `display_color_for_wavelength`) as a 2D SVG in the plane of incidence, plus a text table on stdout
+
+### 2.10 Sequential Real-Ray Tracer (Slice B Milestone)
+- [x] `fn trace_sequential(prescription: &ResolvedPrescription, ray: &Ray) -> Result<SequentialPathRecord, OpticsError>`
+- [x] Real-ray tests: h -> 0 convergence to paraxial BFL; positive singlet LSA sign and ~h^2 scaling; plano-hyperbolic aplanat exact focus (spread < 1e-9 mm); chromatic order; Fresnel throughput energy conservation; ray reversibility.
+
 - [x] Tests: deviation decreases monotonically with wavelength over 380–780 nm; deviation at F, d, C lines equals the analytic two-surface Snell value computed independently inside the test (tolerance 1e-9)
 
 ---
@@ -223,20 +229,20 @@
 > Source: RE Doc 05, `optiland/fileio/zemax/`
 
 ### 5.1 Zemax .zmx Parser
-- [ ] `fn parse_zmx(content: &str) -> Result<ZemaxOpticalSystem, ZemaxParseError>`
-- [ ] Handle all operands: `NAME`, `ENPD`, `FNUM`, `WAVL`, `PWAV`, `FTYP`, `YFLD`, `SURF`, `TYPE`, `CURV`, `DISZ`, `GLAS`, `DIAM`, `CONI`, `STOP`
-- [ ] Convert `CURV c` → `radius = if |c| < 1e-12 { f64::INFINITY } else { 1.0/c }`
-- [ ] `enum SurfaceType { Standard, EvenAsphere, Toroidal, ZernikeSag }` (extensible)
-- [ ] `struct ZemaxParseError` (thiserror) with line number and operand context
+- [x] `fn parse_zmx(content: &str) -> Result<ZemaxOpticalSystem, ZemaxParseError>`
+- [x] Handle all operands: `NAME`, `ENPD`, `FNUM`, `WAVL`, `PWAV`, `FTYP`, `YFLD`, `SURF`, `TYPE`, `CURV`, `DISZ`, `GLAS`, `DIAM`, `CONI`, `STOP`
+- [x] Convert `CURV c` → `radius = if |c| < 1e-12 { f64::INFINITY } else { 1.0/c }`
+- [x] `enum SurfaceType { Standard, EvenAsphere, Toroidal, ZernikeSag }` (extensible)
+- [x] `struct ZemaxParseError` (thiserror) with line number and operand context
 
 ### 5.2 Zemax .zmx Serializer (Writer)
-- [ ] `fn write_zmx(system: &ZemaxOpticalSystem) -> String` — round-trip serialization
-- [ ] Round-trip test: parse → write → parse gives identical result
+- [x] `fn write_zmx(system: &ZemaxOpticalSystem) -> String` — round-trip serialization
+- [x] Round-trip test: parse → write → parse gives identical result
 
 ### 5.3 Lens Presets (Bundled)
-- [ ] Cooke Triplet F/4.5 (7 surfaces, SK16/F2/SK16) — as `.zmx` string constant
-- [ ] Double Gauss F/2.0 (10 surfaces) — as `.zmx` string constant
-- [ ] Single Plano-Convex N-BK7 f=100 mm — as `.zmx` string constant
+- [x] Cooke Triplet F/4.5 (7 surfaces, SK16/F2/SK16) — as `.zmx` string constant
+- [x] Double Gauss F/2.0 (12 surfaces) — as `.zmx` string constant
+- [x] Single Plano-Convex N-BK7 f=100 mm — as `.zmx` string constant
 
 ### 5.4 CODE V .seq Parser [-] DEFERRED
 > Deferred: focus on complete Zemax .zmx pipeline first.
@@ -244,11 +250,11 @@
 - [-] Handles `WL`, `IMS`, `OBB`, `INS`, `AIR`, `REFL` tokens
 
 ### 5.5 Tests
-- [ ] Parse Cooke Triplet preset: 7 surfaces, correct radius/thickness/glass values
-- [ ] Parse Double Gauss: 10 surfaces, STOP surface flagged correctly
-- [ ] Round-trip Cooke Triplet: write then re-parse gives identical prescription
-- [ ] `CURV 0.0` → `radius = f64::INFINITY`
-- [ ] `GLAS AIR` → `material_name = "AIR"`
+- [x] Parse Cooke Triplet preset: 7 surfaces, correct radius/thickness/glass values
+- [x] Parse Double Gauss: 12 surfaces, STOP surface flagged correctly
+- [x] Round-trip Cooke Triplet: write then re-parse gives identical prescription
+- [x] `CURV 0.0` → `radius = f64::INFINITY`
+- [x] `GLAS AIR` → `material_name = "AIR"`
 
 ---
 
@@ -676,12 +682,12 @@
 - [x] Phase 9.3: Central 2D scene canvas (prism, light, rays) via egui `Painter`
 - [x] Phase 9.5: Single-Ray Inspector tab (click-to-select ray by nearest segment, per-bounce table from `RayBounce`, angle readouts)
 - [x] Phase 12.1: Local WebAssembly build via `trunk` (verified locally; release wasm: 3.20 MB raw / 1.44 MB gzip)
-- [ ] Step A2: UI visual and interaction polish (glyphs, bounds auto-fit, translucent prism, Fresnel reflection branches, legend, sentence case, chrome fix)
+- [x] Step A2: UI visual and interaction polish (glyphs, bounds auto-fit, translucent prism, Fresnel reflection branches, legend, sentence case, chrome fix)
 
 ### Slice B — Lens Systems & Sequential Diagnostics
 > Goal: Load Zemax Cooke Triplet and Double Gauss prescriptions, trace marginal/chief paraxial rays, and render 2D spot diagrams and ray fans.
-- [ ] Phase 2.4–2.6: Conic surfaces, Citardauque intersection solver, prescriptions, paraxial tracer
-- [ ] Phase 5: Zemax `.zmx` parser, serializer, and bundled lens presets
+- [x] Phase 2.4–2.6, 2.10: Conic surfaces, Citardauque intersection solver, prescriptions, paraxial tracer, sequential ray tracer
+- [x] Phase 5: Zemax `.zmx` parser, serializer, and bundled lens presets
 - [ ] Phase 8.1–8.2: Geometric spot diagrams & transverse ray aberration fans
 - [ ] Phase 9.5: Lens prescription editor table with live edit & re-trace
 - [ ] Phase 11: `optics-cli analyze` CLI command
@@ -706,5 +712,5 @@
 
 ---
 
-> **Next action:** Slice B: Lens systems, Zemax .zmx parser, sequential tracing, spot diagrams & transverse ray fans.
+> **Next action:** Slice B, Step B3: Geometric spot diagrams & transverse ray aberration fans (Phase 8.1–8.2).
 

@@ -74,6 +74,14 @@ mod tests {
         assert!(db.lookup("Fused Silica").is_some());
         assert!(db.lookup("silica").is_some());
         assert!(db.lookup("n-bk7").is_some());
+        assert_eq!(db.lookup("SK16").map(|g| g.name.as_str()), Some("N-SK16"));
+        assert_eq!(db.lookup("N-SK16").map(|g| g.name.as_str()), Some("N-SK16"));
+        assert_eq!(db.lookup("F2").map(|g| g.name.as_str()), Some("F2"));
+
+        // Test MaterialResolver implementation
+        use optics_core::MaterialResolver;
+        let sk16 = db.resolve("SK16")?;
+        assert!((sk16.n(587.56) - 1.6207).abs() < 1e-3);
 
         Ok(())
     }

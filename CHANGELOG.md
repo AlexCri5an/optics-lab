@@ -10,6 +10,46 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 
 ### Added
 
+#### Slice B, Step B2: Zemax `.zmx` Parser & Canonical Presets (`optics-zemax`, `optics-glass`)
+- **Zemax .zmx Format Parser (`optics-zemax::parser`):**
+  - Robust parser `parse_zmx` supporting standard Zemax operands: `NAME`, `ENPD`, `FNUM`, `WAVL`, `WAVM`, `PWAV`, `FTYP`, `YFLD`, `YFLN`, `SURF`, `TYPE`, `CURV`, `DISZ`, `GLAS`, `DIAM`, `CONI`, `STOP`.
+  - Byte-slice parser `parse_zmx_bytes` with automatic detection and decoding of UTF-16 LE BOM (`0xFF 0xFE`) or UTF-8.
+  - Curvature to radius conversion handling flat surfaces ($c \to 0 \implies R = \infty$).
+  - Extensible `SurfaceType` enum (`Standard`, `EvenAsphere`, `Toroidal`, `ZernikeSag`).
+  - Structured, line-numbered `ZemaxParseError` with contextual operand details.
+- **Zemax .zmx Serializer (`optics-zemax::serializer`):**
+  - `write_zmx` and `write_prescription_zmx` providing complete round-trip text serialization.
+  - Round-trip fidelity verified by test: parse $\to$ write $\to$ re-parse yields numerically equivalent systems.
+- **Canonical Lens Presets (`optics-zemax::presets`):**
+  - **Cooke Triplet F/4.5 ($f = 50\,\text{mm}$):** Classical 3-element, 6-surface design eliminating 5 primary Seidel aberrations. Verified paraxial $\text{EFL} = 50.0 \pm 0.5\,\text{mm}$ ($50.00\,\text{mm}$), $\text{BFL} = 42.21 \pm 0.5\,\text{mm}$, and real sequential ray trace focusing on sensor.
+  - **Double Gauss F/2.0 ($f = 50\,\text{mm}$):** 6-element, 4-group configuration forming the basis of standard 35 mm SLR camera lenses. Verified paraxial $\text{EFL} = 50.0 \pm 1.0\,\text{mm}$ and F-number $2.0 \pm 0.1$.
+  - **Plano-Convex N-BK7 ($f = 100\,\text{mm}$):** Singlet with verified paraxial $\text{EFL} = 100.0\,\text{mm}$ and thick-lens $\text{BFL} = 96.7\,\text{mm}$.
+- **Glass Catalog Material Resolver Bridge (`optics-glass::catalog`):**
+  - Implemented `optics_core::MaterialResolver` for `GlassCatalogDb`.
+  - Added case-insensitive alias and `N-` prefix fallback (e.g. `SK16` resolves to `N-SK16`, `N-F2` resolves to `F2`).
+  - Allows `prescription.resolve(&catalog_db)` to resolve all 646 catalog glasses into thread-safe `Arc<dyn RefractiveIndex>`.
+
+#### Slice B, Step B1: Sequential Optics Core (`optics-core`)
+- **Optical Conventions Documentation (`docs/conventions.md`):**
+  - Documented spatial coordinates in mm, $+z$ propagation direction, curvature $c = 1/R$, conic sag equation, normal convention pointing toward incident medium, and Citardauque rearranged root solver.
+- **Conic Surface Geometry (`optics-core::conic`):**
+  - `ConicSurface` struct parameterized by curvature $c = 1/R$, conic constant $k$, semi-diameter, and axial vertex position $z_v$.
+  - Numerically stable `conic_sag(r, c, k)` with finite boundary checking for $(1+k) c^2 r^2 > 1$, returning typed [`OpticsError::GeometryOutsideAperture`].
+  - Analytic unit normal `conic_normal` oriented toward the incident medium ($\mathbf{n} \cdot \hat{z} \le 0$).
+  - Citardauque quadratic root solver `intersect_conic` preventing catastrophic cancellation when $c \to 0$ or ray is near-axial, with vertex-sheet validation and semi-diameter aperture clipping.
+- **Sequential Prescriptions & Materials (`optics-core::prescription`):**
+  - `OpticalSurface` and `OpticalPrescription` representing sequential surface definitions (radius, conic, thickness, semi-diameter, material name, stop flag).
+  - Decoupled `ResolvedPrescription` and `ResolvedSurface` using `trait MaterialResolver` returning `Arc<dyn RefractiveIndex + Send + Sync>`, ensuring zero dependency on `optics-glass`.
+- **Paraxial Ray Tracer (`optics-core::prescription`):**
+  - $y$-$u$ matrix method: `trace_paraxial_marginal` and `trace_paraxial_chief` tracking refraction ($n' u' = n u - y \phi$) and axial transfer ($y' = y + t u'$).
+  - `calculate_paraxial_properties` computing Effective Focal Length (EFL), Back Focal Length (BFL), F-number, and pupil locations.
+- **Sequential Real-Ray Tracer (`optics-core::prescription`):**
+  - `trace_sequential` tracing rays surface-by-surface with conic intersection, Snell refraction, TIR detection, vignetting enforcement, and per-surface Fresnel efficiency recording in `RayBounce`.
+- **Analytical Unit Tests (Derived values, zero invented numbers):**
+  - Conic surface satisfaction to $< 10^{-12}$, circle intersection equivalence, parabola sag known value $r^2/(2R)$, and normal orthogonality to finite-difference tangents.
+  - Paraxial thin-lens and thick-lens equivalence to lensmaker equations, plano-convex EFL/BFL relations, two-surface combination, and Helmholtz-Lagrange invariant conservation across all surfaces.
+  - Real-ray $h \to 0$ convergence to paraxial BFL, longitudinal spherical aberration (LSA) negative sign and $\sim h^2$ scaling, Cartesian plano-hyperbolic aplanat exact focus ($k = -n^2$, focal spread $< 10^{-9}$ mm), chromatic focal order, Fresnel throughput conservation, and ray reversibility.
+
 #### Slice A: Interactive Prism Dispersion UI (`optics-ui`, `optics-lab`, `optics-web`)
 - **Theme & Design Tokens (`optics-ui::theme`):**
   - `OpticsTokens` with MediumDark palette (canvas `#11141a`, panels `#1a1f2e`, accent `#00d4f5`, amber `#f5a623`, dim text `#8b93a7`, text `#e6e9f0`).

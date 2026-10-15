@@ -15,18 +15,26 @@
 #![deny(missing_docs)]
 #![deny(unsafe_code)]
 
+pub mod conic;
 pub mod error;
 pub mod fresnel;
 pub mod geometry;
 pub mod path;
+pub mod prescription;
 pub mod snell;
 pub mod types;
 
 // Re-export primary types and functions at the crate root
+pub use conic::{ConicSurface, conic_normal, conic_sag, intersect_conic};
 pub use error::OpticsError;
 pub use fresnel::{fresnel_dielectric, fresnel_unpolarized, schlick_approx};
 pub use geometry::{Air, ConstantIndex, RefractiveIndex, Triangle};
 pub use path::{PathRecord, RayBranchPolicy, Scene, spectral_fan, trace_path};
+pub use prescription::{
+    MaterialResolver, OpticalPrescription, OpticalSurface, ParaxialProperties, ParaxialRay,
+    ResolvedPrescription, ResolvedSurface, SequentialPathRecord, SequentialRayHit,
+    calculate_paraxial_properties, trace_paraxial_chief, trace_paraxial_marginal, trace_sequential,
+};
 pub use snell::{reflect, snell_refract};
 pub use types::{BounceEvent, HitRecord, Ray, RayBounce, Vec3};
 
