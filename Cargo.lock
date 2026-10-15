@@ -1843,7 +1843,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "optics-bvh"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "bytemuck",
  "optics-core",
@@ -1852,7 +1852,7 @@ dependencies = [
 
 [[package]]
 name = "optics-cli"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "clap",
  "optics-core",
@@ -1865,7 +1865,7 @@ dependencies = [
 
 [[package]]
 name = "optics-core"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "nalgebra",
  "serde",
@@ -1874,7 +1874,7 @@ dependencies = [
 
 [[package]]
 name = "optics-glass"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "optics-core",
  "optics-spectral",
@@ -1885,7 +1885,7 @@ dependencies = [
 
 [[package]]
 name = "optics-lab"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "eframe",
  "optics-ui",
@@ -1894,7 +1894,7 @@ dependencies = [
 
 [[package]]
 name = "optics-render"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "bytemuck",
  "half",
@@ -1907,7 +1907,7 @@ dependencies = [
 
 [[package]]
 name = "optics-spectral"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "optics-core",
  "serde",
@@ -1916,7 +1916,7 @@ dependencies = [
 
 [[package]]
 name = "optics-ui"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "eframe",
  "egui",
@@ -1928,7 +1928,7 @@ dependencies = [
 
 [[package]]
 name = "optics-web"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "eframe",
  "optics-ui",
@@ -1940,7 +1940,7 @@ dependencies = [
 
 [[package]]
 name = "optics-zemax"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "optics-core",
  "optics-glass",

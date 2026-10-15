@@ -529,19 +529,18 @@
 
 ## Phase 12 — WebAssembly App (`apps/optics-web`)
 
-> Browser deployment via WebGPU + egui `wasm32-unknown-unknown`
+> Browser deployment via egui `wasm32-unknown-unknown` + WebGL/Glow (WebGPU in Slice C)
 
-### 12.1 WASM Build (via Trunk)
-- [ ] Setup `Trunk.toml` configuration for `apps/optics-web`
-- [ ] `trunk build --release` produces standalone bundle in `dist/`
-- [ ] `index.html` with WebGPU feature detection + fallback banner
-- [ ] `dist/` in `.gitignore`
-- [ ] 12.1b: GitHub Actions workflow that builds with trunk and deploys `dist/` to GitHub Pages
+### 12.1 Local WASM Build (via Trunk)
+- [x] Setup `Trunk.toml` configuration for `apps/optics-web`
+- [x] `trunk build --release` produces standalone bundle in `dist/` (verified locally: 3.20 MB raw, 1.44 MB gzip)
+- [x] `index.html` with WebGL/WASM availability check + loading indicator + error fallback banner
+- [x] `dist/` and `.trunk/` in `.gitignore`
 - [-] Web worker for heavy BVH build (off main thread) — deferred for Slice A
 
 ### 12.2 Browser Compatibility
-- [ ] Re-verify browser WebGPU support across Chromium 113+, Firefox Nightly, and Safari TP at release time
-- [ ] Graceful fallback banner for browsers without WebGPU
+- [x] WebGL2/WebGL detection with plain-text fallback banner for unsupported browsers
+- [ ] [Slice C] WebGPU feature detection and browser compatibility matrix (Chromium 113+, Firefox Nightly, Safari TP)
 
 ### 12.3 WASM-Specific Features
 - [ ] Drag-and-drop `.zmx` file onto canvas to load
@@ -591,7 +590,7 @@
 
 ---
 
-## Phase 15 — Documentation & Open Source Release
+## Phase 15 — Documentation & Community
 
 ### 15.1 Code Documentation
 - [ ] `#![deny(missing_docs)]` in all `lib.rs` crates
@@ -607,7 +606,6 @@
   - [ ] Lens Design Tutorial (build a Cooke Triplet from scratch)
   - [ ] Keyboard Shortcut Reference
   - [ ] MCP Agent API Reference
-- [ ] Deploy docs to GitHub Pages on main branch push
 
 ### 15.3 Contributing Guide
 - [ ] `CONTRIBUTING.md`:
@@ -616,21 +614,32 @@
   - [ ] PR checklist: tests pass, clippy clean, docs updated
   - [ ] RE methodology note: how to add new reference analysis docs
 
-### 15.4 Licensing & Third-Party Notices
-- [ ] Verify redistribution terms and data provenance of glass catalog data (Schott, Ohara, CDGM, Hoya)
-- [ ] Add `THIRD_PARTY_NOTICES.md` acknowledging algorithms, code, and design ported from `ray-optics`, `optiland`, `three-gpu-pathtracer`, and `vectorcraft`
+---
 
-### 15.5 GitHub Release
-- [ ] Tag `v0.1.0-alpha` (Slice A public release) with pre-built binaries for macOS (arm64), Windows (x64), Linux (x64)
-- [ ] 15.5b: macOS `.app` / `.dmg` packaging with `.icns` icon via `cargo-packager` or `cargo-bundle` attached to a GitHub Release; document that the app is unsigned and how to open it (right-click > Open)
-- [ ] GitHub Release notes (generated from `CHANGELOG.md`)
-- [ ] crates.io publish for `optics-core`, `optics-spectral`, `optics-glass`, `optics-zemax`
-- [-] `brew tap` formula for macOS install — deferred
+## Phase 16 — Release (starts only when user explicitly requests) [-] DEFERRED
 
-### 15.6 Community
-- [ ] GitHub Discussions enabled
-- [ ] Issue templates: Bug Report, Feature Request, Optical Algorithm Proposal
-- [ ] Project board with Phase columns matching this TODO
+> Deferred: zero publishing, tagging, deployments or release packaging permitted until explicit user instruction.
+
+### Milestone Gate: Feature-Complete + Polish
+- [-] All quality gates pass (`cargo fmt`, `cargo clippy -D warnings`, `cargo test`, `cargo build --target wasm32-unknown-unknown`)
+- [-] Golden image visual regression suite clean at 1x and 2x DPI
+- [-] Complete documentation in mdBook and rustdoc clean with 0 warnings
+- [-] Zero unverified claims in reports
+
+### 16.1 Licensing & Third-Party Notices
+- [-] Verify redistribution terms and data provenance of glass catalog data (Schott, Ohara, CDGM, Hoya)
+- [-] Add `THIRD_PARTY_NOTICES.md` acknowledging algorithms, code, and design ported from reference repos
+
+### 16.2 Packaging & Binaries
+- [-] Tag release with pre-built binaries for macOS (arm64), Windows (x64), Linux (x64)
+- [-] macOS `.app` / `.dmg` packaging with `.icns` icon via `cargo-packager` or `cargo-bundle`
+- [-] Release notes (generated from `CHANGELOG.md`)
+- [-] crates.io publish for workspace crates (optics-core, optics-spectral, optics-glass, optics-zemax)
+- [-] `brew tap` formula for macOS install
+
+### 16.3 Web & Documentation Deployments
+- [-] GitHub Actions workflow that builds with trunk and deploys `dist/` to GitHub Pages
+- [-] Deploy mdBook docs to GitHub Pages
 
 ---
 
@@ -655,7 +664,7 @@
 ## Implementation Slices (Vertical Delivery Plan)
 
 ### Slice A — First Interactive Demo (Prism Spectral Dispersion)
-> Goal: End-to-end interactive demo showing white D65 light dispersing through an equilateral Schott N-BK7 prism with clickable ray inspection, running native and on WebAssembly. Public release tagged as `v0.1.0-alpha`.
+> Goal: Prism demo complete and polished; runs natively; builds for web locally.
 - [x] Phase 1: Rust workspace scaffold & CI
 - [x] Phase 2.1–2.3: Core math (Ray, Snell vector refract, exact Fresnel, TIR)
 - [x] Task 2.8: Non-sequential path tracer (triangles, Möller–Trumbore, D65 prism scene)
@@ -666,8 +675,8 @@
 - [x] Phase 9.1: Design tokens & theme palette (MediumDark, WCAG AA verified)
 - [x] Phase 9.3: Central 2D scene canvas (prism, light, rays) via egui `Painter`
 - [x] Phase 9.5: Single-Ray Inspector tab (click-to-select ray by nearest segment, per-bounce table from `RayBounce`, angle readouts)
-- [~] Phase 12.1: Local WebAssembly build via `trunk` (verified locally; release wasm: 3.20 MB raw / 1.44 MB gzip; GitHub Pages deployment deferred per rules)
-- [ ] Phase 15.5 & 15.5b: Slice A public release `v0.1.0-alpha` and macOS `.app`/`.dmg` packaging (deferred to final release phase per rules)
+- [x] Phase 12.1: Local WebAssembly build via `trunk` (verified locally; release wasm: 3.20 MB raw / 1.44 MB gzip)
+- [ ] Step A2: UI visual and interaction polish (glyphs, bounds auto-fit, translucent prism, Fresnel reflection branches, legend, sentence case, chrome fix)
 
 ### Slice B — Lens Systems & Sequential Diagnostics
 > Goal: Load Zemax Cooke Triplet and Double Gauss prescriptions, trace marginal/chief paraxial rays, and render 2D spot diagrams and ray fans.
