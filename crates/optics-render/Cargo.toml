@@ -11,6 +11,7 @@ rust-version.workspace = true
 [dependencies]
 optics-core = { workspace = true }
 optics-bvh  = { workspace = true }
+nalgebra    = { workspace = true }
 # wgpu "25" resolves to 25.0.2 — same version eframe 0.32.3 uses, so Cargo
 # deduplicates them into a single crate copy. Do NOT bump to 26+ without
 # also upgrading eframe.

@@ -9,6 +9,7 @@
 
 pub mod abbe;
 pub mod color;
+pub mod hero;
 pub mod sellmeier;
 
 pub use abbe::{
@@ -18,6 +19,9 @@ pub use color::{
     CIE_1931_CMF_5NM, CIE_D65_SPD_5NM, SPECTRUM_MAX_NM, SPECTRUM_MIN_NM, SPECTRUM_STEP_NM,
     cie_1931_cmf, d65_normalization_factor, d65_spd, display_color_for_wavelength, linear_to_srgb,
     spectrum_to_srgb, srgb_to_linear, wavelength_to_xyz, xyz_to_linear_srgb, xyz_to_srgb,
+};
+pub use hero::{
+    DynamicHeroSpectrum, HeroBundle4, HeroSpectrum, hero_sample_wavelengths, sample_hero_bundle,
 };
 pub use sellmeier::{cauchy_dispersion, sellmeier_formula_1, sellmeier_formula_2};
 

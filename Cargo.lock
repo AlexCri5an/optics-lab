@@ -2345,6 +2345,7 @@ name = "optics-bvh"
 version = "0.0.1"
 dependencies = [
  "bytemuck",
+ "nalgebra",
  "optics-core",
  "serde",
 ]
@@ -2397,6 +2398,7 @@ version = "0.0.1"
 dependencies = [
  "bytemuck",
  "half",
+ "nalgebra",
  "optics-bvh",
  "optics-core",
  "serde",

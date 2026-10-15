@@ -10,6 +10,47 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 
 ### Added
 
+#### Phase 7: wgpu Path Tracing Pipeline & Camera Models (`optics-render`)
+- **GPU Hardware Context & Target Allocations (`optics-render::context`, `optics-render::target`):**
+  - `GpuContext` with headless adapter/device initialization and surface integration.
+  - `RenderTarget` (Rgba16Float HDR accumulation buffer) and `ToneMapTarget` with `resize_render_targets`.
+- **Physical Camera Models (`optics-render::camera`):**
+  - `ThinLensCamera` with depth-of-field, aperture diameter, focal plane distance, concentric disk lens sampling, and 16-byte aligned `CameraUniform`.
+  - `OrthographicCamera` for technical paraxial cross-sections and layout views.
+- **BVH Buffer Upload Pipeline (`optics-render::bvh_upload`):**
+  - `BvhBuffer` uploading flat 16-byte aligned BVH node arrays and triangle primitive pools directly into GPU storage buffers.
+- **WGSL Compute & Render Shaders (`optics-render::shaders`):**
+  - `path_tracer.wgsl`: PCG32 random number generator, thin-lens camera ray generation, iterative BVH traversal (32-deep stack), Fresnel dielectric reflection/refraction, Total Internal Reflection (TIR), and Russian Roulette path termination.
+  - `tonemapping.wgsl`: Fullscreen vertex generator, ACES filmic tone mapping operator, and IEC 61966-2-1 piecewise sRGB gamma transfer curve.
+  - `bvh_heatmap.wgsl`: Traversal complexity visualizer with smooth temperature ramp ($Blue \to Cyan \to Green \to Yellow \to Red$).
+- **Statistical Convergence Analytics (`optics-render::convergence`):**
+  - `ConvergenceTracker` implementing Welford's online one-pass mean and variance algorithm ($\sigma^2, \text{SEM}$).
+  - `compute_rmse` for root-mean-square error tracking against reference solutions.
+- **Renderer Orchestration (`optics-render::pipeline`):**
+  - `PathTracingRenderer` dispatching compute passes, managing uniform bindings, and incrementing sample accumulation.
+
+#### Phase 3.3: Hero-Wavelength Spectral Sampling (`optics-spectral`)
+- **Stratified Hero-Wavelength Engine (`optics-spectral::hero`):**
+  - `HeroSpectrum<const N: usize>` and `DynamicHeroSpectrum` for stratified Monte Carlo spectral ray sampling in $380\dots780\,\text{nm}$.
+  - Primary hero wavelength selection with uniform stratification, wrap-around, and relative sample weights.
+  - Direct spectral integration estimators: `to_xyz`, `to_linear_srgb`, `to_srgb`, and `d65_weights`.
+  - Constant spectrum test confirming flat white reconstruction across stratified hero bundles.
+
+#### Phase 6: 2-Level BVH Acceleration Structure & GPU Buffer Packing (`optics-bvh`)
+- **Bounding Volume Hierarchy (`optics-bvh::aabb`, `optics-bvh::builder`):**
+  - Axis-Aligned Bounding Box (`Aabb`) with Kay-Kajiya / Smits ray-slab intersection test handling zero directions, NaNs, and grazing incidence safely.
+  - 16-bin Surface Area Heuristic (SAH) builder (`build_bvh`, `find_best_split`) with spatial median partitioning fallback.
+- **2-Level TLAS / BLAS Architecture (`optics-bvh::scene`, `optics-bvh::triangle`):**
+  - Bottom-Level Acceleration Structure (BLAS) accelerating triangular meshes via Möller–Trumbore intersection.
+  - Top-Level Acceleration Structure (TLAS) over `BlasInstance` elements with affine local-to-world transformation matrices.
+  - Hierarchical ray traversal (`BvhScene::intersect`) with world-to-local ray transformation and outward normal preservation.
+- **GPU Buffer Layout & Memory Alignment (`optics-bvh::gpu`):**
+  - `GpuBvhNode`: 32-byte struct with 16-byte alignment (`#[repr(C, align(16))]`) implementing `bytemuck::Pod` and `Zeroable`.
+  - `GpuTriangle`: 64-byte struct with 16-byte alignment (`v0, v1, v2, normal_mat`) implementing `bytemuck::Pod` and `Zeroable`.
+  - Zero-copy buffer serialization routines: `pack_bvh_to_gpu_buffer` and `pack_triangles_to_gpu_buffer`.
+- **Traversal Diagnostics & Cost Heatmaps (`optics-bvh::cost`):**
+  - `trace_bvh_cost` measuring intersection evaluation count for performance diagnostics and heatmaps.
+
 #### Scientific Desktop Workstation UI (1:1 Reference Layout & Visual Language)
 - **Design Tokens & Theme System (`optics-ui::theme`):**
   - Canonical dark scientific palette matching reference: `#080D13` (canvas), `#0D141C` (panels), `#101820` (secondary), `#26313B` (borders), `#1B252E` (subtle borders), `#D8DEE6` (primary text), `#8995A3` (secondary text), `#5E6A76` (muted), `#202B36` (selected item), `#A9B8C8` (accent).
