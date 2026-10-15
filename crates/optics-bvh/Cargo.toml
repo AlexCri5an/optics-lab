@@ -1,0 +1,17 @@
+[package]
+name        = "optics-bvh"
+description = "2-level TLAS/BLAS acceleration structure, SAH builder, GPU buffer packing"
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+optics-core = { workspace = true }
+bytemuck    = { workspace = true }
+serde       = { workspace = true }
+
+[lints]
+workspace = true

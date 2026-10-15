@@ -1,0 +1,24 @@
+[package]
+name        = "optics-render"
+description = "wgpu path tracing pipeline, compute shaders, BVH upload, camera models"
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+optics-core = { workspace = true }
+optics-bvh  = { workspace = true }
+# wgpu "25" resolves to 25.0.2 — same version eframe 0.32.3 uses, so Cargo
+# deduplicates them into a single crate copy. Do NOT bump to 26+ without
+# also upgrading eframe.
+wgpu        = { workspace = true }
+bytemuck    = { workspace = true }
+half        = { workspace = true }
+serde       = { workspace = true }
+thiserror   = { workspace = true }
+
+[lints]
+workspace = true

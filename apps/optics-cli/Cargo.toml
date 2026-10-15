@@ -1,0 +1,25 @@
+[package]
+name        = "optics-cli"
+description = "OpticsLab CLI — headless benchmark and batch diagnostic runner"
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "optics-cli"
+path = "src/main.rs"
+
+[dependencies]
+optics-core     = { workspace = true }
+optics-spectral = { workspace = true }
+optics-glass    = { workspace = true }
+optics-zemax    = { workspace = true }
+clap            = { workspace = true }
+serde           = { workspace = true }
+serde_json      = { workspace = true }
+
+[lints]
+workspace = true

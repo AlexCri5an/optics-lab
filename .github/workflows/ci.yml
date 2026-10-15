@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check-format-lint-test:
+    name: Check, Format, Clippy & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: |
+          rustup show active-toolchain || rustup toolchain install stable --profile minimal
+
+      - name: Install mold & clang for fast linking
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mold clang
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Cargo check (native)
+        run: cargo check --all --all-targets
+
+      - name: Cargo clippy
+        run: cargo clippy --all --all-targets -- -D warnings
+
+      - name: Run tests
+        run: cargo test --all
+
+  check-wasm:
+    name: Build WASM Target
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain with wasm32 target
+        run: |
+          rustup target add wasm32-unknown-unknown
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build optics-web (WASM)
+        run: cargo build --target wasm32-unknown-unknown -p optics-web

@@ -1,0 +1,17 @@
+[package]
+name        = "optics-core"
+description = "Ray primitives, 3D math, Snell/Fresnel vector algebra, paraxial tracer"
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

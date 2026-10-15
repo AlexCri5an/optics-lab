@@ -1,0 +1,75 @@
+[workspace]
+resolver = "3"
+members = [
+    # Library crates
+    "crates/optics-core",
+    "crates/optics-spectral",
+    "crates/optics-glass",
+    "crates/optics-bvh",
+    "crates/optics-zemax",
+    "crates/optics-render",
+    "crates/optics-ui",
+    # Application targets
+    "apps/optics-lab",
+    "apps/optics-cli",
+    "apps/optics-web",
+]
+
+[workspace.package]
+version     = "0.1.0"
+edition     = "2024"
+authors     = ["OpticsLab Contributors"]
+license     = "MIT"
+repository  = "https://github.com/AlexCri5an/optics-lab"
+rust-version = "1.87"
+
+# ---------------------------------------------------------------------------
+# Workspace-wide lint policy (VectorCraft zero-panic standard)
+# ---------------------------------------------------------------------------
+[workspace.lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+dbg_macro    = "warn"
+unwrap_used  = "deny"
+expect_used  = "deny"
+todo         = "warn"
+panic        = "warn"
+
+# ---------------------------------------------------------------------------
+# Workspace-wide dependency versions — single source of truth.
+# IMPORTANT: eframe 0.32.3 pulls in wgpu 25.0.2; optics-render MUST use the
+# same wgpu semver range so Cargo deduplicates them into one copy.
+# ---------------------------------------------------------------------------
+[workspace.dependencies]
+# Math
+nalgebra   = { version = "0.33", features = ["serde-serialize"] }
+
+# Serialisation
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Error handling
+thiserror  = "2"
+
+# CLI
+clap       = { version = "4", features = ["derive"] }
+
+# GPU / rendering
+wgpu       = "25"      # Locked to match eframe 0.32.3 (egui-wgpu 0.32.3 → wgpu 25.0.2)
+bytemuck   = { version = "1", features = ["derive"] }
+half       = "2"
+
+# UI
+egui       = "0.32"
+eframe     = { version = "0.32.3", default-features = false, features = ["wgpu", "default_fonts"] }
+
+# Internal crates
+optics-core     = { path = "crates/optics-core" }
+optics-spectral = { path = "crates/optics-spectral" }
+optics-glass    = { path = "crates/optics-glass" }
+optics-bvh      = { path = "crates/optics-bvh" }
+optics-zemax    = { path = "crates/optics-zemax" }
+optics-render   = { path = "crates/optics-render" }
+optics-ui       = { path = "crates/optics-ui" }

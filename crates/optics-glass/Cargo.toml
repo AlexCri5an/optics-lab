@@ -1,0 +1,19 @@
+[package]
+name        = "optics-glass"
+description = "Real-world optical glass catalog (Schott, Ohara, CDGM, Hoya) with Sellmeier data"
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+optics-core     = { workspace = true }
+optics-spectral = { workspace = true }
+serde           = { workspace = true }
+serde_json      = { workspace = true }
+thiserror       = { workspace = true }
+
+[lints]
+workspace = true

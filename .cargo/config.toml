@@ -1,0 +1,13 @@
+# .cargo/config.toml
+#
+# Linker overrides: only applied on Linux CI to speed up link times.
+# macOS uses Apple's linker by default (no override needed).
+# Windows uses MSVC link.exe by default (no override needed).
+
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+[target.aarch64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]

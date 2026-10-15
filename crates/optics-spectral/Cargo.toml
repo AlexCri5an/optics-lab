@@ -1,0 +1,17 @@
+[package]
+name        = "optics-spectral"
+description = "Sellmeier & Cauchy dispersion, hero-wavelength sampling, CIE 1931 XYZ → sRGB"
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+optics-core = { workspace = true }
+serde       = { workspace = true }
+thiserror   = { workspace = true }
+
+[lints]
+workspace = true
