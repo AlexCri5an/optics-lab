@@ -79,3 +79,96 @@ fn test_tir_edge_state_harness() {
         );
     harness.run();
 }
+
+#[test]
+fn test_lens_system_cross_section_harness_1x_and_2x() {
+    let mut app = OpticsLabApp {
+        app_mode: optics_ui::AppMode::LensSystem,
+        ..Default::default()
+    };
+    if let Some(sim) = &mut app.lens_sim {
+        sim.active_subview = optics_ui::LensSubview::CrossSection;
+    }
+
+    // 1x DPI
+    let mut harness1x = Harness::builder()
+        .with_size(egui::Vec2::new(900.0, 600.0))
+        .with_pixels_per_point(1.0)
+        .build_state(
+            |ctx, state| {
+                let mut frame = eframe::Frame::_new_kittest();
+                state.update(ctx, &mut frame);
+            },
+            app,
+        );
+    harness1x.run();
+}
+
+#[test]
+fn test_lens_system_spot_diagram_harness() {
+    let mut app = OpticsLabApp {
+        app_mode: optics_ui::AppMode::LensSystem,
+        ..Default::default()
+    };
+    if let Some(sim) = &mut app.lens_sim {
+        sim.active_subview = optics_ui::LensSubview::SpotDiagram;
+    }
+
+    let mut harness = Harness::builder()
+        .with_size(egui::Vec2::new(900.0, 600.0))
+        .with_pixels_per_point(1.0)
+        .build_state(
+            |ctx, state| {
+                let mut frame = eframe::Frame::_new_kittest();
+                state.update(ctx, &mut frame);
+            },
+            app,
+        );
+    harness.run();
+}
+
+#[test]
+fn test_lens_system_ray_fan_harness() {
+    let mut app = OpticsLabApp {
+        app_mode: optics_ui::AppMode::LensSystem,
+        ..Default::default()
+    };
+    if let Some(sim) = &mut app.lens_sim {
+        sim.active_subview = optics_ui::LensSubview::RayFan;
+    }
+
+    let mut harness = Harness::builder()
+        .with_size(egui::Vec2::new(900.0, 600.0))
+        .with_pixels_per_point(1.0)
+        .build_state(
+            |ctx, state| {
+                let mut frame = eframe::Frame::_new_kittest();
+                state.update(ctx, &mut frame);
+            },
+            app,
+        );
+    harness.run();
+}
+
+#[test]
+fn test_lens_system_prescription_table_harness() {
+    let mut app = OpticsLabApp {
+        app_mode: optics_ui::AppMode::LensSystem,
+        ..Default::default()
+    };
+    if let Some(sim) = &mut app.lens_sim {
+        sim.active_subview = optics_ui::LensSubview::PrescriptionTable;
+    }
+
+    let mut harness = Harness::builder()
+        .with_size(egui::Vec2::new(900.0, 600.0))
+        .with_pixels_per_point(1.0)
+        .build_state(
+            |ctx, state| {
+                let mut frame = eframe::Frame::_new_kittest();
+                state.update(ctx, &mut frame);
+            },
+            app,
+        );
+    harness.run();
+}

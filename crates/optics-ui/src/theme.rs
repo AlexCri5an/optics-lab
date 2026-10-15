@@ -73,35 +73,35 @@ pub fn apply_tokens(ctx: &Context, tokens: &OpticsTokens) {
 
     // Window strokes and corner radius
     style.visuals.window_stroke = Stroke::new(1.0, tokens.border);
-    style.visuals.window_corner_radius = CornerRadius::same(8);
+    style.visuals.window_corner_radius = CornerRadius::same(2);
 
     // Non-interactive widgets
     style.visuals.widgets.noninteractive.bg_fill = tokens.panel_bg;
     style.visuals.widgets.noninteractive.weak_bg_fill = tokens.panel_bg;
     style.visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0, tokens.text_primary);
     style.visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, tokens.border);
-    style.visuals.widgets.noninteractive.corner_radius = CornerRadius::same(4);
+    style.visuals.widgets.noninteractive.corner_radius = CornerRadius::same(2);
 
     // Inactive widgets
     style.visuals.widgets.inactive.bg_fill = Color32::from_rgba_premultiplied(38, 46, 66, 200);
     style.visuals.widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
     style.visuals.widgets.inactive.fg_stroke = Stroke::new(1.0, tokens.text_primary);
     style.visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, tokens.border);
-    style.visuals.widgets.inactive.corner_radius = CornerRadius::same(4);
+    style.visuals.widgets.inactive.corner_radius = CornerRadius::same(2);
 
     // Hovered widgets
     style.visuals.widgets.hovered.bg_fill = tokens.hover_bg;
     style.visuals.widgets.hovered.weak_bg_fill = tokens.hover_bg;
     style.visuals.widgets.hovered.fg_stroke = Stroke::new(1.0, Color32::WHITE);
-    style.visuals.widgets.hovered.bg_stroke = Stroke::new(1.5, tokens.accent);
-    style.visuals.widgets.hovered.corner_radius = CornerRadius::same(4);
+    style.visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, tokens.accent);
+    style.visuals.widgets.hovered.corner_radius = CornerRadius::same(2);
 
     // Active / pressed widgets
     style.visuals.widgets.active.bg_fill = tokens.active_bg;
     style.visuals.widgets.active.weak_bg_fill = tokens.active_bg;
     style.visuals.widgets.active.fg_stroke = Stroke::new(1.0, Color32::WHITE);
-    style.visuals.widgets.active.bg_stroke = Stroke::new(2.0, tokens.accent);
-    style.visuals.widgets.active.corner_radius = CornerRadius::same(4);
+    style.visuals.widgets.active.bg_stroke = Stroke::new(1.5, tokens.accent);
+    style.visuals.widgets.active.corner_radius = CornerRadius::same(2);
 
     // Selection visuals
     style.visuals.selection.bg_fill = Color32::from_rgba_premultiplied(0, 212, 245, 60);

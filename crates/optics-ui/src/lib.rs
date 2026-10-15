@@ -10,11 +10,12 @@ pub mod hit_test;
 pub mod icons;
 pub mod legend;
 pub mod lens_sim;
+pub mod lens_view;
 pub mod sim;
 pub mod theme;
 pub mod view_transform;
 
-pub use app::{ActiveTool, OpticsLabApp};
+pub use app::{ActiveTool, AppMode, OpticsLabApp};
 pub use formatting::{
     format_angle_deg, format_bounce_event, format_percent, format_refractive_index,
     format_wavelength,
@@ -26,6 +27,7 @@ pub use lens_sim::{
     LensElement2D, LensPreset, LensSimulation, LensSubview, TracedSequentialRay2D,
     build_lens_elements, trace_cross_section_rays,
 };
+pub use lens_view::render_lens_system_panel;
 pub use sim::{
     EdgeState, PrismSimulation, ReflectedBranch2D, TracedRay2D, map_reflectance_to_alpha,
 };

@@ -448,4 +448,22 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_recalculate_performance_cooke_triplet() -> TestResult {
+        let mut sim = LensSimulation::new(LensPreset::CookeTriplet)?;
+
+        let start = std::time::Instant::now();
+        sim.recalculate();
+        let elapsed = start.elapsed();
+
+        // 60 FPS is 16.6 ms per frame; recalculation should be under 10 ms (well under one frame)
+        assert!(
+            elapsed.as_millis() < 10,
+            "Recalculate took too long: {} ms",
+            elapsed.as_millis()
+        );
+
+        Ok(())
+    }
 }
