@@ -98,7 +98,10 @@ pub fn draw_tool_icon(
                 stroke,
             );
             painter.line_segment(
-                [center + Vec2::new(0.0, 4.5), center + Vec2::new(0.0, 4.5 + len)],
+                [
+                    center + Vec2::new(0.0, 4.5),
+                    center + Vec2::new(0.0, 4.5 + len),
+                ],
                 stroke,
             );
             painter.line_segment(
@@ -109,7 +112,10 @@ pub fn draw_tool_icon(
                 stroke,
             );
             painter.line_segment(
-                [center + Vec2::new(4.5, 0.0), center + Vec2::new(4.5 + len, 0.0)],
+                [
+                    center + Vec2::new(4.5, 0.0),
+                    center + Vec2::new(4.5 + len, 0.0),
+                ],
                 stroke,
             );
         }
@@ -125,7 +131,10 @@ pub fn draw_tool_icon(
                 stroke,
             );
             painter.line_segment(
-                [p_right + Vec2::new(0.0, -4.0), p_right + Vec2::new(0.0, 4.0)],
+                [
+                    p_right + Vec2::new(0.0, -4.0),
+                    p_right + Vec2::new(0.0, 4.0),
+                ],
                 stroke,
             );
             // Center gauge mark

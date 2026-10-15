@@ -8,6 +8,7 @@ pub mod app;
 pub mod formatting;
 pub mod hit_test;
 pub mod icons;
+pub mod legend;
 pub mod sim;
 pub mod theme;
 pub mod view_transform;
@@ -19,7 +20,9 @@ pub use formatting::{
 };
 pub use hit_test::{find_hovered_ray_index, point_to_segment_distance};
 pub use icons::{ToolIcon, draw_tool_icon};
-pub use sim::{PrismSimulation, TracedRay2D};
+pub use legend::{draw_wavelength_legend, find_closest_ray_by_x, wavelength_to_x, x_to_wavelength};
+pub use sim::{
+    EdgeState, PrismSimulation, ReflectedBranch2D, TracedRay2D, map_reflectance_to_alpha,
+};
 pub use theme::{OpticsTokens, apply_tokens, wcag_contrast_ratio, wcag_relative_luminance};
 pub use view_transform::ViewTransform;
-
