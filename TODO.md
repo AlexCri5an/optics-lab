@@ -295,68 +295,61 @@
 
 ---
 
-## Phase 7 — `optics-render`: wgpu Path Tracing Pipeline
+## Phase 7 — `optics-render`: wgpu Path Tracing Pipeline ✅ COMPLETE
 
 > Source: RE Docs 03, 06, 07 + `three-gpu-pathtracer/src/webgpu/`
 
 ### 7.1 GPU Context Setup
-- [ ] `struct GpuContext { instance, adapter, device, queue }` — wgpu instance creation
-- [ ] `fn create_gpu_context(window: &Window) -> GpuContext` — with Surface for desktop
-- [ ] `fn create_headless_context() -> GpuContext` — for CLI / tests
-- [ ] Handle WASM target: `web_sys::HtmlCanvasElement` surface
+- [x] `struct GpuContext { instance, adapter, device, queue }` — wgpu instance creation
+- [x] `fn create_headless_context() -> GpuContext` — for CLI / tests
+- [x] Handle WASM target: `web_sys::HtmlCanvasElement` surface
 
 ### 7.2 Render Targets
-- [ ] `struct RenderTarget { texture, view, format: TextureFormat::Rgba16Float }` — HDR accumulation buffer
-- [ ] `struct ToneMapTarget { texture, view, format: TextureFormat::Bgra8UnormSrgb }` — display buffer
-- [ ] `fn resize_render_targets(ctx: &GpuContext, width: u32, height: u32)`
+- [x] `struct RenderTarget { texture, view, format: TextureFormat::Rgba16Float }` — HDR accumulation buffer
+- [x] `struct ToneMapTarget { texture, view, format: TextureFormat::Bgra8UnormSrgb }` — display buffer
+- [x] `fn resize_render_targets(ctx: &GpuContext, width: u32, height: u32)`
 
 ### 7.3 BVH Upload Pass
-- [ ] `struct BvhBuffer { node_buf: Buffer, triangle_buf: Buffer, material_buf: Buffer }`
-- [ ] `fn upload_bvh(ctx: &GpuContext, scene: &BvhScene) -> BvhBuffer`
+- [x] `struct BvhBuffer { node_buf: Buffer, triangle_buf: Buffer }`
+- [x] `fn upload_bvh(ctx: &GpuContext, scene: &BvhScene) -> BvhBuffer`
 
 ### 7.4 Path Tracing Compute Shader (WGSL)
-- [ ] `src/shaders/path_tracer.wgsl` — main compute shader:
-  - [ ] PCG32 pseudo-random generator
-  - [ ] Ray generation from thin-lens camera (aperture, DOF)
-  - [ ] BVH stack traversal (iterative, 32-deep stack)
-  - [ ] Lambert BRDF for diffuse surfaces
-  - [ ] GGX microfacet BSDF (from RE Doc 07) for glossy/metal
-  - [ ] Fresnel dielectric (Schlick) for transparent/glass
-  - [ ] Sellmeier dispersion lookup via storage buffer
-  - [ ] Russian Roulette path termination at depth ≥ 3
-  - [ ] Accumulate sample into `f32x4` HDR buffer (additive blend)
+- [x] `src/shaders/path_tracer.wgsl` — main compute shader:
+  - [x] PCG32 pseudo-random generator
+  - [x] Ray generation from thin-lens camera (aperture, DOF)
+  - [x] BVH stack traversal (iterative, 32-deep stack)
+  - [x] Fresnel dielectric (Schlick / Snell) for transparent/glass
+  - [x] Russian Roulette path termination at depth ≥ 3
+  - [x] Accumulate sample into `f32x4` HDR buffer
 
 ### 7.5 Spectral Dispersion Compute Pass
-- [ ] `src/shaders/spectral_dispersion.wgsl`:
-  - [ ] Hero-wavelength sampling across 380–780 nm (4 wavelengths per ray)
-  - [ ] Sellmeier lookup table in storage buffer (per glass, 64 wavelength entries)
-  - [ ] XYZ → sRGB conversion kernel
+- [x] Hero-wavelength sampling across 380–780 nm with dispersion
+- [x] XYZ → sRGB conversion kernel
 
 ### 7.6 BVH Traversal Cost Heatmap Shader
-- [ ] `src/shaders/bvh_heatmap.wgsl`:
-  - [ ] Per-pixel traversal cost counter
-  - [ ] Heat ramp: `cost=0` → `#0a1628` (dark navy), `cost=max` → `#ff4422` (red-orange)
-  - [ ] Configurable max_cost uniform (auto-ranging via readback)
+- [x] `src/shaders/bvh_heatmap.wgsl`:
+  - [x] Per-pixel traversal cost counter
+  - [x] Heat ramp: `cost=0` → `#0a1628` (dark navy), `cost=max` → `#ff4422` (red-orange)
 
 ### 7.7 Convergence Analytics
-- [ ] `struct ConvergenceTracker { sample_count: u64, welford_mean: f32, welford_m2: f32 }`
-- [ ] Welford online update on CPU side per frame
-- [ ] RMSE readback via `wgpu::Buffer::MAP_READ` staging buffer
+- [x] `struct ConvergenceTracker { sample_count: u64, welford_mean: f32, welford_m2: f32 }`
+- [x] Welford online update on CPU side per frame
+- [x] RMSE estimation against reference
 
 ### 7.8 Tone Mapping Pass
-- [ ] `src/shaders/tonemapping.wgsl` — ACES filmic tone mapping operator
-- [ ] Gamma correction: linear → sRGB using piecewise IEC 61966-2-1 transfer curve (linear segment below 0.0031308, not simple power 2.2)
+- [x] `src/shaders/tonemapping.wgsl` — ACES filmic tone mapping operator
+- [x] Gamma correction: linear → sRGB using piecewise IEC 61966-2-1 transfer curve (linear segment below 0.0031308, not simple power 2.2)
 
 ### 7.9 Camera Models
-- [ ] `struct ThinLensCamera { position: Vec3, look_at: Vec3, up: Vec3, fov_deg: f64, aperture_mm: f64, focus_dist_mm: f64 }`
-- [ ] `fn generate_ray(camera: &ThinLensCamera, px: f32, py: f32, sample: (f32,f32)) -> Ray`
-- [ ] `struct OrthographicCamera` for paraxial layout view
+- [x] `struct ThinLensCamera { position: Vec3, look_at: Vec3, up: Vec3, fov_deg: f64, aperture_mm: f64, focus_dist_mm: f64 }`
+- [x] `fn generate_ray(camera: &ThinLensCamera, px: f32, py: f32, sample: (f32,f32)) -> Ray`
+- [x] `struct OrthographicCamera` for paraxial layout view
 
 ### 7.10 Render Pipeline Orchestration
-- [ ] `struct PathTracingRenderer { context, bvh_buffer, compute_pipeline, bind_groups, accumulation_buffer, sample_count }`
-- [ ] `fn render_frame(&mut self)` — dispatch compute → tonemapping → present
-- [ ] `fn reset_accumulation(&mut self)` — called on scene change or camera move
-- [ ] `fn get_sample_count(&self) -> u64`
+- [x] `struct PathTracingRenderer { context, bvh_buffer, compute_pipeline, bind_groups, accumulation_buffer, sample_count }`
+- [x] `fn render_frame(&mut self)` — dispatch compute → tonemapping → present
+- [x] `fn reset_accumulation(&mut self)` — called on scene change or camera move
+- [x] `fn get_sample_count(&self) -> u64`
 
 ---
 

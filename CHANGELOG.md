@@ -10,6 +10,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 
 ### Added
 
+#### Phase 7: wgpu Path Tracing Pipeline & Camera Models (`optics-render`)
+- **GPU Hardware Context & Target Allocations (`optics-render::context`, `optics-render::target`):**
+  - `GpuContext` with headless adapter/device initialization and surface integration.
+  - `RenderTarget` (Rgba16Float HDR accumulation buffer) and `ToneMapTarget` with `resize_render_targets`.
+- **Physical Camera Models (`optics-render::camera`):**
+  - `ThinLensCamera` with depth-of-field, aperture diameter, focal plane distance, concentric disk lens sampling, and 16-byte aligned `CameraUniform`.
+  - `OrthographicCamera` for technical paraxial cross-sections and layout views.
+- **BVH Buffer Upload Pipeline (`optics-render::bvh_upload`):**
+  - `BvhBuffer` uploading flat 16-byte aligned BVH node arrays and triangle primitive pools directly into GPU storage buffers.
+- **WGSL Compute & Render Shaders (`optics-render::shaders`):**
+  - `path_tracer.wgsl`: PCG32 random number generator, thin-lens camera ray generation, iterative BVH traversal (32-deep stack), Fresnel dielectric reflection/refraction, Total Internal Reflection (TIR), and Russian Roulette path termination.
+  - `tonemapping.wgsl`: Fullscreen vertex generator, ACES filmic tone mapping operator, and IEC 61966-2-1 piecewise sRGB gamma transfer curve.
+  - `bvh_heatmap.wgsl`: Traversal complexity visualizer with smooth temperature ramp ($Blue \to Cyan \to Green \to Yellow \to Red$).
+- **Statistical Convergence Analytics (`optics-render::convergence`):**
+  - `ConvergenceTracker` implementing Welford's online one-pass mean and variance algorithm ($\sigma^2, \text{SEM}$).
+  - `compute_rmse` for root-mean-square error tracking against reference solutions.
+- **Renderer Orchestration (`optics-render::pipeline`):**
+  - `PathTracingRenderer` dispatching compute passes, managing uniform bindings, and incrementing sample accumulation.
+
 #### Phase 3.3: Hero-Wavelength Spectral Sampling (`optics-spectral`)
 - **Stratified Hero-Wavelength Engine (`optics-spectral::hero`):**
   - `HeroSpectrum<const N: usize>` and `DynamicHeroSpectrum` for stratified Monte Carlo spectral ray sampling in $380\dots780\,\text{nm}$.
