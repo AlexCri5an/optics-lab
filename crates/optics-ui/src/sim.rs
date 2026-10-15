@@ -87,19 +87,20 @@ impl PrismSimulation {
         #[cfg(not(target_arch = "wasm32"))]
         let start = std::time::Instant::now();
 
-        // 1. Resolve glass material
-        let catalog = GlassCatalogDb::load_bundled().ok();
-        let glass_mat: GlassMaterial =
-            match catalog.as_ref().and_then(|db| db.lookup(&self.glass_name)) {
-                Some(m) => m.clone(),
-                None => match self.glass_name.to_lowercase().as_str() {
-                    "n-bk7" | "nbk7" => GlassMaterial::n_bk7(),
-                    "sf11" => GlassMaterial::sf11(),
-                    "f2" => GlassMaterial::f2(),
-                    "fused silica" | "fused_silica" => GlassMaterial::fused_silica(),
-                    _ => GlassMaterial::n_bk7(),
-                },
-            };
+        // 1. Resolve glass material (check fast presets first before falling back to full JSON catalog)
+        let glass_mat: GlassMaterial = match self.glass_name.to_lowercase().as_str() {
+            "n-bk7" | "nbk7" => GlassMaterial::n_bk7(),
+            "sf11" => GlassMaterial::sf11(),
+            "f2" => GlassMaterial::f2(),
+            "fused silica" | "fused_silica" => GlassMaterial::fused_silica(),
+            _ => {
+                let catalog = GlassCatalogDb::load_bundled().ok();
+                match catalog.as_ref().and_then(|db| db.lookup(&self.glass_name)) {
+                    Some(m) => m.clone(),
+                    None => GlassMaterial::n_bk7(),
+                }
+            }
+        };
 
         self.nd = glass_mat.nd;
         self.vd = glass_mat.vd;
@@ -269,12 +270,19 @@ impl PrismSimulation {
     /// Evaluates the deviation angle for a specific wavelength in radians.
     #[must_use]
     pub fn compute_deviation_rad(&self, wavelength_nm: f64) -> Option<f64> {
-        let catalog = GlassCatalogDb::load_bundled().ok();
-        let glass_mat: GlassMaterial =
-            match catalog.as_ref().and_then(|db| db.lookup(&self.glass_name)) {
-                Some(m) => m.clone(),
-                None => GlassMaterial::n_bk7(),
-            };
+        let glass_mat: GlassMaterial = match self.glass_name.to_lowercase().as_str() {
+            "n-bk7" | "nbk7" => GlassMaterial::n_bk7(),
+            "sf11" => GlassMaterial::sf11(),
+            "f2" => GlassMaterial::f2(),
+            "fused silica" | "fused_silica" => GlassMaterial::fused_silica(),
+            _ => {
+                let catalog = GlassCatalogDb::load_bundled().ok();
+                match catalog.as_ref().and_then(|db| db.lookup(&self.glass_name)) {
+                    Some(m) => m.clone(),
+                    None => GlassMaterial::n_bk7(),
+                }
+            }
+        };
 
         let n = glass_mat.n(wavelength_nm);
         let alpha = self.apex_deg.to_radians();
@@ -329,5 +337,24 @@ mod tests {
             (dev_deg - 38.9567).abs() < 0.01,
             "CLI table value match failed: got {dev_deg}"
         );
+    }
+
+    #[test]
+    fn test_retrace_performance_64_samples() {
+        let mut sim = PrismSimulation::default();
+        sim.sample_count = 64;
+
+        // Warmup
+        sim.retrace();
+
+        let iterations = 100;
+        let start = std::time::Instant::now();
+        for _ in 0..iterations {
+            sim.retrace();
+        }
+        let elapsed = start.elapsed();
+        let ms_per_retrace = elapsed.as_secs_f64() * 1000.0 / (iterations as f64);
+        eprintln!("Measured re-trace time at 64 samples: {ms_per_retrace:.4} ms");
+        assert!(ms_per_retrace < 5.0);
     }
 }
