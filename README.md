@@ -6,6 +6,30 @@ OpticsLab is a clean-room, open-source alternative to commercial optical enginee
 
 ---
 
+## Interactive Prism Dispersion (Slice A Preview)
+
+OpticsLab features an interactive 2D prism simulation demonstrating real-time chromatic dispersion across physical glass media (N-BK7, SF11, F2, Fused Silica). An incoming D65 standard illuminant white ray refracts according to Sellmeier dispersion formulas, producing a continuous spectral fan sampled across visible wavelengths. Clicking any ray selects it and opens the inspector panel displaying exact per-bounce Fresnel reflectance/transmittance, angles of incidence/refraction, and cumulative throughput.
+
+<!-- Screenshot placeholder: Slice A Prism Dispersion UI with Spectral Fan and Ray Inspector (1200x800) -->
+<!-- ![OpticsLab Slice A UI Screenshot](docs/images/slice_a_prism_ui.png) -->
+
+### Running Locally
+
+#### Native Desktop App (macOS, Linux, Windows)
+```bash
+cargo run -p optics-lab
+```
+
+#### WebAssembly (Local Browser via Trunk)
+```bash
+# Install trunk if not present: brew install trunk  OR  cargo install trunk
+cd apps/optics-web
+trunk serve
+```
+Open `http://127.0.0.1:8080` in your web browser.
+
+---
+
 ## Inspiration & References
 
 OpticsLab is inspired by a broad landscape of research tools, commercial software, and modern open-source initiatives:
