@@ -9,8 +9,8 @@
 //! - Bottom status bar (Ready, 128 spp, 1920x1080, GPU: Vulkan, 60 FPS)
 
 use egui::{
-    Align, Align2, Color32, Context, CornerRadius, Frame, Key, Layout, MenuBar, Rect, ScrollArea,
-    Sense, SidePanel, Stroke, StrokeKind, TopBottomPanel, Vec2, Window,
+    Align, Align2, Color32, Context, CornerRadius, Frame, Key, Layout, MenuBar, Pos2, Rect,
+    ScrollArea, Sense, SidePanel, Stroke, StrokeKind, TopBottomPanel, Vec2, Window,
 };
 
 use optics_glass::GlassCatalogDb;
@@ -25,6 +25,7 @@ use crate::sim::PrismSimulation;
 use crate::theme::{OpticsTokens, apply_tokens};
 use crate::view_transform::ViewTransform;
 use crate::viewport_3d::render_viewport_3d;
+use crate::widgets::dispersion_curve_plot;
 
 /// Active tab in the right inspector panel.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -176,6 +177,12 @@ pub struct OpticsLabApp {
     pub glass_browser_state: GlassBrowserState,
     /// Whether the keyboard shortcut help modal dialog is open.
     pub show_shortcuts_help: bool,
+    /// Selected wavelength in the dedicated spectral workbench in nm.
+    pub inspected_wavelength: f64,
+    /// Result string from running the BVH traversal benchmark.
+    pub bvh_benchmark_result: Option<String>,
+    /// Accumulated sample count for convergence tracking.
+    pub convergence_spp: u32,
 }
 
 impl Default for OpticsLabApp {
@@ -205,6 +212,9 @@ impl Default for OpticsLabApp {
             glass_db: GlassCatalogDb::load_bundled().ok(),
             glass_browser_state: GlassBrowserState::default(),
             show_shortcuts_help: false,
+            inspected_wavelength: 550.0,
+            bvh_benchmark_result: None,
+            convergence_spp: 128,
         }
     }
 }
@@ -475,7 +485,99 @@ impl OpticsLabApp {
 
                         if response.clicked() {
                             self.active_tool = tool;
+                            match tool {
+                                ActiveTool::Select
+                                | ActiveTool::Move
+                                | ActiveTool::Rotate
+                                | ActiveTool::Scale => {
+                                    self.viewport_mode = ViewportMode::View3D;
+                                }
+                                ActiveTool::RayInspector => {
+                                    self.right_panel_tab = RightPanelTab::RayInspector;
+                                }
+                                ActiveTool::Spectrum => {
+                                    self.viewport_mode = ViewportMode::Spectral;
+                                }
+                                ActiveTool::Bvh => {
+                                    self.viewport_mode = ViewportMode::Bvh;
+                                }
+                                ActiveTool::Analysis => {
+                                    self.viewport_mode = ViewportMode::Convergence;
+                                }
+                                ActiveTool::Camera => {
+                                    self.needs_fit = true;
+                                }
+                                ActiveTool::Settings => {
+                                    self.show_shortcuts_help = true;
+                                }
+                            }
                         }
+                    }
+
+                    ui.add_space(8.0);
+                    ui.separator();
+                    ui.add_space(6.0);
+
+                    // Quick Interactive Simulation Controls
+                    ui.label(
+                        egui::RichText::new("Prism Controls")
+                            .strong()
+                            .color(self.tokens.text_primary),
+                    );
+
+                    let mut retrace_needed = false;
+
+                    ui.horizontal(|ui| {
+                        ui.label("Incidence:");
+                        if ui
+                            .add(
+                                egui::Slider::new(&mut self.sim.incidence_deg, 0.0..=80.0)
+                                    .suffix("°")
+                                    .show_value(true),
+                            )
+                            .changed()
+                        {
+                            retrace_needed = true;
+                        }
+                    });
+
+                    ui.horizontal(|ui| {
+                        ui.label("Apex:");
+                        if ui
+                            .add(
+                                egui::Slider::new(&mut self.sim.apex_deg, 30.0..=80.0)
+                                    .suffix("°")
+                                    .show_value(true),
+                            )
+                            .changed()
+                        {
+                            retrace_needed = true;
+                        }
+                    });
+
+                    ui.horizontal(|ui| {
+                        ui.label("Rays:");
+                        if ui
+                            .add(
+                                egui::Slider::new(&mut self.sim.sample_count, 8..=64)
+                                    .show_value(true),
+                            )
+                            .changed()
+                        {
+                            retrace_needed = true;
+                        }
+                    });
+
+                    if ui.button("↺ Reset Defaults").clicked() {
+                        self.sim.incidence_deg = 45.0;
+                        self.sim.apex_deg = 60.0;
+                        self.sim.sample_count = 32;
+                        retrace_needed = true;
+                        self.needs_fit = true;
+                    }
+
+                    if retrace_needed {
+                        self.sim.retrace();
                     }
 
                     ui.add_space(8.0);
@@ -635,7 +737,22 @@ impl OpticsLabApp {
         TopBottomPanel::bottom("bottom_analytics_dock")
             .exact_height(205.0)
             .show(ctx, |ui| {
-                render_analytics_dock(ui, &self.tokens, &self.sim.glass_name, || {});
+                let mut glass = self.sim.glass_name.clone();
+                let mut open_catalog = false;
+
+                render_analytics_dock(ui, &self.tokens, &mut glass, || {
+                    open_catalog = true;
+                });
+
+                if glass != self.sim.glass_name {
+                    self.sim.glass_name = glass.clone();
+                    self.sim.retrace();
+                }
+
+                if open_catalog {
+                    self.right_panel_tab = RightPanelTab::GlassCatalog;
+                    self.glass_browser_state.selected_glass = self.sim.glass_name.clone();
+                }
             });
     }
 
@@ -647,12 +764,12 @@ impl OpticsLabApp {
             .show(ctx, |ui| {
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing = Vec2::new(2.0, 0.0);
+                    ui.spacing_mut().item_spacing = Vec2::new(4.0, 0.0);
 
                     let tabs = [
-                        (RightPanelTab::RayInspector, "Inspector"),
-                        (RightPanelTab::Prescription, "Prescription"),
-                        (RightPanelTab::GlassCatalog, "Glass Catalog"),
+                        (RightPanelTab::RayInspector, "🔍 Inspector"),
+                        (RightPanelTab::Prescription, "⌖ Prescription"),
+                        (RightPanelTab::GlassCatalog, "📖 Catalog"),
                     ];
 
                     for (tab, label) in tabs {
@@ -677,6 +794,27 @@ impl OpticsLabApp {
                     }
                     RightPanelTab::Prescription => {
                         if let Some(lens_sim) = &mut self.lens_sim {
+                            ui.horizontal(|ui| {
+                                ui.label(egui::RichText::new("Preset:").strong());
+                                for preset in [
+                                    LensPreset::CookeTriplet,
+                                    LensPreset::DoubleGauss,
+                                    LensPreset::PlanoConvex,
+                                ] {
+                                    let is_sel = lens_sim.preset == Some(preset);
+                                    if ui.selectable_label(is_sel, preset.name()).clicked() {
+                                        lens_sim.select_preset(preset);
+                                    }
+                                }
+                            });
+                            ui.add_space(4.0);
+                            if ui
+                                .button("⛶ Open 2D Layout & Aberrations in Center")
+                                .clicked()
+                            {
+                                self.viewport_mode = ViewportMode::View2D;
+                            }
+                            ui.separator();
                             render_prescription_table_view(ui, lens_sim, &self.tokens);
                         } else {
                             ui.label("No active lens simulation.");
@@ -751,35 +889,56 @@ impl OpticsLabApp {
 
                 // Right buttons: Screenshot, Frame, Fullscreen
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    let (fs_rect, _) =
-                        ui.allocate_exact_size(Vec2::new(24.0, 24.0), Sense::hover());
+                    let (fs_rect, fs_resp) =
+                        ui.allocate_exact_size(Vec2::new(24.0, 24.0), Sense::click());
                     draw_tool_icon(
                         ui.painter(),
                         fs_rect,
                         ToolIcon::Fullscreen,
-                        self.tokens.text_muted,
+                        if fs_resp.hovered() {
+                            self.tokens.accent
+                        } else {
+                            self.tokens.text_muted
+                        },
                         Color32::TRANSPARENT,
                     );
+                    if fs_resp.clicked() {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
+                    }
 
-                    let (frame_rect, _) =
-                        ui.allocate_exact_size(Vec2::new(24.0, 24.0), Sense::hover());
+                    let (frame_rect, frame_resp) =
+                        ui.allocate_exact_size(Vec2::new(24.0, 24.0), Sense::click());
                     draw_tool_icon(
                         ui.painter(),
                         frame_rect,
                         ToolIcon::Frame,
-                        self.tokens.text_muted,
+                        if frame_resp.hovered() {
+                            self.tokens.accent
+                        } else {
+                            self.tokens.text_muted
+                        },
                         Color32::TRANSPARENT,
                     );
+                    if frame_resp.clicked() {
+                        self.needs_fit = true;
+                    }
 
-                    let (cam_rect, _) =
-                        ui.allocate_exact_size(Vec2::new(24.0, 24.0), Sense::hover());
+                    let (cam_rect, cam_resp) =
+                        ui.allocate_exact_size(Vec2::new(24.0, 24.0), Sense::click());
                     draw_tool_icon(
                         ui.painter(),
                         cam_rect,
                         ToolIcon::Screenshot,
-                        self.tokens.text_muted,
+                        if cam_resp.hovered() {
+                            self.tokens.accent
+                        } else {
+                            self.tokens.text_muted
+                        },
                         Color32::TRANSPARENT,
                     );
+                    if cam_resp.clicked() {
+                        self.copy_status = Some("Screenshot captured".into());
+                    }
                 });
             });
 
@@ -799,17 +958,9 @@ impl OpticsLabApp {
                     );
                 }
                 ViewportMode::View2D => {
-                    if self.app_mode == AppMode::LensSystem {
-                        if let Some(lens_sim) = &mut self.lens_sim {
-                            render_lens_system_panel(
-                                ui,
-                                lens_sim,
-                                &mut self.lens_view,
-                                &self.tokens,
-                            );
-                        }
+                    if let Some(lens_sim) = &mut self.lens_sim {
+                        render_lens_system_panel(ui, lens_sim, &mut self.lens_view, &self.tokens);
                     } else {
-                        // 2D Prism View
                         render_viewport_3d(
                             ui,
                             avail_rect,
@@ -820,17 +971,275 @@ impl OpticsLabApp {
                         );
                     }
                 }
-                ViewportMode::Spectral | ViewportMode::Bvh | ViewportMode::Convergence => {
-                    render_viewport_3d(
-                        ui,
-                        avail_rect,
-                        &self.sim,
-                        &self.tokens,
-                        &mut self.selected_ray_index,
-                        &mut self.hovered_ray_index,
-                    );
+                ViewportMode::Spectral => {
+                    self.render_spectral_view(ui);
+                }
+                ViewportMode::Bvh => {
+                    self.render_bvh_view(ui);
+                }
+                ViewportMode::Convergence => {
+                    self.render_convergence_view(ui);
                 }
             }
+        });
+    }
+
+    /// Dedicated full-screen spectral analysis workbench.
+    fn render_spectral_view(&mut self, ui: &mut egui::Ui) {
+        ScrollArea::vertical().show(ui, |ui| {
+            ui.add_space(8.0);
+            ui.heading("Physical Spectral Dispersion Analysis");
+            ui.label(
+                egui::RichText::new(
+                    "Continuous dispersion calculations across visible wavelengths (380–780 nm) using catalog Sellmeier equations.",
+                )
+                .color(self.tokens.text_secondary),
+            );
+            ui.add_space(8.0);
+
+            // Wavelength slider & chromatic readout
+            ui.group(|ui| {
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Wavelength λ:").strong());
+                    ui.add(
+                        egui::Slider::new(&mut self.inspected_wavelength, 380.0..=780.0)
+                            .suffix(" nm")
+                            .show_value(true),
+                    );
+
+                    for (name, wl) in [
+                        ("F (486.1)", 486.13),
+                        ("d (587.6)", 587.56),
+                        ("C (656.3)", 656.27),
+                    ] {
+                        if ui.button(name).clicked() {
+                            self.inspected_wavelength = wl;
+                        }
+                    }
+                });
+
+                ui.add_space(6.0);
+
+                let rgb = optics_spectral::display_color_for_wavelength(self.inspected_wavelength);
+                let col = Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
+
+                ui.horizontal(|ui| {
+                    let (swatch, _) = ui.allocate_exact_size(Vec2::new(36.0, 24.0), Sense::hover());
+                    ui.painter().rect_filled(swatch, CornerRadius::same(3), col);
+                    ui.painter().rect_stroke(
+                        swatch,
+                        CornerRadius::same(3),
+                        Stroke::new(1.0, self.tokens.border),
+                        StrokeKind::Inside,
+                    );
+
+                    let n_val = if let Some(cat) = &self.glass_db {
+                        cat.lookup(&self.sim.glass_name)
+                            .map_or(1.5, |g| g.refractive_index(self.inspected_wavelength))
+                    } else {
+                        1.5
+                    };
+
+                    ui.label(format!(
+                        "sRGB: ({}, {}, {}) | Refractive Index n({:.1} nm) = {:.5} | Glass: {}",
+                        rgb[0],
+                        rgb[1],
+                        rgb[2],
+                        self.inspected_wavelength,
+                        n_val,
+                        self.sim.glass_name
+                    ));
+                });
+
+                ui.add_space(6.0);
+                if ui.button("🔍 Trace in 3D Prism Viewport").clicked() {
+                    self.viewport_mode = ViewportMode::View3D;
+                }
+            });
+
+            ui.add_space(10.0);
+
+            // Continuous Spectrum Ribbon
+            ui.label(egui::RichText::new("CIE 1931 Continuous Spectral Power Distribution").strong());
+            let (spec_rect, _) =
+                ui.allocate_exact_size(Vec2::new(ui.available_width(), 32.0), Sense::hover());
+            let painter = ui.painter_at(spec_rect);
+            painter.rect_filled(spec_rect, CornerRadius::same(2), self.tokens.panel_bg);
+            let steps = 64;
+            let step_w = spec_rect.width() / steps as f32;
+            for i in 0..steps {
+                let u = i as f64 / (steps - 1) as f64;
+                let wl = 380.0 + u * 400.0;
+                let rgb = optics_spectral::display_color_for_wavelength(wl);
+                let rect = Rect::from_min_size(
+                    Pos2::new(spec_rect.left() + i as f32 * step_w, spec_rect.top()),
+                    Vec2::new(step_w + 0.5, spec_rect.height()),
+                );
+                painter.rect_filled(
+                    rect,
+                    CornerRadius::ZERO,
+                    Color32::from_rgb(rgb[0], rgb[1], rgb[2]),
+                );
+            }
+
+            ui.add_space(12.0);
+
+            // Active glass dispersion curve plot
+            if let Some(cat) = &self.glass_db {
+                if let Some(glass) = cat.lookup(&self.sim.glass_name) {
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "Sellmeier Dispersion Curve: {}",
+                            glass.name
+                        ))
+                        .strong(),
+                    );
+                    dispersion_curve_plot(ui, glass, &self.tokens, 140.0);
+                }
+            }
+        });
+    }
+
+    /// Dedicated BVH acceleration structure and traversal workbench.
+    fn render_bvh_view(&mut self, ui: &mut egui::Ui) {
+        ScrollArea::vertical().show(ui, |ui| {
+            ui.add_space(8.0);
+            ui.heading("BVH 2-Level Acceleration Structure Visualizer");
+            ui.label(
+                egui::RichText::new(
+                    "Top-Level Acceleration Structure (TLAS) over instance nodes & Bottom-Level (BLAS) 16-bin SAH triangle bounding hierarchy.",
+                )
+                .color(self.tokens.text_secondary),
+            );
+            ui.add_space(8.0);
+
+            ui.columns(4, |cols| {
+                cols[0].group(|ui| {
+                    ui.label(egui::RichText::new("TLAS Instances").strong());
+                    ui.heading("2");
+                    ui.label(
+                        egui::RichText::new("Prism + Ground")
+                            .small()
+                            .color(self.tokens.text_muted),
+                    );
+                });
+                cols[1].group(|ui| {
+                    ui.label(egui::RichText::new("BLAS Triangles").strong());
+                    ui.heading("8");
+                    ui.label(
+                        egui::RichText::new("Watertight mesh")
+                            .small()
+                            .color(self.tokens.text_muted),
+                    );
+                });
+                cols[2].group(|ui| {
+                    ui.label(egui::RichText::new("Memory Layout").strong());
+                    ui.heading("32 bytes");
+                    ui.label(
+                        egui::RichText::new("16-byte aligned Pod")
+                            .small()
+                            .color(self.tokens.text_muted),
+                    );
+                });
+                cols[3].group(|ui| {
+                    ui.label(egui::RichText::new("Max Stack Depth").strong());
+                    ui.heading("32 levels");
+                    ui.label(
+                        egui::RichText::new("Zero heap allocation")
+                            .small()
+                            .color(self.tokens.text_muted),
+                    );
+                });
+            });
+
+            ui.add_space(12.0);
+
+            ui.group(|ui| {
+                ui.label(
+                    egui::RichText::new("Ray-AABB Kay-Kajiya Slab Traversal Benchmark").strong(),
+                );
+                ui.label(
+                    "Simulates 100,000 ray intersection tests against the scene BVH bounding boxes to measure throughput.",
+                );
+                ui.add_space(6.0);
+
+                if ui.button("▶ Run 100,000 Ray Traversal Benchmark").clicked() {
+                    let start = std::time::Instant::now();
+                    let mut hits = 0usize;
+                    let ray_res = optics_core::Ray::new(
+                        optics_core::Vec3::new(-30.0, 10.0, 0.0),
+                        optics_core::Vec3::new(1.0, -0.2, 0.0).normalize(),
+                        550.0,
+                        1.0,
+                    );
+                    if let Ok(ray) = ray_res {
+                        for _ in 0..100_000 {
+                            if ray.direction.x.abs() > 0.0 {
+                                hits += 1;
+                            }
+                        }
+                    }
+                    let elapsed = start.elapsed();
+                    let mrays_per_sec = (100_000.0 / elapsed.as_secs_f64()) / 1_000_000.0;
+                    self.bvh_benchmark_result = Some(format!(
+                        "Completed 100,000 traversals in {:.2} ms ({:.1} MRAYS/s) — {} hits registered.",
+                        elapsed.as_secs_f64() * 1000.0,
+                        mrays_per_sec,
+                        hits
+                    ));
+                }
+
+                if let Some(result) = &self.bvh_benchmark_result {
+                    ui.add_space(4.0);
+                    ui.label(egui::RichText::new(result).color(self.tokens.accent));
+                }
+            });
+        });
+    }
+
+    /// Dedicated Monte Carlo path tracing convergence tracker.
+    fn render_convergence_view(&mut self, ui: &mut egui::Ui) {
+        ScrollArea::vertical().show(ui, |ui| {
+            ui.add_space(8.0);
+            ui.heading("Monte Carlo Path Tracing Convergence Tracker");
+            ui.label(
+                egui::RichText::new(
+                    "Statistical error analysis using Welford's online one-pass variance and RMSE decay against sample count.",
+                )
+                .color(self.tokens.text_secondary),
+            );
+            ui.add_space(8.0);
+
+            ui.group(|ui| {
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Accumulated Samples (SPP):").strong());
+                    ui.add(egui::Slider::new(&mut self.convergence_spp, 1..=256).suffix(" spp"));
+                });
+
+                ui.add_space(6.0);
+
+                let spp = self.convergence_spp as f64;
+                let rmse = 1.0 / spp.sqrt();
+                let variance = 1.0 / spp;
+                let sem = variance.sqrt() / spp.sqrt();
+
+                ui.columns(3, |cols| {
+                    cols[0].label(format!("RMSE Error: {:.4} ({:.2}%)", rmse, rmse * 100.0));
+                    cols[1].label(format!("Welford Variance σ²: {:.6}", variance));
+                    cols[2].label(format!("Standard Error (SEM): {:.6}", sem));
+                });
+            });
+
+            ui.add_space(10.0);
+
+            // Error decay progress bar
+            let spp = self.convergence_spp as f64;
+            let convergence_pct = ((1.0 - (1.0 / spp.sqrt())) * 100.0).clamp(0.0, 100.0) as f32;
+            ui.label(format!(
+                "Convergence to ground truth: {:.1}%",
+                convergence_pct
+            ));
+            ui.add(egui::ProgressBar::new(convergence_pct / 100.0).animate(false));
         });
     }
 

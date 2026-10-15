@@ -20,7 +20,7 @@ fn wavelength_color32(wavelength_nm: f64) -> Color32 {
 pub fn render_analytics_dock(
     ui: &mut egui::Ui,
     tokens: &OpticsTokens,
-    glass_name: &str,
+    glass_name: &mut String,
     on_edit_material: impl FnOnce(),
 ) {
     let avail_width = ui.available_width();
@@ -506,7 +506,7 @@ fn render_material_glass_panel(
     width: f32,
     height: f32,
     tokens: &OpticsTokens,
-    glass_name: &str,
+    glass_name: &mut String,
     on_edit_material: impl FnOnce(),
 ) {
     let (rect, _) = ui.allocate_exact_size(Vec2::new(width, height), egui::Sense::hover());
@@ -529,48 +529,48 @@ fn render_material_glass_panel(
         tokens.text_primary,
     );
 
-    // Dropdown box for glass selection
+    // Interactive Dropdown box for glass selection
     let combo_rect = Rect::from_min_size(
         Pos2::new(rect.min.x + 8.0, rect.min.y + 26.0),
         Vec2::new(width - 16.0, 22.0),
     );
-    painter.rect_filled(
-        combo_rect,
-        egui::CornerRadius::same(2),
-        tokens.panel_secondary,
-    );
-    painter.rect_stroke(
-        combo_rect,
-        egui::CornerRadius::same(2),
-        Stroke::new(1.0, tokens.border),
-        egui::StrokeKind::Inside,
-    );
 
-    let display_title = match glass_name {
+    let display_title: &'static str = match glass_name.as_str() {
         "N-BK7" | "BK7" => "BK7 (Schott)",
         "SF11" => "SF11 (Schott)",
         "F2" => "F2 (Schott)",
         "Fused Silica" => "Fused Silica (Corning)",
-        _ => "BK7 (Schott)",
+        _ => "Custom",
     };
-    painter.text(
-        combo_rect.min + Vec2::new(8.0, 11.0),
-        egui::Align2::LEFT_CENTER,
-        display_title,
-        egui::FontId::proportional(11.0),
-        tokens.text_primary,
-    );
-    painter.text(
-        Pos2::new(combo_rect.max.x - 10.0, combo_rect.min.y + 11.0),
-        egui::Align2::CENTER_CENTER,
-        "⌄",
-        egui::FontId::proportional(12.0),
-        tokens.text_muted,
+
+    ui.scope_builder(
+        egui::UiBuilder::new()
+            .max_rect(combo_rect)
+            .layout(egui::Layout::top_down(egui::Align::Min)),
+        |ui| {
+            egui::ComboBox::from_id_salt("analytics_material_dropdown")
+                .selected_text(display_title)
+                .width(width - 24.0)
+                .show_ui(ui, |ui| {
+                    let glasses = [
+                        ("N-BK7", "BK7 (Schott)"),
+                        ("SF11", "SF11 (Schott)"),
+                        ("F2", "F2 (Schott)"),
+                        ("Fused Silica", "Fused Silica (Corning)"),
+                    ];
+                    for (code, label) in glasses {
+                        let is_sel = glass_name.as_str() == code;
+                        if ui.selectable_label(is_sel, label).clicked() {
+                            *glass_name = code.to_string();
+                        }
+                    }
+                });
+        },
     );
 
     // Parameter Grid
     let grid_top = combo_rect.bottom() + 8.0;
-    let (nd, vd) = match glass_name {
+    let (nd, vd) = match glass_name.as_str() {
         "N-BK7" | "BK7" => ("1.5168", "64.2"),
         "SF11" => ("1.7847", "25.7"),
         "F2" => ("1.6200", "36.4"),
@@ -670,31 +670,20 @@ fn render_material_glass_panel(
         Pos2::new(rect.min.x + 12.0, rect.bottom() - 24.0),
         Vec2::new(width - 24.0, 18.0),
     );
-    painter.rect_filled(
-        btn_rect,
-        egui::CornerRadius::same(2),
-        tokens.panel_secondary,
-    );
-    painter.rect_stroke(
-        btn_rect,
-        egui::CornerRadius::same(2),
-        Stroke::new(1.0, tokens.border),
-        egui::StrokeKind::Inside,
-    );
-    painter.text(
-        btn_rect.center(),
-        egui::Align2::CENTER_CENTER,
-        "✎ Edit Material",
-        egui::FontId::proportional(10.0),
-        tokens.text_primary,
-    );
 
-    // Trigger callback if clicked
-    if ui.input(|i| i.pointer.primary_clicked()) {
-        if let Some(pos) = ui.ctx().pointer_interact_pos() {
-            if btn_rect.contains(pos) {
+    ui.scope_builder(
+        egui::UiBuilder::new()
+            .max_rect(btn_rect)
+            .layout(egui::Layout::centered_and_justified(
+                egui::Direction::LeftToRight,
+            )),
+        |ui| {
+            if ui
+                .button(egui::RichText::new("✎ Edit Material").size(10.0))
+                .clicked()
+            {
                 on_edit_material();
             }
-        }
-    }
+        },
+    );
 }
