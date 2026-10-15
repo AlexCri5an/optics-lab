@@ -138,6 +138,10 @@
 ### 2.9 Spectral Fan & Headless SVG (Slice A Milestone)
 - [x] `fn spectral_fan(scene: &Scene, ray_template: &Ray, wavelengths_nm: &[f64], policy: RayBranchPolicy, max_bounces: usize) -> Vec<(f64, PathRecord)>`
 - [x] `optics-cli prism --glass N-BK7 --apex 60 --incidence 45 --samples 32 --svg out.svg` draws the prism outline and colored rays (via `display_color_for_wavelength`) as a 2D SVG in the plane of incidence, plus a text table on stdout
+
+### 2.10 Sequential Real-Ray Tracer (Slice B Milestone)
+- [ ] `fn trace_sequential(prescription: &ResolvedPrescription, ray: &Ray) -> Result<SequentialPathRecord, OpticsError>`
+
 - [x] Tests: deviation decreases monotonically with wavelength over 380–780 nm; deviation at F, d, C lines equals the analytic two-surface Snell value computed independently inside the test (tolerance 1e-9)
 
 ---
@@ -676,11 +680,11 @@
 - [x] Phase 9.3: Central 2D scene canvas (prism, light, rays) via egui `Painter`
 - [x] Phase 9.5: Single-Ray Inspector tab (click-to-select ray by nearest segment, per-bounce table from `RayBounce`, angle readouts)
 - [x] Phase 12.1: Local WebAssembly build via `trunk` (verified locally; release wasm: 3.20 MB raw / 1.44 MB gzip)
-- [ ] Step A2: UI visual and interaction polish (glyphs, bounds auto-fit, translucent prism, Fresnel reflection branches, legend, sentence case, chrome fix)
+- [x] Step A2: UI visual and interaction polish (glyphs, bounds auto-fit, translucent prism, Fresnel reflection branches, legend, sentence case, chrome fix)
 
 ### Slice B — Lens Systems & Sequential Diagnostics
 > Goal: Load Zemax Cooke Triplet and Double Gauss prescriptions, trace marginal/chief paraxial rays, and render 2D spot diagrams and ray fans.
-- [ ] Phase 2.4–2.6: Conic surfaces, Citardauque intersection solver, prescriptions, paraxial tracer
+- [ ] Phase 2.4–2.6, 2.10: Conic surfaces, Citardauque intersection solver, prescriptions, paraxial tracer, sequential ray tracer
 - [ ] Phase 5: Zemax `.zmx` parser, serializer, and bundled lens presets
 - [ ] Phase 8.1–8.2: Geometric spot diagrams & transverse ray aberration fans
 - [ ] Phase 9.5: Lens prescription editor table with live edit & re-trace
@@ -706,5 +710,5 @@
 
 ---
 
-> **Next action:** Slice B: Lens systems, Zemax .zmx parser, sequential tracing, spot diagrams & transverse ray fans.
+> **Next action:** Slice B, Step B1: Sequential optics core (conic surfaces, prescriptions, paraxial tracer, sequential ray tracer).
 
