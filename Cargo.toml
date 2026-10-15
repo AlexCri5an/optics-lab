@@ -63,7 +63,7 @@ half       = "2"
 
 # UI
 egui       = "0.32"
-eframe     = { version = "0.32.3", default-features = false, features = ["wgpu", "default_fonts"] }
+eframe     = { version = "0.32.3", default-features = false, features = ["glow", "default_fonts"] }
 
 # Internal crates
 optics-core     = { path = "crates/optics-core" }
