@@ -39,6 +39,34 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
   - Configured `Trunk.toml` and `index.html` with full-window canvas, animated loading spinner, and plain-text WebGL/WebAssembly availability checks.
   - Built and verified release WASM bundle (`3.20 MB` raw, `1.44 MB` gzip).
 
+#### Slice A, Step A2: UI Visual & Interaction Polish
+- **Minimalist CAD Vector Icons (`optics-ui::icons`):**
+  - Custom vector icons for Select, Ray Probe, Lens Surface, Light Source, and Measure drawn directly with `egui::Painter`.
+  - Contrasts verified $\ge 3:1$ across normal, hover, active, and disabled states (`test_tool_icon_contrast_ratios`).
+  - Replaced non-ASCII symbols with clean ASCII characters verified by character set restriction test (`test_ui_allowed_character_set`).
+- **Scene Auto-Fit & Finite Rays (`optics-ui::sim`):**
+  - Pure `compute_scene_bounds` enclosing prism vertices, incoming ray source origin, and all ray/branch endpoints.
+  - Unit tests verifying fit containment across extreme apex ($20^\circ$ and $90^\circ$) and incidence ($0^\circ$ and $80^\circ$) angles.
+- **Translucent Optical Prism Styling (`optics-ui::app`):**
+  - Low-alpha glass tint mapped from $n_d$ (`Color32::from_rgba_unmultiplied(32, 44, 64, tint_alpha)`), thin lighter outline, inner facet highlight, and muted base facet.
+- **Polished Rays & Fresnel Reflection Branches (`optics-ui::app`, `optics-ui::sim`):**
+  - Incoming ray with source emitter dot and "D65 white light" label.
+  - Layered spectral fan rays with soft glow underlay + crisp core; hover wavelength tooltip near cursor.
+  - Selected ray styling: retains spectral color, wide glow underlay, white-ringed bounce dots, and terminal wavelength badge.
+  - Dashed Fresnel reflection branches with alpha mapped from $R_\text{total}$ via pure `map_reflectance_to_alpha`.
+- **Wavelength Legend Bar (`optics-ui::legend`):**
+  - Pure bidirectional wavelength-to-pixel coordinate mapping with tick marks every 100 nm, sample dots, selected ray marker, and interactive click selection.
+- **Inspector Polish, Copy Table & Controls (`optics-ui::app`):**
+  - Sentence case headings, no trailing colons, monospace right-aligned numbers.
+  - Two-row wrapped bounce layout fitting panel width without horizontal scrolling.
+  - "Copy table" TSV clipboard export with user feedback.
+  - Sliders with double-click to reset, scene "Reset scene" button, and glass selector showing $n_d$ readout.
+  - Keyboard shortcuts: `S`, `I`, `Esc`, `R` / `Cmd+0`.
+- **Edge State Detection (`optics-ui::sim`):**
+  - Pure `EdgeState` detection (`AllTotalInternalReflection`, `NoRaysTransmitted`, `RayMissedPrism`) with visible canvas banners.
+- **Automated UI Harness Tests (`optics-ui/tests/snapshot_tests.rs`):**
+  - `egui_kittest` execution tests at 1.0 and 2.0 DPI for default state, selected ray state, and TIR state.
+
 ---
 
 ## [0.1.0-research] — 2026-10-15

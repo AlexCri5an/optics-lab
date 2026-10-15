@@ -1,6 +1,6 @@
 # OpticsLab — Master Implementation Plan & Task List
 
-> **Status:** Phase 1 ✅ complete. Phase 2.1–2.3, 2.8, 2.9 ✅ complete. Phase 3.1–3.2, 3.4 ✅ complete. Phase 4.1–4.3 ✅ complete. Slice A UI Step A1 (9.1 theme, 9.3 2D canvas, 9.4 tool strip, 9.5 ray inspector, native app, local web build via trunk) ✅ complete.
+> **Status:** Phase 1 ✅ complete. Phase 2.1–2.3, 2.8, 2.9 ✅ complete. Phase 3.1–3.2, 3.4 ✅ complete. Phase 4.1–4.3 ✅ complete. Slice A UI Step A1 & Step A2 (Theme, CAD icons, 2D canvas, translucent prism, Fresnel branches, legend bar, ray inspector, controls, edge states, native app, local web build via trunk) ✅ complete.
 >
 > Legend: `[ ]` = todo · `[x]` = done · `[~]` = in progress · `[-]` = deferred
 
@@ -706,5 +706,5 @@
 
 ---
 
-> **Next action:** Slice A Step A2: Deepen edge states, polish UI interactions, and add visual regression checks.
+> **Next action:** Slice B: Lens systems, Zemax .zmx parser, sequential tracing, spot diagrams & transverse ray fans.
 
