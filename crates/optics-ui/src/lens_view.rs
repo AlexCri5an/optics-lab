@@ -733,7 +733,12 @@ fn draw_single_ray_fan_plot(
 }
 
 /// Renders the editable numerical lens prescription table.
-fn render_prescription_table_view(ui: &mut Ui, sim: &mut LensSimulation, tokens: &OpticsTokens) {
+/// Renders the lens prescription editor table.
+pub fn render_prescription_table_view(
+    ui: &mut Ui,
+    sim: &mut LensSimulation,
+    tokens: &OpticsTokens,
+) {
     ui.horizontal(|ui| {
         ui.label(
             egui::RichText::new("Lens Prescription Editor")

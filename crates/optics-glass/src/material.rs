@@ -19,6 +19,20 @@ pub enum GlassCatalog {
     Custom,
 }
 
+impl GlassCatalog {
+    /// Returns the human-readable manufacturer or catalog name.
+    #[must_use]
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Schott => "Schott",
+            Self::Ohara => "OHARA",
+            Self::Cdgm => "CDGM",
+            Self::Hoya => "HOYA",
+            Self::Custom => "Custom",
+        }
+    }
+}
+
 /// Dispersion equation representation for refractive index calculation.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum DispersionModel {

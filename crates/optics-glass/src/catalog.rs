@@ -164,6 +164,11 @@ impl GlassCatalogDb {
     pub fn is_empty(&self) -> bool {
         self.glasses_by_name.is_empty()
     }
+
+    /// Returns an iterator over all loaded glasses in the database.
+    pub fn all_glasses(&self) -> impl Iterator<Item = &GlassMaterial> {
+        self.glasses_by_name.values()
+    }
 }
 
 impl optics_core::MaterialResolver for GlassCatalogDb {
