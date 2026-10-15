@@ -13,15 +13,30 @@ use egui::{
     Sense, SidePanel, Stroke, StrokeKind, TopBottomPanel, Vec2, Window,
 };
 
+use optics_glass::GlassCatalogDb;
+
 use crate::analytics::render_analytics_dock;
+use crate::glass_browser::{GlassBrowserState, render_glass_catalog_panel};
 use crate::icons::{ToolIcon, draw_tool_icon};
 use crate::inspector::{RayInspectorState, render_ray_inspector_panel};
 use crate::lens_sim::{LensPreset, LensSimulation};
-use crate::lens_view::render_lens_system_panel;
+use crate::lens_view::{render_lens_system_panel, render_prescription_table_view};
 use crate::sim::PrismSimulation;
 use crate::theme::{OpticsTokens, apply_tokens};
 use crate::view_transform::ViewTransform;
 use crate::viewport_3d::render_viewport_3d;
+
+/// Active tab in the right inspector panel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RightPanelTab {
+    /// Ray inspector probe and physical bounce tables.
+    #[default]
+    RayInspector,
+    /// Lens prescription editor and canonical presets.
+    Prescription,
+    /// Complete optical glass catalog browser with Abbe diagram and dispersion plots.
+    GlassCatalog,
+}
 
 /// Active user tool in the left toolbar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -153,6 +168,14 @@ pub struct OpticsLabApp {
     pub scene_tree_ground_open: bool,
     /// Selected object in scene tree.
     pub selected_scene_object: Option<String>,
+    /// Active tab in the right inspector panel.
+    pub right_panel_tab: RightPanelTab,
+    /// Bundled optical glass catalog database.
+    pub glass_db: Option<GlassCatalogDb>,
+    /// Interactive state for the glass catalog browser.
+    pub glass_browser_state: GlassBrowserState,
+    /// Whether the keyboard shortcut help modal dialog is open.
+    pub show_shortcuts_help: bool,
 }
 
 impl Default for OpticsLabApp {
@@ -178,6 +201,10 @@ impl Default for OpticsLabApp {
             scene_tree_prism_open: true,
             scene_tree_ground_open: false,
             selected_scene_object: Some("Prism".into()),
+            right_panel_tab: RightPanelTab::RayInspector,
+            glass_db: GlassCatalogDb::load_bundled().ok(),
+            glass_browser_state: GlassBrowserState::default(),
+            show_shortcuts_help: false,
         }
     }
 }
@@ -203,8 +230,17 @@ impl OpticsLabApp {
         if ctx.input(|i| i.key_pressed(Key::I)) {
             self.active_tool = ActiveTool::RayInspector;
         }
+        if ctx.input(|i| i.key_pressed(Key::F1)) {
+            self.show_shortcuts_help = !self.show_shortcuts_help;
+        }
         if ctx.input(|i| i.key_pressed(Key::Escape)) {
-            self.selected_ray_index = None;
+            if self.show_shortcuts_help {
+                self.show_shortcuts_help = false;
+            } else if self.show_about {
+                self.show_about = false;
+            } else {
+                self.selected_ray_index = None;
+            }
         }
         if ctx.input(|i| (i.modifiers.command || i.modifiers.ctrl) && i.key_pressed(Key::Num0)) {
             self.needs_fit = true;
@@ -284,6 +320,10 @@ impl OpticsLabApp {
                         });
 
                         ui.menu_button("Help", |ui| {
+                            if ui.button("Keyboard shortcuts (F1)").clicked() {
+                                self.show_shortcuts_help = true;
+                                ui.close();
+                            }
                             if ui.button("About OpticsLab").clicked() {
                                 self.show_about = true;
                                 ui.close();
@@ -605,13 +645,56 @@ impl OpticsLabApp {
             .exact_width(330.0)
             .resizable(false)
             .show(ctx, |ui| {
-                render_ray_inspector_panel(
-                    ui,
-                    &self.sim,
-                    self.selected_ray_index,
-                    &mut self.inspector_state,
-                    &self.tokens,
-                );
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing = Vec2::new(2.0, 0.0);
+
+                    let tabs = [
+                        (RightPanelTab::RayInspector, "Inspector"),
+                        (RightPanelTab::Prescription, "Prescription"),
+                        (RightPanelTab::GlassCatalog, "Glass Catalog"),
+                    ];
+
+                    for (tab, label) in tabs {
+                        let is_active = self.right_panel_tab == tab;
+                        if ui.selectable_label(is_active, label).clicked() {
+                            self.right_panel_tab = tab;
+                        }
+                    }
+                });
+
+                ui.separator();
+
+                match self.right_panel_tab {
+                    RightPanelTab::RayInspector => {
+                        render_ray_inspector_panel(
+                            ui,
+                            &self.sim,
+                            self.selected_ray_index,
+                            &mut self.inspector_state,
+                            &self.tokens,
+                        );
+                    }
+                    RightPanelTab::Prescription => {
+                        if let Some(lens_sim) = &mut self.lens_sim {
+                            render_prescription_table_view(ui, lens_sim, &self.tokens);
+                        } else {
+                            ui.label("No active lens simulation.");
+                        }
+                    }
+                    RightPanelTab::GlassCatalog => {
+                        if let Some(catalog) = &self.glass_db {
+                            render_glass_catalog_panel(
+                                ui,
+                                catalog,
+                                &mut self.glass_browser_state,
+                                &self.tokens,
+                            );
+                        } else {
+                            ui.label("Glass catalog not loaded.");
+                        }
+                    }
+                }
             });
     }
 
@@ -794,6 +877,59 @@ impl OpticsLabApp {
                 });
             });
     }
+
+    /// Renders the keyboard shortcuts cheat sheet modal dialog.
+    fn render_shortcuts_modal(&mut self, ctx: &Context) {
+        if !self.show_shortcuts_help {
+            return;
+        }
+
+        Window::new("Keyboard Shortcuts")
+            .collapsible(false)
+            .resizable(false)
+            .default_size(Vec2::new(420.0, 340.0))
+            .show(ctx, |ui| {
+                ui.add_space(4.0);
+                ui.label(
+                    egui::RichText::new("OpticsLab Hotkeys & Controls")
+                        .strong()
+                        .color(self.tokens.text_primary),
+                );
+                ui.separator();
+
+                egui::Grid::new("shortcuts_table")
+                    .num_columns(2)
+                    .spacing([24.0, 6.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        let shortcuts = [
+                            ("S", "Select tool (ray & vertex picking)"),
+                            ("M", "Move tool"),
+                            ("Alt+R", "Rotate tool"),
+                            ("I", "Ray inspector probe"),
+                            ("Ctrl/Cmd + 0", "Reset viewport (fit scene)"),
+                            ("Middle Drag", "Pan viewport"),
+                            ("Scroll Wheel", "Zoom in / out"),
+                            ("Click + Drag (numbers)", "Scrub numeric parameter"),
+                            ("Escape", "Clear selection / close dialogs"),
+                            ("F1", "Toggle shortcuts reference"),
+                        ];
+
+                        for (key, desc) in shortcuts {
+                            ui.label(egui::RichText::new(key).strong().color(self.tokens.accent));
+                            ui.label(egui::RichText::new(desc).color(self.tokens.text_secondary));
+                            ui.end_row();
+                        }
+                    });
+
+                ui.add_space(16.0);
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    if ui.button("Close").clicked() {
+                        self.show_shortcuts_help = false;
+                    }
+                });
+            });
+    }
 }
 
 impl eframe::App for OpticsLabApp {
@@ -821,5 +957,6 @@ impl eframe::App for OpticsLabApp {
 
         // 7. Dialogs
         self.render_about_dialog(ctx);
+        self.render_shortcuts_modal(ctx);
     }
 }

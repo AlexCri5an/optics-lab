@@ -10,7 +10,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 
 ### Added
 
-#### Phase 7: wgpu Path Tracing Pipeline & Camera Models (`optics-render`)
+#### Phase 9.5 & 9.8: Glass Catalog Browser, Abbe Diagram & Interactive Widgets (`optics-ui`, `optics-glass`)
+- **Technical UI Widgets (`optics-ui::widgets`):**
+  - `scrub_field`: Drag-to-edit numerical parameter field with fine/coarse drag sensitivity, hover state feedback, and boundary clamping.
+  - `dispersion_curve_plot`: Continuous refractive index $n(\lambda)$ curve from $380\dots780\,\text{nm}$ marked with Fraunhofer $F$ (486.1 nm), $d$ (587.6 nm), and $C$ (656.3 nm) spectral lines.
+  - `abbe_diagram`: Interactive Abbe $V_d$ vs $n_d$ scatter plot with standard optical glass coordinate convention (inverted $V_d \in [20, 85]$, $n_d \in [1.45, 2.05]$), crown/flint boundary line, and active selection ring.
+- **Glass Catalog Browser Panel (`optics-ui::glass_browser`):**
+  - Searchable catalog inspector filtering across all 646 bundled glasses from Schott, Ohara, CDGM, and Hoya.
+  - Summary card displaying refractive index $n_d$, Abbe number $V_d$, and Sellmeier oscillator resonance coefficients.
+  - Live dispersion curve and Abbe scatter plot integrated directly into the browser tab.
+  - Added `all_glasses()` iterator on `GlassCatalogDb` and `name()` method on `GlassCatalog`.
+- **Keyboard Shortcuts & Help Modal (`optics-ui::app`):**
+  - Keyboard shortcuts cheat sheet dialog (`F1` or Help menu) documenting navigation, tool keys, parameter scrubbing, and viewport shortcuts.
+  - Right inspector tab switcher integrating Ray Inspector, Lens Prescription Table Editor, and Glass Catalog Browser.
 - **GPU Hardware Context & Target Allocations (`optics-render::context`, `optics-render::target`):**
   - `GpuContext` with headless adapter/device initialization and surface integration.
   - `RenderTarget` (Rgba16Float HDR accumulation buffer) and `ToneMapTarget` with `resize_render_targets`.

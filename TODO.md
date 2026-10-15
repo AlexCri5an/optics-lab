@@ -1,6 +1,6 @@
 # OpticsLab — Master Implementation Plan & Task List
 
-> **Status:** Phase 1 ✅ complete. Phase 2.1–2.6, 2.8–2.10 ✅ complete. Phase 3.1–3.2, 3.4 ✅ complete. Phase 4.1–4.3 ✅ complete. Phase 5.1–5.3, 5.5 ✅ complete (Zemax .zmx parser, serializer, presets). Phase 8.1–8.2 ✅ complete (Spot diagrams & ray fans). Slice A UI Step A1 & Step A2 ✅ complete. Slice B (Sequential Core, Zemax Parser & Presets, Aberrations & Spot Diagrams, Prescription Editor & Aberration UI, optics-cli analyze) ✅ COMPLETE.
+> **Status:** Phase 1 ✅ complete. Phase 2.1–2.6, 2.8–2.10 ✅ complete. Phase 3.1–3.4 ✅ complete. Phase 4.1–4.3 ✅ complete. Phase 5.1–5.3, 5.5 ✅ complete (Zemax .zmx parser, serializer, presets). Phase 6 ✅ complete (2-level BVH, SAH builder, GPU layout). Phase 7 ✅ complete (wgpu path tracer pipeline, WGSL shaders, headless tests). Phase 8.1–8.2 ✅ complete (Spot diagrams & ray fans). Phase 9.1, 9.3–9.8 ✅ complete (UI system, 3D viewport, glass catalog browser, Abbe diagram, widgets). Slices A, B, C, D core ✅ COMPLETE.
 >
 > Legend: `[ ]` = todo · `[x]` = done · `[~]` = in progress · `[-]` = deferred
 
@@ -434,11 +434,11 @@
   - [ ] "Load .zmx file" button → file dialog → parse → update table (Slice D native file dialogs)
   - [ ] "Export .zmx" button → save dialog → write_zmx (Slice D native file dialogs)
   - [x] Lens preset selector (dropdown): Cooke Triplet, Double Gauss, Plano-Convex, Custom
-- [ ] **Tab: Glass Catalog Browser**
-  - [ ] Search field (filter by name substring)
-  - [ ] Abbe diagram (Vd on X, nd on Y) — egui `Plot` with colored dots
-  - [ ] Scrollable glass list with nd, Vd, catalog columns
-  - [ ] Click glass → show full Sellmeier coefficients & n(λ) dispersion curve
+- [x] **Tab: Glass Catalog Browser**
+  - [x] Search field (filter by name substring)
+  - [x] Abbe diagram (Vd on X, nd on Y) — inverted Vd scale with crown/flint separation
+  - [x] Scrollable glass list with nd, Vd, catalog columns
+  - [x] Click glass → show full Sellmeier coefficients & n(λ) dispersion curve
 
 ### 9.6 Bottom Analytics Dock Tabs
 - [x] **Panel: Convergence Monitor**
@@ -461,15 +461,15 @@
 - [x] **View**: Reset view, Show reflections, Show timing
 - [x] **Render**: Start/Pause path tracer placeholder
 - [x] **Diagnostics**: Single-ray inspect mode, BVH slab test
-- [x] **Help**: About OpticsLab dialog window
+- [x] **Help**: About OpticsLab dialog window, Keyboard Shortcuts (F1)
 - [x] Sample counter (128 spp) and native window controls (minimize, maximize, close)
 
 ### 9.8 Widgets Library
-- [ ] `fn scrub_field(ui: &mut Ui, label: &str, value: &mut f64, min: f64, max: f64, precision: usize)` — drag-to-edit numeric field
-- [ ] `fn dispersion_curve_plot(ui: &mut Ui, glass: &GlassMaterial)` — n(λ) plot 380–780 nm
-- [ ] `fn abbe_diagram(ui: &mut Ui, catalog: &GlassCatalogDb, highlighted: Option<&str>)`
-- [ ] `fn spot_diagram_widget(ui: &mut Ui, data: &SpotMetrics)`
-- [ ] `fn ray_fan_widget(ui: &mut Ui, data: &RayFanData)`
+- [x] `fn scrub_field(ui: &mut Ui, label: &str, value: &mut f64, min: f64, max: f64, precision: usize)` — drag-to-edit numeric field
+- [x] `fn dispersion_curve_plot(ui: &mut Ui, glass: &GlassMaterial)` — n(λ) plot 380–780 nm with Fraunhofer F, d, C lines
+- [x] `fn abbe_diagram(ui: &mut Ui, catalog: &GlassCatalogDb, highlighted: Option<&str>)` — scatter plot of catalog glasses
+- [x] `fn spot_diagram_widget(ui: &mut Ui, data: &SpotMetrics)`
+- [x] `fn ray_fan_widget(ui: &mut Ui, data: &RayFanData)`
 
 ---
 
