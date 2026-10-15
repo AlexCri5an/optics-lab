@@ -1,6 +1,6 @@
 # OpticsLab — Master Implementation Plan & Task List
 
-> **Status:** Phase 1 ✅ complete. Phase 2.1–2.3, 2.8, 2.9 ✅ complete. Phase 3.1–3.2, 3.4 ✅ complete. Phase 4.1–4.3 ✅ complete. Slice A UI Step A1 & Step A2 (Theme, CAD icons, 2D canvas, translucent prism, Fresnel branches, legend bar, ray inspector, controls, edge states, native app, local web build via trunk) ✅ complete.
+> **Status:** Phase 1 ✅ complete. Phase 2.1–2.6, 2.8–2.10 ✅ complete. Phase 3.1–3.2, 3.4 ✅ complete. Phase 4.1–4.3 ✅ complete. Phase 5.1–5.3, 5.5 ✅ complete (Zemax .zmx parser, serializer, presets). Slice A UI Step A1 & Step A2 ✅ complete. Slice B Step B1 (Sequential Core) & Step B2 (Zemax Parser & Presets) ✅ complete.
 >
 > Legend: `[ ]` = todo · `[x]` = done · `[~]` = in progress · `[-]` = deferred
 
@@ -126,7 +126,7 @@
 - [x] Test conic sag: sphere k=0, parabola k=-1 at r=0 → sag=0; parabola sag known value r^2/(2R)
 - [x] Test Citardauque solver against analytical root for sphere
 - [x] Test paraxial EFL for a single thin lens (1/f = (n-1)(1/R1 - 1/R2))
-- [ ] Test Cooke Triplet paraxial EFL = ~50 mm (Step B2)
+- [x] Test Cooke Triplet paraxial EFL = ~50 mm (Step B2)
 
 ### 2.8 Non-Sequential Single-Ray Path Tracer (Slice A Milestone)
 - [x] `trait RefractiveIndex { fn n(&self, wavelength_nm: f64) -> f64 }` in `optics-core` (zero dependency on `optics-glass`)
@@ -229,20 +229,20 @@
 > Source: RE Doc 05, `optiland/fileio/zemax/`
 
 ### 5.1 Zemax .zmx Parser
-- [ ] `fn parse_zmx(content: &str) -> Result<ZemaxOpticalSystem, ZemaxParseError>`
-- [ ] Handle all operands: `NAME`, `ENPD`, `FNUM`, `WAVL`, `PWAV`, `FTYP`, `YFLD`, `SURF`, `TYPE`, `CURV`, `DISZ`, `GLAS`, `DIAM`, `CONI`, `STOP`
-- [ ] Convert `CURV c` → `radius = if |c| < 1e-12 { f64::INFINITY } else { 1.0/c }`
-- [ ] `enum SurfaceType { Standard, EvenAsphere, Toroidal, ZernikeSag }` (extensible)
-- [ ] `struct ZemaxParseError` (thiserror) with line number and operand context
+- [x] `fn parse_zmx(content: &str) -> Result<ZemaxOpticalSystem, ZemaxParseError>`
+- [x] Handle all operands: `NAME`, `ENPD`, `FNUM`, `WAVL`, `PWAV`, `FTYP`, `YFLD`, `SURF`, `TYPE`, `CURV`, `DISZ`, `GLAS`, `DIAM`, `CONI`, `STOP`
+- [x] Convert `CURV c` → `radius = if |c| < 1e-12 { f64::INFINITY } else { 1.0/c }`
+- [x] `enum SurfaceType { Standard, EvenAsphere, Toroidal, ZernikeSag }` (extensible)
+- [x] `struct ZemaxParseError` (thiserror) with line number and operand context
 
 ### 5.2 Zemax .zmx Serializer (Writer)
-- [ ] `fn write_zmx(system: &ZemaxOpticalSystem) -> String` — round-trip serialization
-- [ ] Round-trip test: parse → write → parse gives identical result
+- [x] `fn write_zmx(system: &ZemaxOpticalSystem) -> String` — round-trip serialization
+- [x] Round-trip test: parse → write → parse gives identical result
 
 ### 5.3 Lens Presets (Bundled)
-- [ ] Cooke Triplet F/4.5 (7 surfaces, SK16/F2/SK16) — as `.zmx` string constant
-- [ ] Double Gauss F/2.0 (10 surfaces) — as `.zmx` string constant
-- [ ] Single Plano-Convex N-BK7 f=100 mm — as `.zmx` string constant
+- [x] Cooke Triplet F/4.5 (7 surfaces, SK16/F2/SK16) — as `.zmx` string constant
+- [x] Double Gauss F/2.0 (12 surfaces) — as `.zmx` string constant
+- [x] Single Plano-Convex N-BK7 f=100 mm — as `.zmx` string constant
 
 ### 5.4 CODE V .seq Parser [-] DEFERRED
 > Deferred: focus on complete Zemax .zmx pipeline first.
@@ -250,11 +250,11 @@
 - [-] Handles `WL`, `IMS`, `OBB`, `INS`, `AIR`, `REFL` tokens
 
 ### 5.5 Tests
-- [ ] Parse Cooke Triplet preset: 7 surfaces, correct radius/thickness/glass values
-- [ ] Parse Double Gauss: 10 surfaces, STOP surface flagged correctly
-- [ ] Round-trip Cooke Triplet: write then re-parse gives identical prescription
-- [ ] `CURV 0.0` → `radius = f64::INFINITY`
-- [ ] `GLAS AIR` → `material_name = "AIR"`
+- [x] Parse Cooke Triplet preset: 7 surfaces, correct radius/thickness/glass values
+- [x] Parse Double Gauss: 12 surfaces, STOP surface flagged correctly
+- [x] Round-trip Cooke Triplet: write then re-parse gives identical prescription
+- [x] `CURV 0.0` → `radius = f64::INFINITY`
+- [x] `GLAS AIR` → `material_name = "AIR"`
 
 ---
 
@@ -686,8 +686,8 @@
 
 ### Slice B — Lens Systems & Sequential Diagnostics
 > Goal: Load Zemax Cooke Triplet and Double Gauss prescriptions, trace marginal/chief paraxial rays, and render 2D spot diagrams and ray fans.
-- [ ] Phase 2.4–2.6, 2.10: Conic surfaces, Citardauque intersection solver, prescriptions, paraxial tracer, sequential ray tracer
-- [ ] Phase 5: Zemax `.zmx` parser, serializer, and bundled lens presets
+- [x] Phase 2.4–2.6, 2.10: Conic surfaces, Citardauque intersection solver, prescriptions, paraxial tracer, sequential ray tracer
+- [x] Phase 5: Zemax `.zmx` parser, serializer, and bundled lens presets
 - [ ] Phase 8.1–8.2: Geometric spot diagrams & transverse ray aberration fans
 - [ ] Phase 9.5: Lens prescription editor table with live edit & re-trace
 - [ ] Phase 11: `optics-cli analyze` CLI command
@@ -712,5 +712,5 @@
 
 ---
 
-> **Next action:** Slice B, Step B1: Sequential optics core (conic surfaces, prescriptions, paraxial tracer, sequential ray tracer).
+> **Next action:** Slice B, Step B3: Geometric spot diagrams & transverse ray aberration fans (Phase 8.1–8.2).
 

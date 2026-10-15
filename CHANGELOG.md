@@ -10,6 +10,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 
 ### Added
 
+#### Slice B, Step B2: Zemax `.zmx` Parser & Canonical Presets (`optics-zemax`, `optics-glass`)
+- **Zemax .zmx Format Parser (`optics-zemax::parser`):**
+  - Robust parser `parse_zmx` supporting standard Zemax operands: `NAME`, `ENPD`, `FNUM`, `WAVL`, `WAVM`, `PWAV`, `FTYP`, `YFLD`, `YFLN`, `SURF`, `TYPE`, `CURV`, `DISZ`, `GLAS`, `DIAM`, `CONI`, `STOP`.
+  - Byte-slice parser `parse_zmx_bytes` with automatic detection and decoding of UTF-16 LE BOM (`0xFF 0xFE`) or UTF-8.
+  - Curvature to radius conversion handling flat surfaces ($c \to 0 \implies R = \infty$).
+  - Extensible `SurfaceType` enum (`Standard`, `EvenAsphere`, `Toroidal`, `ZernikeSag`).
+  - Structured, line-numbered `ZemaxParseError` with contextual operand details.
+- **Zemax .zmx Serializer (`optics-zemax::serializer`):**
+  - `write_zmx` and `write_prescription_zmx` providing complete round-trip text serialization.
+  - Round-trip fidelity verified by test: parse $\to$ write $\to$ re-parse yields numerically equivalent systems.
+- **Canonical Lens Presets (`optics-zemax::presets`):**
+  - **Cooke Triplet F/4.5 ($f = 50\,\text{mm}$):** Classical 3-element, 6-surface design eliminating 5 primary Seidel aberrations. Verified paraxial $\text{EFL} = 50.0 \pm 0.5\,\text{mm}$ ($50.00\,\text{mm}$), $\text{BFL} = 42.21 \pm 0.5\,\text{mm}$, and real sequential ray trace focusing on sensor.
+  - **Double Gauss F/2.0 ($f = 50\,\text{mm}$):** 6-element, 4-group configuration forming the basis of standard 35 mm SLR camera lenses. Verified paraxial $\text{EFL} = 50.0 \pm 1.0\,\text{mm}$ and F-number $2.0 \pm 0.1$.
+  - **Plano-Convex N-BK7 ($f = 100\,\text{mm}$):** Singlet with verified paraxial $\text{EFL} = 100.0\,\text{mm}$ and thick-lens $\text{BFL} = 96.7\,\text{mm}$.
+- **Glass Catalog Material Resolver Bridge (`optics-glass::catalog`):**
+  - Implemented `optics_core::MaterialResolver` for `GlassCatalogDb`.
+  - Added case-insensitive alias and `N-` prefix fallback (e.g. `SK16` resolves to `N-SK16`, `N-F2` resolves to `F2`).
+  - Allows `prescription.resolve(&catalog_db)` to resolve all 646 catalog glasses into thread-safe `Arc<dyn RefractiveIndex>`.
+
 #### Slice B, Step B1: Sequential Optics Core (`optics-core`)
 - **Optical Conventions Documentation (`docs/conventions.md`):**
   - Documented spatial coordinates in mm, $+z$ propagation direction, curvature $c = 1/R$, conic sag equation, normal convention pointing toward incident medium, and Citardauque rearranged root solver.
