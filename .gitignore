@@ -26,3 +26,10 @@ rustc-ice-*.txt
 # Research inspiration clones
 research/inspirations/
 research/reverse_engineering/*.json
+
+# Trunk build artifacts
+dist/
+**/dist/
+.trunk/
+**/.trunk/
+

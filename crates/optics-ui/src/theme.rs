@@ -132,7 +132,10 @@ pub fn apply_tokens(ctx: &Context, tokens: &OpticsTokens) {
             TextStyle::Button,
             FontId::new(13.0, FontFamily::Proportional),
         ),
-        (TextStyle::Small, FontId::new(11.0, FontFamily::Proportional)),
+        (
+            TextStyle::Small,
+            FontId::new(11.0, FontFamily::Proportional),
+        ),
     ]
     .into();
 

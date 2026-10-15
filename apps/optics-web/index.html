@@ -4,17 +4,115 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>OpticsLab</title>
+  <link data-trunk rel="rust" data-wasm-opt="z" />
   <style>
-    html, body { margin: 0; background: #1a1f2e; height: 100%; }
-    canvas { display: block; width: 100%; height: 100vh; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #11141a;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #e6e9f0;
+    }
+    #the_canvas_id {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+    #center_container {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      z-index: 10;
+      pointer-events: none;
+    }
+    .spinner {
+      width: 36px;
+      height: 36px;
+      margin: 0 auto 16px auto;
+      border: 3px solid #1a1f2e;
+      border-top: 3px solid #00d4f5;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .error-box {
+      background: #1a1f2e;
+      border: 1px solid #f5a623;
+      padding: 16px 24px;
+      border-radius: 8px;
+      max-width: 420px;
+      color: #e6e9f0;
+    }
   </style>
 </head>
 <body>
+  <div id="center_container">
+    <div id="loading_indicator">
+      <div class="spinner"></div>
+      <div>Loading OpticsLab...</div>
+    </div>
+    <div id="error_message" class="error-box" style="display: none;"></div>
+  </div>
+
+  <noscript>
+    <div style="position: absolute; top: 20px; left: 20px; color: #f5a623; background: #1a1f2e; padding: 16px; border-radius: 8px;">
+      OpticsLab requires JavaScript and WebAssembly to run in your browser.
+    </div>
+  </noscript>
+
   <canvas id="the_canvas_id"></canvas>
-  <!-- Filled in Phase 12: wasm-pack generates pkg/optics_web.js -->
+
   <script type="module">
-    // import init from './pkg/optics_web.js';
-    // init().then(() => { window.wasm_exports.start(); });
+    import init, { WebHandle } from "./optics-web.js";
+
+    function showStatusError(msg) {
+      const loader = document.getElementById("loading_indicator");
+      const errBox = document.getElementById("error_message");
+      if (loader) loader.style.display = "none";
+      if (errBox) {
+        errBox.style.display = "block";
+        errBox.innerHTML = msg;
+      }
+    }
+
+    async function run() {
+      // Check WebAssembly support
+      if (typeof WebAssembly !== "object") {
+        showStatusError("WebAssembly is not supported by your browser. Please upgrade to a modern browser.");
+        return;
+      }
+
+      // Check WebGL support
+      const testCanvas = document.createElement("canvas");
+      const gl = testCanvas.getContext("webgl2") || testCanvas.getContext("webgl");
+      if (!gl) {
+        showStatusError("WebGL is not supported or disabled in your browser. OpticsLab requires WebGL support.");
+        return;
+      }
+
+      try {
+        await init();
+        const canvas = document.getElementById("the_canvas_id");
+        const handle = new WebHandle();
+        await handle.start(canvas);
+        const loader = document.getElementById("loading_indicator");
+        if (loader) loader.style.display = "none";
+      } catch (err) {
+        showStatusError("Failed to initialize OpticsLab: " + err);
+      }
+    }
+
+    run();
   </script>
 </body>
 </html>
