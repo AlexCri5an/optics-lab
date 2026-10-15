@@ -165,8 +165,8 @@
   - Hydrogen red C: `LAMBDA_C_NM = 656.27` (0.65627 μm)
 
 ### 3.3 Hero-Wavelength Spectral Sampling
-- [ ] `struct HeroSpectrum { wavelengths_nm: [f64; N], weights: [f64; N] }` (N=4 default)
-- [ ] `fn hero_sample_wavelengths(primary_nm: f64, n_wavelengths: usize) -> HeroSpectrum`
+- [x] `struct HeroSpectrum { wavelengths_nm: [f64; N], weights: [f64; N] }` (N=4 default)
+- [x] `fn hero_sample_wavelengths(primary_nm: f64, n_wavelengths: usize) -> HeroSpectrum`
   - Uniform stratified sampling across 380–780 nm band with primary hero wavelength
 
 ### 3.4 CIE 1931 XYZ Color Matching & Piecewise sRGB
@@ -187,7 +187,7 @@
 - [x] Monochromatic 550 nm is green-dominant and 700 nm is red-dominant
 - [x] sRGB transfer curve linearity (slope 12.92), exponent 2.4, and junction continuity
 - [x] Equal-energy spectrum is NOT (1, 1, 1) in sRGB (differs by >15% on red)
-- [ ] Hero-wavelength output has correct centroid at primary wavelength (Slice C)
+- [x] Hero-wavelength output has correct centroid at primary wavelength (Slice C)
 
 ---
 
@@ -258,40 +258,40 @@
 
 ---
 
-## Phase 6 — `optics-bvh`: Acceleration Structure
-
+## Phase 6 — `optics-bvh`: Acceleration Structure ✅ COMPLETE
+ 
 > Source: RE Doc 03, `three-gpu-pathtracer/src/shader/bvh/`
 
 ### 6.1 AABB & BVH Node
-- [ ] `struct Aabb { min: Vec3, max: Vec3 }` with `fn grow(&mut self, pt: Vec3)`, `fn surface_area() -> f64`
-- [ ] `fn ray_aabb_slab_test(ray: &Ray, aabb: &Aabb) -> Option<(f64, f64)>` — exact slab method with safe NaN handling
-- [ ] `struct BvhNode { aabb: Aabb, left_or_first: u32, count: u32, is_leaf: bool }`
+- [x] `struct Aabb { min: Vec3, max: Vec3 }` with `fn grow(&mut self, pt: Vec3)`, `fn surface_area() -> f64`
+- [x] `fn ray_aabb_slab_test(ray: &Ray, aabb: &Aabb) -> Option<(f64, f64)>` — exact slab method with safe NaN handling
+- [x] `struct BvhNode { aabb: Aabb, left_or_first: u32, count: u32, is_leaf: bool }`
 
 ### 6.2 CPU BVH Builder (SAH)
-- [ ] `fn build_bvh(primitives: &[Primitive]) -> Vec<BvhNode>` — Surface Area Heuristic
-- [ ] Binned SAH with 16 bins per axis
-- [ ] `fn find_best_split(node: &BvhNode, primitives: &[Primitive]) -> SplitDecision`
+- [x] `fn build_bvh(primitives: &[Primitive]) -> Vec<BvhNode>` — Surface Area Heuristic
+- [x] Binned SAH with 16 bins per axis
+- [x] `fn find_best_split(node: &BvhNode, primitives: &[Primitive]) -> SplitDecision`
 
 ### 6.3 2-Level BVH (TLAS / BLAS)
-- [ ] BLAS: per-mesh BVH over triangles
-- [ ] TLAS: BVH over BLAS instances (for multi-object scenes)
-- [ ] `struct BvhScene { tlas: Vec<BvhNode>, blas: Vec<Vec<BvhNode>>, triangles: Vec<Triangle> }`
+- [x] BLAS: per-mesh BVH over triangles
+- [x] TLAS: BVH over BLAS instances (for multi-object scenes)
+- [x] `struct BvhScene { tlas: Vec<BvhNode>, blas: Vec<Vec<BvhNode>>, triangles: Vec<Triangle> }`
 
 ### 6.4 BVH GPU Buffer Layout (16-Byte Aligned)
-- [ ] 16-byte aligned flat GPU buffer pack:
+- [x] 16-byte aligned flat GPU buffer pack:
   - `struct GpuBvhNode { aabb_min_left: [f32; 4], aabb_max_count: [f32; 4] }` where $w$-components pack `left_or_first: u32` and `count: u32` (or explicitly padded 32-byte struct with 16-byte alignment)
-- [ ] `fn pack_bvh_to_gpu_buffer(nodes: &[BvhNode]) -> Vec<u8>` — `bytemuck`-safe
-- [ ] Triangle buffer: `[v0: f32x4, v1: f32x4, v2: f32x4, normal: f32x4]` (16-byte aligned)
-- [ ] Unit test: verify `std::mem::size_of::<GpuBvhNode>() == 32` and `std::mem::align_of::<GpuBvhNode>() == 16`
+- [x] `fn pack_bvh_to_gpu_buffer(nodes: &[BvhNode]) -> Vec<u8>` — `bytemuck`-safe
+- [x] Triangle buffer: `[v0: f32x4, v1: f32x4, v2: f32x4, normal: f32x4]` (16-byte aligned)
+- [x] Unit test: verify `std::mem::size_of::<GpuBvhNode>() == 32` and `std::mem::align_of::<GpuBvhNode>() == 16`
 
 ### 6.5 Traversal Cost Counter (CPU reference)
-- [ ] `fn trace_bvh_cost(ray: &Ray, bvh: &BvhScene) -> u32` — returns intersection test count
+- [x] `fn trace_bvh_cost(ray: &Ray, bvh: &BvhScene) -> u32` — returns intersection test count
 
 ### 6.6 Tests
-- [ ] Ray-AABB: miss past, miss before, miss off-axis, hit returns correct t range
-- [ ] Single-triangle BVH: 1 node, 1 triangle, hit returns t ≈ distance
-- [ ] SAH split produces valid left/right partition (no empty sides)
-- [ ] CPU traversal cost > 0 for hit ray, = 0 for early-exit miss ray
+- [x] Ray-AABB: miss past, miss before, miss off-axis, hit returns correct t range
+- [x] Single-triangle BVH: 1 node, 1 triangle, hit returns t ≈ distance
+- [x] SAH split produces valid left/right partition (no empty sides)
+- [x] CPU traversal cost > 0 for hit ray, = 0 for early-exit miss ray
 
 ---
 
