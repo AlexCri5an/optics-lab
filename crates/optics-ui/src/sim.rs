@@ -341,8 +341,10 @@ mod tests {
 
     #[test]
     fn test_retrace_performance_64_samples() {
-        let mut sim = PrismSimulation::default();
-        sim.sample_count = 64;
+        let mut sim = PrismSimulation {
+            sample_count: 64,
+            ..Default::default()
+        };
 
         // Warmup
         sim.retrace();
