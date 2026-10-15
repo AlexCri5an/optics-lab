@@ -351,7 +351,27 @@ pub fn calculate_paraxial_properties(
     }
 
     let efl_mm = -y1 / final_u;
-    let bfl_mm = -last.y / final_u;
+
+    // Check if the final surface is a planar zero-thickness image/detector plane in air
+    // (i.e. zero index step across the interface, zero curvature, zero thickness).
+    // If so, BFL is measured from the last optical lens surface (surface N - 1).
+    let last_surf_is_detector = prescription.surfaces.len() > 1 && {
+        let n_surfs = prescription.surfaces.len();
+        let last_surf = &prescription.surfaces[n_surfs - 1];
+        let prev_surf = &prescription.surfaces[n_surfs - 2];
+        let n_before = prev_surf.material.n(wavelength_nm);
+        let n_after = last_surf.material.n(wavelength_nm);
+        (n_before - n_after).abs() < 1e-12
+            && last_surf.conic.curvature.abs() < 1e-12
+            && last_surf.thickness_mm == 0.0
+    };
+
+    let bfl_mm = if last_surf_is_detector {
+        let prev_idx = prescription.surfaces.len() - 2;
+        -marginal_rays[prev_idx].y / marginal_rays[prev_idx].u
+    } else {
+        -last.y / final_u
+    };
     let f_number = efl_mm.abs() / prescription.entrance_pupil_diameter_mm;
 
     // Entrance pupil: distance from surface 1 to stop viewed from object space
