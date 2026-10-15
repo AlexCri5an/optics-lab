@@ -9,8 +9,8 @@ use crate::sim::PrismSimulation;
 use crate::theme::{OpticsTokens, apply_tokens};
 use crate::view_transform::ViewTransform;
 use egui::{
-    Align2, Button, Color32, Context, Frame, Key, MenuBar, Pos2, ScrollArea, Sense, SidePanel,
-    Stroke, TopBottomPanel, Ui, Vec2, Window,
+    Align2, Color32, Context, CornerRadius, Frame, Key, MenuBar, Pos2, ScrollArea, Sense,
+    SidePanel, Stroke, StrokeKind, TopBottomPanel, Ui, Vec2, Window,
 };
 
 /// Active user tool in the left toolbar.
@@ -92,7 +92,7 @@ impl OpticsLabApp {
         });
     }
 
-    /// Renders the left tool strip.
+    /// Renders the left tool strip with minimalist vector icons.
     fn render_tool_strip(&mut self, ctx: &Context) {
         SidePanel::left("tool_strip")
             .resizable(false)
@@ -101,25 +101,31 @@ impl OpticsLabApp {
                 ui.vertical_centered(|ui| {
                     ui.add_space(8.0);
 
-                    // Select Tool
-                    let sel_btn = Button::new("⇱")
-                        .min_size(Vec2::new(34.0, 34.0))
-                        .selected(self.active_tool == ActiveTool::Select);
-                    if ui.add(sel_btn).on_hover_text("Select tool (S)").clicked() {
+                    // Select tool (S)
+                    let sel_resp = Self::render_tool_button(
+                        ui,
+                        crate::icons::ToolIcon::Select,
+                        self.active_tool == ActiveTool::Select,
+                        true,
+                        "Select (S)",
+                        &self.tokens,
+                    );
+                    if sel_resp.clicked() {
                         self.active_tool = ActiveTool::Select;
                     }
 
                     ui.add_space(4.0);
 
-                    // Ray Probe Tool (Default)
-                    let probe_btn = Button::new("⚡")
-                        .min_size(Vec2::new(34.0, 34.0))
-                        .selected(self.active_tool == ActiveTool::RayProbe);
-                    if ui
-                        .add(probe_btn)
-                        .on_hover_text("Ray probe tool (I)")
-                        .clicked()
-                    {
+                    // Ray probe tool (I)
+                    let probe_resp = Self::render_tool_button(
+                        ui,
+                        crate::icons::ToolIcon::RayProbe,
+                        self.active_tool == ActiveTool::RayProbe,
+                        true,
+                        "Ray probe (I)",
+                        &self.tokens,
+                    );
+                    if probe_resp.clicked() {
                         self.active_tool = ActiveTool::RayProbe;
                     }
 
@@ -128,18 +134,102 @@ impl OpticsLabApp {
                     ui.add_space(8.0);
 
                     // Planned future tools shown disabled
-                    ui.add_enabled(false, Button::new("⬭").min_size(Vec2::new(34.0, 34.0)))
-                        .on_disabled_hover_text("Lens surface tool — Coming later");
+                    Self::render_tool_button(
+                        ui,
+                        crate::icons::ToolIcon::LensSurface,
+                        false,
+                        false,
+                        "Lens surface tool (Coming later)",
+                        &self.tokens,
+                    );
                     ui.add_space(4.0);
 
-                    ui.add_enabled(false, Button::new("☀").min_size(Vec2::new(34.0, 34.0)))
-                        .on_disabled_hover_text("Light source tool — Coming later");
+                    Self::render_tool_button(
+                        ui,
+                        crate::icons::ToolIcon::LightSource,
+                        false,
+                        false,
+                        "Light source tool (Coming later)",
+                        &self.tokens,
+                    );
                     ui.add_space(4.0);
 
-                    ui.add_enabled(false, Button::new("📏").min_size(Vec2::new(34.0, 34.0)))
-                        .on_disabled_hover_text("Measure tool — Coming later");
+                    Self::render_tool_button(
+                        ui,
+                        crate::icons::ToolIcon::Measure,
+                        false,
+                        false,
+                        "Measure tool (Coming later)",
+                        &self.tokens,
+                    );
                 });
             });
+    }
+
+    /// Renders a single tool strip button with custom vector icon and contrast styling.
+    fn render_tool_button(
+        ui: &mut Ui,
+        icon: crate::icons::ToolIcon,
+        is_selected: bool,
+        is_enabled: bool,
+        tooltip: &str,
+        tokens: &OpticsTokens,
+    ) -> egui::Response {
+        let (rect, response) = ui.allocate_exact_size(Vec2::new(34.0, 34.0), Sense::click());
+        let painter = ui.painter_at(rect);
+
+        let (bg_fill, stroke_color, icon_fill) = if !is_enabled {
+            (
+                Color32::TRANSPARENT,
+                Color32::from_rgb(70, 78, 98), // Dimmed disabled stroke (contrast >= 3:1)
+                Color32::TRANSPARENT,
+            )
+        } else if is_selected {
+            (
+                tokens.accent,
+                tokens.canvas, // Dark icon on bright cyan accent (contrast >= 13:1)
+                tokens.canvas,
+            )
+        } else if response.hovered() {
+            (
+                tokens.hover_bg,
+                Color32::WHITE,
+                Color32::from_rgba_premultiplied(255, 255, 255, 40),
+            )
+        } else {
+            (
+                Color32::TRANSPARENT,
+                tokens.text_dim,
+                Color32::TRANSPARENT,
+            )
+        };
+
+        if bg_fill != Color32::TRANSPARENT {
+            painter.rect_filled(rect, CornerRadius::same(6), bg_fill);
+        }
+        if is_selected {
+            painter.rect_stroke(
+                rect,
+                CornerRadius::same(6),
+                Stroke::new(1.0, Color32::WHITE),
+                StrokeKind::Inside,
+            );
+        } else if is_enabled && response.hovered() {
+            painter.rect_stroke(
+                rect,
+                CornerRadius::same(6),
+                Stroke::new(1.0, tokens.accent),
+                StrokeKind::Inside,
+            );
+        }
+
+        crate::icons::draw_tool_icon(&painter, rect, icon, stroke_color, icon_fill);
+
+        if is_enabled {
+            response.on_hover_text(tooltip)
+        } else {
+            response.on_disabled_hover_text(tooltip)
+        }
     }
 
     /// Renders the right inspector and control panel.

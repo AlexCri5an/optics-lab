@@ -13,8 +13,12 @@ optics-core     = { workspace = true }
 optics-spectral = { workspace = true }
 optics-glass    = { workspace = true }
 egui            = { workspace = true }
-eframe          = { workspace = true }
+eframe          = { workspace = true, features = ["accesskit"] }
 serde           = { workspace = true }
+
+[dev-dependencies]
+egui_kittest = { version = "0.32.3", features = ["snapshot"] }
 
 [lints]
 workspace = true
+
