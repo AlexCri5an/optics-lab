@@ -10,6 +10,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 
 ### Added
 
+#### Slice B, Step B1: Sequential Optics Core (`optics-core`)
+- **Optical Conventions Documentation (`docs/conventions.md`):**
+  - Documented spatial coordinates in mm, $+z$ propagation direction, curvature $c = 1/R$, conic sag equation, normal convention pointing toward incident medium, and Citardauque rearranged root solver.
+- **Conic Surface Geometry (`optics-core::conic`):**
+  - `ConicSurface` struct parameterized by curvature $c = 1/R$, conic constant $k$, semi-diameter, and axial vertex position $z_v$.
+  - Numerically stable `conic_sag(r, c, k)` with finite boundary checking for $(1+k) c^2 r^2 > 1$, returning typed [`OpticsError::GeometryOutsideAperture`].
+  - Analytic unit normal `conic_normal` oriented toward the incident medium ($\mathbf{n} \cdot \hat{z} \le 0$).
+  - Citardauque quadratic root solver `intersect_conic` preventing catastrophic cancellation when $c \to 0$ or ray is near-axial, with vertex-sheet validation and semi-diameter aperture clipping.
+- **Sequential Prescriptions & Materials (`optics-core::prescription`):**
+  - `OpticalSurface` and `OpticalPrescription` representing sequential surface definitions (radius, conic, thickness, semi-diameter, material name, stop flag).
+  - Decoupled `ResolvedPrescription` and `ResolvedSurface` using `trait MaterialResolver` returning `Arc<dyn RefractiveIndex + Send + Sync>`, ensuring zero dependency on `optics-glass`.
+- **Paraxial Ray Tracer (`optics-core::prescription`):**
+  - $y$-$u$ matrix method: `trace_paraxial_marginal` and `trace_paraxial_chief` tracking refraction ($n' u' = n u - y \phi$) and axial transfer ($y' = y + t u'$).
+  - `calculate_paraxial_properties` computing Effective Focal Length (EFL), Back Focal Length (BFL), F-number, and pupil locations.
+- **Sequential Real-Ray Tracer (`optics-core::prescription`):**
+  - `trace_sequential` tracing rays surface-by-surface with conic intersection, Snell refraction, TIR detection, vignetting enforcement, and per-surface Fresnel efficiency recording in `RayBounce`.
+- **Analytical Unit Tests (Derived values, zero invented numbers):**
+  - Conic surface satisfaction to $< 10^{-12}$, circle intersection equivalence, parabola sag known value $r^2/(2R)$, and normal orthogonality to finite-difference tangents.
+  - Paraxial thin-lens and thick-lens equivalence to lensmaker equations, plano-convex EFL/BFL relations, two-surface combination, and Helmholtz-Lagrange invariant conservation across all surfaces.
+  - Real-ray $h \to 0$ convergence to paraxial BFL, longitudinal spherical aberration (LSA) negative sign and $\sim h^2$ scaling, Cartesian plano-hyperbolic aplanat exact focus ($k = -n^2$, focal spread $< 10^{-9}$ mm), chromatic focal order, Fresnel throughput conservation, and ray reversibility.
+
 #### Slice A: Interactive Prism Dispersion UI (`optics-ui`, `optics-lab`, `optics-web`)
 - **Theme & Design Tokens (`optics-ui::theme`):**
   - `OpticsTokens` with MediumDark palette (canvas `#11141a`, panels `#1a1f2e`, accent `#00d4f5`, amber `#f5a623`, dim text `#8b93a7`, text `#e6e9f0`).

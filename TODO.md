@@ -93,21 +93,22 @@
 - [x] `fn schlick_approx(cos_theta: f64, n1: f64, n2: f64) -> f64` — fast unpolarized approximation
 
 ### 2.4 Conic Surface Geometry (Citardauque Method)
-- [ ] `struct ConicSurface { radius_mm: f64, conic_constant: f64, semi_diam_mm: f64 }`
-- [ ] `fn intersect_conic(ray: &Ray, surface: &ConicSurface) -> Result<f64, OpticsError>` — Citardauque solver
-- [ ] `fn conic_normal(hit_point: Vec3, surface: &ConicSurface) -> Vec3` — analytical normal
-- [ ] `fn conic_sag(r: f64, c: f64, k: f64) -> f64` — sag equation z(r)
+- [x] `struct ConicSurface { radius_mm: f64, conic_constant: f64, semi_diam_mm: f64 }`
+- [x] `fn intersect_conic(ray: &Ray, surface: &ConicSurface, surface_index: usize) -> Result<HitRecord, OpticsError>` — Citardauque solver
+- [x] `fn conic_normal(hit_point: Vec3, surface: &ConicSurface) -> Result<Vec3, OpticsError>` — analytical normal
+- [x] `fn conic_sag(r: f64, c: f64, k: f64) -> Result<f64, OpticsError>` — sag equation z(r)
 
 ### 2.5 Optical Surface & Prescription Types
-- [ ] `struct OpticalSurface { surface_index, radius_mm, conic_constant, thickness_mm, clear_aperture_radius_mm, glass, is_aperture_stop }`
-- [ ] `struct OpticalPrescription { name, entrance_pupil_diameter_mm, surfaces }`
-- [ ] Impl `Default` for both (flat plane, no glass)
+- [x] `struct OpticalSurface { surface_index, radius_mm, conic_constant, thickness_mm, semi_diameter_mm, material_name, is_stop }`
+- [x] `struct OpticalPrescription { name, entrance_pupil_diameter_mm, field_angles_deg, wavelengths_nm, surfaces }`
+- [x] `struct ResolvedPrescription` with decoupled `trait MaterialResolver`
+- [x] Impl `Default` for both (flat plane, no glass)
 
 ### 2.6 Paraxial Ray Tracer
-- [ ] `fn trace_paraxial_marginal(prescription: &OpticalPrescription) -> ParaxialRay`
-- [ ] `fn trace_paraxial_chief(prescription: &OpticalPrescription, field_angle_deg: f64) -> ParaxialRay`
-- [ ] `struct ParaxialProperties { efl_mm, bfl_mm, f_number, entrance_pupil_pos_mm, exit_pupil_pos_mm }`
-- [ ] `fn calculate_paraxial_properties(prescription: &OpticalPrescription) -> ParaxialProperties`
+- [x] `fn trace_paraxial_marginal(prescription: &ResolvedPrescription, wavelength_nm: f64) -> Result<Vec<ParaxialRay>, OpticsError>`
+- [x] `fn trace_paraxial_chief(prescription: &ResolvedPrescription, field_angle_deg: f64, wavelength_nm: f64) -> Result<Vec<ParaxialRay>, OpticsError>`
+- [x] `struct ParaxialProperties { efl_mm, bfl_mm, f_number, entrance_pupil_pos_mm, exit_pupil_pos_mm }`
+- [x] `fn calculate_paraxial_properties(prescription: &ResolvedPrescription, wavelength_nm: f64) -> Result<ParaxialProperties, OpticsError>`
 
 ### 2.7 Tests (unit)
 - [x] Test Snell's law with N-BK7 at 587.56 nm (nd=1.5168) — verify refraction angles at 30° and 45°
@@ -122,10 +123,10 @@
 - [x] Test Fresnel energy conservation (R_total + T_total == 1.0) and TIR ((1.0, 1.0))
 - [x] Test Fresnel Stokes symmetry between conjugate Snell angles (n1 -> n2 vs n2 -> n1)
 - [x] Test Schlick approximation against exact unpolarized Fresnel (exact at normal/grazing, stated tolerance)
-- [ ] Test conic sag: sphere k=0, parabola k=-1 at r=0 → sag=0
-- [ ] Test Citardauque solver against analytical root for sphere
-- [ ] Test paraxial EFL for a single thin lens (1/f = (n-1)(1/R1 - 1/R2))
-- [ ] Test Cooke Triplet paraxial EFL = ~50 mm
+- [x] Test conic sag: sphere k=0, parabola k=-1 at r=0 → sag=0; parabola sag known value r^2/(2R)
+- [x] Test Citardauque solver against analytical root for sphere
+- [x] Test paraxial EFL for a single thin lens (1/f = (n-1)(1/R1 - 1/R2))
+- [ ] Test Cooke Triplet paraxial EFL = ~50 mm (Step B2)
 
 ### 2.8 Non-Sequential Single-Ray Path Tracer (Slice A Milestone)
 - [x] `trait RefractiveIndex { fn n(&self, wavelength_nm: f64) -> f64 }` in `optics-core` (zero dependency on `optics-glass`)
@@ -140,7 +141,8 @@
 - [x] `optics-cli prism --glass N-BK7 --apex 60 --incidence 45 --samples 32 --svg out.svg` draws the prism outline and colored rays (via `display_color_for_wavelength`) as a 2D SVG in the plane of incidence, plus a text table on stdout
 
 ### 2.10 Sequential Real-Ray Tracer (Slice B Milestone)
-- [ ] `fn trace_sequential(prescription: &ResolvedPrescription, ray: &Ray) -> Result<SequentialPathRecord, OpticsError>`
+- [x] `fn trace_sequential(prescription: &ResolvedPrescription, ray: &Ray) -> Result<SequentialPathRecord, OpticsError>`
+- [x] Real-ray tests: h -> 0 convergence to paraxial BFL; positive singlet LSA sign and ~h^2 scaling; plano-hyperbolic aplanat exact focus (spread < 1e-9 mm); chromatic order; Fresnel throughput energy conservation; ray reversibility.
 
 - [x] Tests: deviation decreases monotonically with wavelength over 380–780 nm; deviation at F, d, C lines equals the analytic two-surface Snell value computed independently inside the test (tolerance 1e-9)
 
