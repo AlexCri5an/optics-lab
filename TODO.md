@@ -1,6 +1,6 @@
 # OpticsLab — Master Implementation Plan & Task List
 
-> **Status:** Phase 1 ✅ complete. Phase 2.1–2.6, 2.8–2.10 ✅ complete. Phase 3.1–3.2, 3.4 ✅ complete. Phase 4.1–4.3 ✅ complete. Phase 5.1–5.3, 5.5 ✅ complete (Zemax .zmx parser, serializer, presets). Slice A UI Step A1 & Step A2 ✅ complete. Slice B Step B1 (Sequential Core) & Step B2 (Zemax Parser & Presets) ✅ complete.
+> **Status:** Phase 1 ✅ complete. Phase 2.1–2.6, 2.8–2.10 ✅ complete. Phase 3.1–3.2, 3.4 ✅ complete. Phase 4.1–4.3 ✅ complete. Phase 5.1–5.3, 5.5 ✅ complete (Zemax .zmx parser, serializer, presets). Phase 8.1–8.2 ✅ complete (Spot diagrams & ray fans). Slice A UI Step A1 & Step A2 ✅ complete. Slice B Step B1 (Sequential Core), Step B2 (Zemax Parser & Presets) & Step B3 (Aberrations & Spot Diagrams) ✅ complete.
 >
 > Legend: `[ ]` = todo · `[x]` = done · `[~]` = in progress · `[-]` = deferred
 
@@ -365,13 +365,13 @@
 > Source: RE Doc 08, `optiland/analysis/`
 
 ### 8.1 Geometric Spot Diagram
-- [ ] `fn trace_hexapolar_grid(prescription: &OpticalPrescription, field_angle_deg: f64, num_rings: usize) -> Vec<[f64;2]>`
-- [ ] `fn spot_diagram_metrics(points: &[[f64;2]]) -> SpotMetrics`
-- [ ] `struct SpotMetrics { centroid_x, centroid_y, rms_radius_um, geo_radius_um, airy_radius_um, is_diffraction_limited }`
+- [x] `fn trace_hexapolar_grid(prescription: &OpticalPrescription, field_angle_deg: f64, num_rings: usize) -> Vec<[f64;2]>`
+- [x] `fn spot_diagram_metrics(points: &[[f64;2]]) -> SpotMetrics`
+- [x] `struct SpotMetrics { centroid_x, centroid_y, rms_radius_um, geo_radius_um, airy_radius_um, is_diffraction_limited }`
 
 ### 8.2 Transverse Ray Aberration Fans
-- [ ] `fn trace_ray_fan(prescription: &OpticalPrescription, field_angle_deg: f64, num_points: usize) -> RayFanData`
-- [ ] `struct RayFanData { tangential: Vec<(f64,f64)>, sagittal: Vec<(f64,f64)> }` — `(pupil_coord, aberration_um)`
+- [x] `fn trace_ray_fan(prescription: &OpticalPrescription, field_angle_deg: f64, num_points: usize) -> RayFanData`
+- [x] `struct RayFanData { tangential: Vec<(f64,f64)>, sagittal: Vec<(f64,f64)> }` — `(pupil_coord, aberration_um)`
 
 ### 8.3 MTF (Modulation Transfer Function) [-] DEFERRED
 > Deferred: post-Slice A analytical enhancement.
@@ -688,7 +688,7 @@
 > Goal: Load Zemax Cooke Triplet and Double Gauss prescriptions, trace marginal/chief paraxial rays, and render 2D spot diagrams and ray fans.
 - [x] Phase 2.4–2.6, 2.10: Conic surfaces, Citardauque intersection solver, prescriptions, paraxial tracer, sequential ray tracer
 - [x] Phase 5: Zemax `.zmx` parser, serializer, and bundled lens presets
-- [ ] Phase 8.1–8.2: Geometric spot diagrams & transverse ray aberration fans
+- [x] Phase 8.1–8.2: Geometric spot diagrams & transverse ray aberration fans
 - [ ] Phase 9.5: Lens prescription editor table with live edit & re-trace
 - [ ] Phase 11: `optics-cli analyze` CLI command
 
@@ -712,5 +712,5 @@
 
 ---
 
-> **Next action:** Slice B, Step B3: Geometric spot diagrams & transverse ray aberration fans (Phase 8.1–8.2).
+> **Next action:** Slice B, Step B4: Prescription Editor UI & Ray Fan / Spot Diagram Plots (Phase 9.5) or CLI analyze (Phase 11).
 
