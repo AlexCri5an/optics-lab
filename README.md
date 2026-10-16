@@ -43,31 +43,48 @@ cargo run -p optics-engine --example 10_aspheric_surfaces
 
 ---
 
-## 2. Workspace Crate Architecture
+## 2. Repository Layout
 
-The codebase consists of 12 focused, modular crates:
-
-| Crate | Purpose | Scope / Capabilities |
-| :--- | :--- | :--- |
-| [`optics-core`](crates/optics-core) | Core Math & Physics | 3D vectors (`Vec3`), parametric rays (`Ray`), Snell/Fresnel vector algebra, conic/aspheric/Forbes/Zernike/GRIN surfaces, paraxial ABCD transfer, ray aiming, spot diagram, wavefront OPD, Zernike fit, Seidel sums, FFT PSF, diffraction MTF, TMM coatings, Jones/Mueller polarimetry. |
-| [`optics-spectral`](crates/optics-spectral) | Spectral Physics | Sellmeier 1–5, Schott, Herzberger, Conrady, and extended dispersion; Edlén / Birch & Downs atmospheric air model; Schott thermal dispersion ($dn/dT$); internal linear transmittance; CIE 1931 XYZ $\to$ sRGB; hero wavelength sampling. |
-| [`optics-glass`](crates/optics-glass) | Optical Materials | 646 bundled manufacturer glasses (Schott, Ohara, CDGM, Hoya); Abbe diagram querying ($n_d, V_d$); synthetic model glass; Zemax `.agf` and refractiveindex.info YAML parsers. |
-| [`optics-bvh`](crates/optics-bvh) | Spatial Acceleration | Surface Area Heuristic (SAH) builder; Möller-Trumbore ray-triangle intersection; 2-level TLAS/BLAS instance traversal; GPU buffer packing for compute shaders. |
-| [`optics-zemax`](crates/optics-zemax) | Interoperability & CAD | Lossless Zemax `.zmx` parser/serializer; canonical presets (Cooke Triplet, Double Gauss, Singlet); CODE V `.seq` & OSLO `.len` bridges; SVG 2D layout; AutoCAD DXF; 3D STL binary/ASCII; Wavefront OBJ + MTL; ISO 10110 drawing sheets; versioned project workspace schema. |
-| [`optics-render`](crates/optics-render) | GPU Path Tracing | Hardware WebGPU path tracer (`wgpu`); WGSL compute shaders; multi-material Sellmeier storage buffer indexing; thin-lens camera; Welford online variance tracking. |
-| [`optics-optimize`](crates/optics-optimize) | System Optimization | Levenberg-Marquardt Damped Least Squares (DLS); finite-difference Jacobian; comprehensive merit function operands; multi-start global search; simulated annealing; discrete glass catalog substitution ("Hammer"). |
-| [`optics-tolerance`](crates/optics-tolerance) | Manufacturing Tolerancing | Radius, thickness, conic, decenter, tilt, wedge, index/Abbe tolerances; Uniform, Truncated Normal, Worst-Case distributions; sensitivity ranking; paraxial refocus compensator; RSS error budget; deterministic Monte Carlo yield simulation. |
-| [`optics-nonseq`](crates/optics-nonseq) | 3D Non-Sequential | Mixed primitive geometry (Plane, Disk, Sphere, Cylinder, Box, Mesh); vector Snell/Fresnel branching; Total Internal Reflection (TIR); Beer-Lambert absorption; 2D pixelated radiometric/photopic detectors; ray history logs. |
-| [`optics-engine`](crates/optics-engine) | Unified Facade | Single integration target for UI frontends. Command pattern (`EngineCommand`), bounded undo/redo history (`UndoStack`), revision-keyed result caching with dirty invalidation, diagnostic validation layer (`DiagnosticLevel`), reactive event broadcasting (`EngineEvent`), background worker threads (`JobHandle`). |
-| [`optics-ffi`](crates/optics-ffi) | Foreign Language C ABI | `extern "C"` ABI boundary, opaque handles (`OpticsEngineHandle`), thread-local error messaging, C header (`include/optics_lab.h`), zero-dependency Python `ctypes` bindings. |
-| [`optics-cli`](apps/optics-cli) | Command-Line Interface | Thin CLI client over `optics-engine` providing command-line analysis, multi-format CAD exports, and automated 10-suite self-tests. |
+```text
+/
+├── .github/workflows/ci.yml   # GitHub Actions CI matrix workflow
+├── apps/
+│   └── optics-cli/            # Headless CLI diagnostic tool & exporter
+├── crates/                    # 12 modular computational backend crates
+│   ├── optics-core/           # 3D vectors, rays, Snell/Fresnel, aspheres, aberrations, TMM, polarimetry
+│   ├── optics-spectral/       # Sellmeier/Cauchy/Schott dispersion, thermal shifts, CIE 1931 colorimetry
+│   ├── optics-glass/          # 646 manufacturer optical glasses database, AGF and YAML loaders
+│   ├── optics-bvh/            # Surface Area Heuristic (SAH) BVH & GPU buffer packing
+│   ├── optics-zemax/          # Lossless .zmx roundtrip, CODE V, OSLO, SVG, DXF, STL, OBJ, ISO 10110
+│   ├── optics-render/         # Headless hardware WebGPU path tracer & WGSL shaders
+│   ├── optics-optimize/       # Damped Least Squares (DLS), multi-start, simulated annealing, glass hammer
+│   ├── optics-tolerance/      # Sensitivity ranking, paraxial compensators, Monte Carlo yield simulation
+│   ├── optics-nonseq/         # 3D non-sequential ray tracing, Fresnel branching, 2D detectors, TIR guides
+│   ├── optics-engine/         # High-level facade, transactional command queue, undo/redo, dirty cache
+│   └── optics-ffi/            # C99 FFI ABI boundary and Python ctypes bindings
+├── docs/                      # Architectural and technical documentation
+│   ├── API_REFERENCE.md       # Public API reference for OpticalEngine & foreign bindings
+│   ├── API_SCHEMA.json        # JSON Schema for engine commands and analysis requests
+│   ├── API_STABILITY.md       # SemVer guarantees and API stability tiers
+│   ├── ARCHITECTURE.md        # 12-crate workspace architecture and pipeline diagrams
+│   ├── CONVENTIONS.md         # Mathematical signs, optical units, and coordinate standards
+│   ├── ROADMAP.md             # Technical roadmap and planned feature progression
+│   ├── VALIDATION.md          # Verification guide for test execution and benchmark reproduction
+│   ├── archive/               # Historical research traces and sign-off records
+│   └── audit/                 # Consolidated STATUS.md, MATHEMATICAL_AUDIT.md, FUNCTION_INVENTORY.md
+├── examples/                  # Symlink to crates/optics-engine/examples/ (10 runnable scripts)
+├── include/
+│   └── optics_lab.h           # Canonical C99 header for C ABI integration
+└── tools/
+    └── golden/                # Independent golden verification datasets and Python test harness
+```
 
 ---
 
 ## 3. Verified Computational Features
 
 - **Double-Precision Standard**: Every ray coordinate, direction cosine, surface normal, and optical path length is computed in `f64`.
-- **VectorCraft Zero-Panic Guarantee**: Every workspace crate strictly enforces `#![deny(clippy::unwrap_used)]` and `#![deny(clippy::expect_used)]`. Errors propagate via typed `Result<T, OpticsError>`.
+- **Zero-Panic Guarantee**: Every workspace crate strictly enforces `#![deny(clippy::unwrap_used)]` and `#![deny(clippy::expect_used)]`. Errors propagate via typed `Result<T, OpticsError>`.
 - **Golden Reference Validation**: Cross-validated against textbook benchmarks (Smith *Modern Optical Engineering*, Arthur Cox *A System of Optical Design*, and MIL-HDBK-141) with agreement within $0.002\% - 0.02\%$.
 - **Physical Invariants**: Property-based invariant tests verify Snell cross-product conservation ($< 10^{-12}$), normal unit length ($1.0 \pm 10^{-12}$), Fresnel energy conservation ($R+T=1.000000000000$), ray reversibility ($< 10^{-12}$), and surface-by-surface Lagrange invariant conservation ($< 10^{-10}$).
 - **Adversarial Fuzzing**: Stress-tested against null bytes, extreme floats (`NaN`, `Infinity`, subnormals), progressive file truncation, and random bitflip mutations with zero panics.
@@ -102,7 +119,7 @@ The codebase consists of 12 focused, modular crates:
 cargo build --workspace
 
 # Run complete test suite (218 tests)
-cargo test --workspace && cargo test -p optics-bvh
+cargo test --workspace
 
 # Run Clippy static analysis with zero-panic lint enforcement
 cargo clippy --workspace --all-targets --all-features -- -D warnings
