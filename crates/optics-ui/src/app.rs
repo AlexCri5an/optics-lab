@@ -14,6 +14,7 @@ use egui::{
 };
 
 use optics_glass::GlassCatalogDb;
+use optics_zemax::parse_zmx_bytes;
 
 use crate::analytics::render_analytics_dock;
 use crate::glass_browser::{GlassBrowserState, render_glass_catalog_panel};
@@ -187,9 +188,22 @@ pub struct OpticsLabApp {
 
 impl Default for OpticsLabApp {
     fn default() -> Self {
+        #[cfg(target_arch = "wasm32")]
+        let (default_app_mode, default_viewport_mode, default_right_tab) = (
+            AppMode::LensSystem,
+            ViewportMode::View2D,
+            RightPanelTab::Prescription,
+        );
+        #[cfg(not(target_arch = "wasm32"))]
+        let (default_app_mode, default_viewport_mode, default_right_tab) = (
+            AppMode::PrismDispersion,
+            ViewportMode::View3D,
+            RightPanelTab::RayInspector,
+        );
+
         Self {
-            app_mode: AppMode::PrismDispersion,
-            viewport_mode: ViewportMode::View3D,
+            app_mode: default_app_mode,
+            viewport_mode: default_viewport_mode,
             tokens: OpticsTokens::dark_scientific(),
             active_tool: ActiveTool::Select,
             view: ViewTransform::default(),
@@ -208,7 +222,7 @@ impl Default for OpticsLabApp {
             scene_tree_prism_open: true,
             scene_tree_ground_open: false,
             selected_scene_object: Some("Prism".into()),
-            right_panel_tab: RightPanelTab::RayInspector,
+            right_panel_tab: default_right_tab,
             glass_db: GlassCatalogDb::load_bundled().ok(),
             glass_browser_state: GlassBrowserState::default(),
             show_shortcuts_help: false,
@@ -257,6 +271,54 @@ impl OpticsLabApp {
         }
     }
 
+    /// Handles file drag-and-drop events (e.g. dropping a Zemax `.zmx` file onto the window/canvas).
+    fn handle_file_drag_and_drop(&mut self, ctx: &Context) {
+        let dropped = ctx.input(|i| i.raw.dropped_files.clone());
+        for file in dropped {
+            let zmx_bytes: Option<Vec<u8>> = if let Some(bytes) = file.bytes {
+                Some(bytes.to_vec())
+            } else if let Some(path) = file.path {
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    std::fs::read(&path).ok()
+                }
+                #[cfg(target_arch = "wasm32")]
+                {
+                    let _ = path;
+                    None
+                }
+            } else {
+                None
+            };
+
+            if let Some(bytes) = zmx_bytes {
+                match parse_zmx_bytes(&bytes) {
+                    Ok(system) => {
+                        let name = system.name.clone();
+                        let num_surfaces = system.surfaces.len();
+                        let prescription = system.to_optical_prescription();
+
+                        if let Some(ref mut sim) = self.lens_sim {
+                            sim.load_prescription_custom(prescription);
+                        } else if let Ok(sim) = LensSimulation::from_prescription(prescription) {
+                            self.lens_sim = Some(sim);
+                        }
+
+                        self.app_mode = AppMode::LensSystem;
+                        self.viewport_mode = ViewportMode::View2D;
+                        self.right_panel_tab = RightPanelTab::Prescription;
+                        self.copy_status = Some(format!(
+                            "Loaded Zemax prescription: {name} ({num_surfaces} surfaces)"
+                        ));
+                    }
+                    Err(e) => {
+                        self.copy_status = Some(format!("Failed to parse .zmx: {e}"));
+                    }
+                }
+            }
+        }
+    }
+
     /// Renders the top application bar matching the reference image.
     fn render_top_bar(&mut self, ctx: &Context) {
         TopBottomPanel::top("top_app_bar")
@@ -293,6 +355,42 @@ impl OpticsLabApp {
                     // Menus: File, Edit, View, Render, Diagnostics, Help
                     MenuBar::new().ui(ui, |ui| {
                         ui.menu_button("File", |ui| {
+                            ui.menu_button("Load preset", |ui| {
+                                if ui.button("Cooke Triplet F/4.5").clicked() {
+                                    if let Some(ref mut sim) = self.lens_sim {
+                                        sim.select_preset(LensPreset::CookeTriplet);
+                                    }
+                                    self.app_mode = AppMode::LensSystem;
+                                    self.viewport_mode = ViewportMode::View2D;
+                                    self.right_panel_tab = RightPanelTab::Prescription;
+                                    ui.close();
+                                }
+                                if ui.button("Double Gauss F/2.0").clicked() {
+                                    if let Some(ref mut sim) = self.lens_sim {
+                                        sim.select_preset(LensPreset::DoubleGauss);
+                                    }
+                                    self.app_mode = AppMode::LensSystem;
+                                    self.viewport_mode = ViewportMode::View2D;
+                                    self.right_panel_tab = RightPanelTab::Prescription;
+                                    ui.close();
+                                }
+                                if ui.button("Plano-Convex Singlet").clicked() {
+                                    if let Some(ref mut sim) = self.lens_sim {
+                                        sim.select_preset(LensPreset::PlanoConvex);
+                                    }
+                                    self.app_mode = AppMode::LensSystem;
+                                    self.viewport_mode = ViewportMode::View2D;
+                                    self.right_panel_tab = RightPanelTab::Prescription;
+                                    ui.close();
+                                }
+                            });
+                            ui.separator();
+                            ui.label(
+                                egui::RichText::new("Drag & drop .zmx file to load")
+                                    .size(11.0)
+                                    .color(self.tokens.text_muted),
+                            );
+                            ui.separator();
                             if ui.button("Quit").clicked() {
                                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                                 ui.close();
@@ -715,11 +813,14 @@ impl OpticsLabApp {
             .exact_height(22.0)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(
-                        egui::RichText::new("Ready")
-                            .size(11.0)
-                            .color(self.tokens.text_secondary),
-                    );
+                    let status_text = self.copy_status.as_deref().unwrap_or("Ready");
+                    ui.label(egui::RichText::new(status_text).size(11.0).color(
+                        if self.copy_status.is_some() {
+                            self.tokens.accent
+                        } else {
+                            self.tokens.text_secondary
+                        },
+                    ));
 
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         ui.label(
@@ -943,6 +1044,18 @@ impl OpticsLabApp {
             });
 
             ui.add_space(2.0);
+
+            // Drag-and-drop hover feedback banner
+            if ctx.input(|i| !i.raw.hovered_files.is_empty()) {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new("📂 Drop .zmx file to load optical prescription")
+                            .size(11.5)
+                            .color(self.tokens.accent),
+                    );
+                });
+                ui.add_space(2.0);
+            }
 
             // Viewport content canvas
             let avail_rect = ui.available_rect_before_wrap();
@@ -1345,6 +1458,7 @@ impl eframe::App for OpticsLabApp {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         apply_tokens(ctx, &self.tokens);
         self.handle_shortcuts(ctx);
+        self.handle_file_drag_and_drop(ctx);
 
         // 1. Top Application Bar
         self.render_top_bar(ctx);
@@ -1367,5 +1481,43 @@ impl eframe::App for OpticsLabApp {
         // 7. Dialogs
         self.render_about_dialog(ctx);
         self.render_shortcuts_modal(ctx);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_drag_and_drop_zmx_file() -> Result<(), Box<dyn std::error::Error>> {
+        let ctx = Context::default();
+        let mut app = OpticsLabApp::default();
+
+        let zmx_content = optics_zemax::presets::DOUBLE_GAUSS_F2_0_ZMX.as_bytes();
+        let dropped = egui::DroppedFile {
+            name: "double_gauss.zmx".to_string(),
+            path: None,
+            last_modified: None,
+            bytes: Some(std::sync::Arc::from(zmx_content)),
+            mime: String::new(),
+        };
+
+        ctx.input_mut(|i| {
+            i.raw.dropped_files.push(dropped);
+        });
+
+        app.handle_file_drag_and_drop(&ctx);
+
+        assert_eq!(app.app_mode, AppMode::LensSystem);
+        assert_eq!(app.viewport_mode, ViewportMode::View2D);
+        assert_eq!(app.right_panel_tab, RightPanelTab::Prescription);
+        let status = app.copy_status.as_deref().unwrap_or("");
+        assert!(status.contains("Double Gauss F/2.0"));
+        assert!(status.contains("surfaces"));
+
+        let lens = app.lens_sim.as_ref().ok_or("Lens simulation missing")?;
+        assert_eq!(lens.elements.len(), 6);
+
+        Ok(())
     }
 }

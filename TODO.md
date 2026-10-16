@@ -550,8 +550,8 @@
 - [ ] [Slice C] WebGPU feature detection and browser compatibility matrix (Chromium 113+, Firefox Nightly, Safari TP)
 
 ### 12.3 WASM-Specific Features
-- [ ] Drag-and-drop `.zmx` file onto canvas to load
-- [ ] Embed sample Cooke Triplet scene as default WASM load
+- [x] Drag-and-drop `.zmx` file onto canvas to load (via `DroppedFile` parsing in `handle_file_drag_and_drop`)
+- [x] Embed sample Cooke Triplet scene as default WASM load (WASM starts directly in `AppMode::LensSystem` with Cooke Triplet preset)
 - [-] Share URL: encode scene state as base64 URL param — deferred
 - [-] PWA manifest for offline install (`manifest.json`, service worker) — deferred
 
