@@ -173,6 +173,43 @@ impl LensSimulation {
         }
     }
 
+    /// Loads an arbitrary [`OpticalPrescription`] (e.g. from an imported `.zmx` file) and recalculates.
+    pub fn load_prescription_custom(&mut self, prescription: OpticalPrescription) {
+        self.preset = None;
+        self.prescription = prescription;
+        self.recalculate();
+    }
+
+    /// Creates a new `LensSimulation` with a custom [`OpticalPrescription`].
+    ///
+    /// # Errors
+    /// Returns an error string if glass catalog loading fails.
+    pub fn from_prescription(prescription: OpticalPrescription) -> Result<Self, String> {
+        let catalog = GlassCatalogDb::load_bundled()
+            .map_err(|e| format!("Failed to load glass catalog: {e}"))?;
+
+        let mut sim = Self {
+            preset: None,
+            prescription,
+            catalog,
+            active_subview: LensSubview::CrossSection,
+            field_angle_deg: 0.0,
+            wavelength_nm: 587.56,
+            spot_rings: 5,
+            fan_points: 41,
+            paraxial: None,
+            elements: Vec::new(),
+            cross_section_rays: Vec::new(),
+            spot_diagram: None,
+            spot_metrics: None,
+            ray_fan: None,
+            last_error: None,
+        };
+
+        sim.recalculate();
+        Ok(sim)
+    }
+
     /// Recomputes all optical properties, cross-sections, spot diagram, and ray fans.
     pub fn recalculate(&mut self) {
         self.last_error = None;
@@ -463,6 +500,24 @@ mod tests {
             "Recalculate took too long: {} ms",
             elapsed.as_millis()
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_custom_prescription_loading() -> TestResult {
+        let p = cooke_triplet_f4_5().map_err(|e| format!("{e}"))?;
+        let mut sim = LensSimulation::from_prescription(p)?;
+
+        assert!(sim.preset.is_none());
+        assert_eq!(sim.elements.len(), 3);
+        assert!(sim.paraxial.is_some());
+
+        let dg = double_gauss_50mm().map_err(|e| format!("{e}"))?;
+        sim.load_prescription_custom(dg);
+        assert!(sim.preset.is_none());
+        assert_eq!(sim.elements.len(), 6);
+        assert!(sim.paraxial.is_some());
 
         Ok(())
     }

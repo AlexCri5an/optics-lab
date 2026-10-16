@@ -10,6 +10,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 
 ### Added
 
+#### Phase 12.3: WASM Drag-and-Drop & Default Scene Loading (`optics-ui`, `optics-web`)
+- **Interactive Drag-and-Drop .zmx Prescription Loading (`optics-ui::app`):**
+  - Added `handle_file_drag_and_drop` supporting direct file drops onto the application window and WASM canvas.
+  - Automatically parses `.zmx` bytes via `optics_zemax::parse_zmx_bytes`, extracts the `OpticalPrescription`, and dynamically updates `LensSimulation`.
+  - Added drag-and-drop hover feedback banner ("📂 Drop .zmx file to load optical prescription") in the central viewport toolbar.
+  - Integrated preset loading and drag-and-drop user guidance into the top `File` menu.
+- **Embedded Cooke Triplet Default WASM Scene (`optics-ui::app`, `apps/optics-web`):**
+  - Configured target-specific default state for `wasm32-unknown-unknown` opening directly in `AppMode::LensSystem` with canonical Cooke Triplet F/4.5 preset, 2D cross-section layout, and prescription editor.
+- **Dynamic Prescription Loading (`optics-ui::lens_sim`):**
+  - Added `load_prescription_custom` and `from_prescription` to `LensSimulation` for loading arbitrary user prescriptions with full recalculation.
+
 #### Phase 11 & Phase 14.1: CLI Diagnostic Tools & End-to-End Integration Suite (`optics-cli`, `optics-zemax`)
 - **Optical Glass Material Diagnostics (`optics-cli glass`):**
   - Added `glass --name <name> [--json]` subcommand to inspect dispersion equations, Sellmeier resonance coefficients, and Fraunhofer line refractive indices ($F, d, C, e, g$).
