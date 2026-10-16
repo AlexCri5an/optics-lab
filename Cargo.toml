@@ -12,7 +12,6 @@ members = [
     # Application targets
     "apps/optics-lab",
     "apps/optics-cli",
-    "apps/optics-web",
 ]
 
 [workspace.package]

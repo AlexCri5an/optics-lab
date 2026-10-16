@@ -178,7 +178,6 @@ impl Default for PrismSimulation {
 impl PrismSimulation {
     /// Re-evaluates the prism geometry, traces the spectral ray fan, and updates outputs.
     pub fn retrace(&mut self) {
-        #[cfg(not(target_arch = "wasm32"))]
         let start = std::time::Instant::now();
 
         // 1. Resolve glass material (check fast presets first before falling back to full JSON catalog)
@@ -353,10 +352,7 @@ impl PrismSimulation {
 
         self.rays = traced_rays;
 
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            self.trace_time_ms = start.elapsed().as_secs_f64() * 1000.0;
-        }
+        self.trace_time_ms = start.elapsed().as_secs_f64() * 1000.0;
     }
 
     /// Detects if the current simulation is in an edge state.

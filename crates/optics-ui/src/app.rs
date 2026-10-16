@@ -251,13 +251,6 @@ pub struct OpticsLabApp {
 
 impl Default for OpticsLabApp {
     fn default() -> Self {
-        #[cfg(target_arch = "wasm32")]
-        let (default_app_mode, default_viewport_mode, default_right_tab) = (
-            AppMode::LensSystem,
-            ViewportMode::View2D,
-            RightPanelTab::Prescription,
-        );
-        #[cfg(not(target_arch = "wasm32"))]
         let (default_app_mode, default_viewport_mode, default_right_tab) = (
             AppMode::PrismDispersion,
             ViewportMode::View3D,
@@ -566,15 +559,7 @@ impl OpticsLabApp {
             let zmx_bytes: Option<Vec<u8>> = if let Some(bytes) = file.bytes {
                 Some(bytes.to_vec())
             } else if let Some(path) = file.path {
-                #[cfg(not(target_arch = "wasm32"))]
-                {
-                    std::fs::read(&path).ok()
-                }
-                #[cfg(target_arch = "wasm32")]
-                {
-                    let _ = path;
-                    None
-                }
+                std::fs::read(&path).ok()
             } else {
                 None
             };
