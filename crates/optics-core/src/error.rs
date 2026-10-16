@@ -21,6 +21,10 @@ pub enum OpticsError {
     #[error("Parse error: {0}")]
     ParseError(String),
 
+    /// An invalid parameter, out-of-bounds input, or invalid optical configuration was passed.
+    #[error("Invalid parameter: {0}")]
+    InvalidParameter(String),
+
     /// Ray missed the optical surface entirely (no mathematical intersection).
     #[error("Ray missed optical surface: {0}")]
     RayMissedSurface(String),
@@ -49,4 +53,12 @@ pub enum OpticsError {
     /// A specified optical glass or material name could not be resolved.
     #[error("Material not found: {0}")]
     MaterialNotFound(String),
+
+    /// A project serialization or deserialization failure occurred.
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
+
+    /// An I/O error occurred while reading or writing a project file.
+    #[error("I/O error: {0}")]
+    IoError(String),
 }

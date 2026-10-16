@@ -15,34 +15,71 @@
 #![deny(missing_docs)]
 #![deny(unsafe_code)]
 
+pub mod aiming;
 pub mod analysis;
 pub mod conic;
 pub mod error;
 pub mod fresnel;
 pub mod geometry;
+pub mod multiconfig;
 pub mod path;
+pub mod polarization;
 pub mod prescription;
+pub mod project;
 pub mod snell;
+pub mod surface;
+pub mod tessellate;
+pub mod thin_film;
 pub mod types;
 
 // Re-export primary types and functions at the crate root
+pub use aiming::{Conjugate, RayAimingMode, VignettingFactors, WavelengthSet, trace_aimed_ray};
 pub use analysis::{
-    PupilCoord, PupilPattern, RayFanData, RayFanPoint, SpotDiagram, SpotMetrics, SpotPoint,
-    generate_pupil_distribution, launch_pupil_ray, spot_diagram_metrics, trace_ray_fan,
-    trace_spot_diagram,
+    FieldCurves, FieldPointAnalysis, FootprintDiagram, FootprintPoint, GhostAnalysis,
+    GhostReflection, LongitudinalAberrationPoint, MtfCurve, MtfPoint, OpdFanData, OpdFanPoint,
+    PointSpreadFunction, PrescriptionSummary, PupilCoord, PupilPattern, RayFanData, RayFanPoint,
+    RayTable, SeidelCoefficients, SpotDiagram, SpotMetrics, SpotPoint, SurfaceRayRow,
+    SurfaceSeidel, ThroughFocusAnalysis, ThroughFocusMtfPoint, ThroughFocusSpotPoint, WavefrontMap,
+    ZernikeFit, compute_diffraction_mtf, compute_fft_psf, compute_field_curves,
+    compute_footprint_diagram, compute_geometric_mtf, compute_longitudinal_spherical_aberration,
+    compute_opd_fan, compute_ray_table, compute_seidel_coefficients,
+    compute_through_focus_geometric_mtf, compute_through_focus_spot, compute_two_bounce_ghosts,
+    diffraction_limit_mtf, fit_zernike_noll, generate_prescription_summary,
+    generate_pupil_distribution, launch_pupil_ray, noll_index_to_nm, spot_diagram_metrics,
+    trace_ray_fan, trace_spot_diagram, zernike_noll_eval,
 };
 pub use conic::{ConicSurface, conic_normal, conic_sag, intersect_conic};
 pub use error::OpticsError;
 pub use fresnel::{fresnel_dielectric, fresnel_unpolarized, schlick_approx};
 pub use geometry::{Air, ConstantIndex, RefractiveIndex, Triangle};
+pub use multiconfig::{
+    ConfigOverride, Configuration, MultiConfigSystem, Pickup, solve_focal_length,
+};
 pub use path::{PathRecord, RayBranchPolicy, Scene, spectral_fan, trace_path};
+pub use polarization::{
+    JonesMatrix, JonesVector, MuellerMatrix, StokesVector, surface_coating_jones,
+    surface_fresnel_jones,
+};
 pub use prescription::{
     MaterialResolver, OpticalPrescription, OpticalSurface, ParaxialProperties, ParaxialRay,
     ResolvedPrescription, ResolvedSurface, SequentialPathRecord, SequentialRayHit,
     calculate_paraxial_properties, trace_paraxial_chief, trace_paraxial_marginal, trace_sequential,
 };
+pub use project::{CameraConfig, OpticsProject, PROJECT_SCHEMA_VERSION, RenderConfig, SceneConfig};
 pub use snell::{reflect, snell_refract};
-pub use types::{BounceEvent, HitRecord, Ray, RayBounce, Vec3};
+pub use surface::{
+    Aperture, ApertureShape, BiconicSurface, CoordinateBreak, DiffractivePhaseSurface, EvenAsphere,
+    ForbesQbfsSurface, ForbesQconSurface, GrinProfile, OddAsphere, SurfaceProfile, ToroidalSurface,
+    XyPolynomialSurface, XyTerm, ZernikeSagSurface, trace_grin_rk4,
+};
+pub use tessellate::{
+    prescription_to_trimesh, prescription_to_trimesh_with_materials, tessellate_conic_surface,
+    tessellate_lens_rim,
+};
+pub use thin_film::{Coating, CoatingResponse, Complex, ThinFilmLayer};
+pub use types::{
+    BounceEvent, Field, HitRecord, Pupil, Ray, RayBounce, SurfaceId, Vec3, Wavelength,
+};
 
 #[cfg(test)]
 mod tests {

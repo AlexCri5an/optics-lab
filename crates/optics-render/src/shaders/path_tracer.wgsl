@@ -39,12 +39,20 @@ struct RenderParams {
     _pad1: f32,
 };
 
+struct GpuMaterial {
+    b: vec4<f32>,
+    c: vec4<f32>,
+    properties: vec4<f32>, // [material_type, roughness, ior_constant, _pad]
+    albedo: vec4<f32>,     // [r, g, b, _pad]
+};
+
 @group(0) @binding(0) var<uniform> camera: CameraUniform;
 @group(0) @binding(1) var<uniform> params: RenderParams;
 @group(0) @binding(2) var<storage, read> bvh_nodes: array<GpuBvhNode>;
 @group(0) @binding(3) var<storage, read> triangles: array<GpuTriangle>;
 @group(0) @binding(4) var accum_texture: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(5) var<storage, read_write> accum_buffer: array<vec4<f32>>;
+@group(0) @binding(6) var<storage, read> materials: array<GpuMaterial>;
 
 // PCG32 pseudo-random number generator
 fn pcg32(state: ptr<function, u32>) -> f32 {
@@ -224,6 +232,26 @@ fn sellmeier_glass(lambda_nm: f32) -> f32 {
     return sqrt(max(1.0, n2));
 }
 
+// Evaluates refractive index n for a specific material ID and wavelength (lambda in nm)
+fn eval_material_ior(mat_id: u32, lambda_nm: f32) -> f32 {
+    let mat_count = arrayLength(&materials);
+    if (mat_count == 0u || mat_id >= mat_count) {
+        return sellmeier_glass(lambda_nm);
+    }
+    let mat = materials[mat_id];
+    let mat_type = u32(mat.properties.x);
+    if (mat_type == 0u) {
+        let l_um = clamp(lambda_nm, 350.0, 850.0) * 0.001;
+        let l2 = l_um * l_um;
+        let n2 = 1.0 
+            + (mat.b.x * l2) / (l2 - mat.c.x)
+            + (mat.b.y * l2) / (l2 - mat.c.y)
+            + (mat.b.z * l2) / (l2 - mat.c.z);
+        return sqrt(max(1.0, n2));
+    }
+    return max(1.0, mat.properties.z);
+}
+
 // Convert wavelength (nm) to normalized sRGB color
 fn wavelength_to_rgb(wl: f32) -> vec3<f32> {
     var r = 0.0;
@@ -330,18 +358,38 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             break;
         }
 
-        if (hit.mat_id == 0u) {
-            // Material 0: Dielectric Prism with Sellmeier spectral dispersion
+        let mat_count = arrayLength(&materials);
+        var mat_type = 0u;
+        var mat_albedo = vec3<f32>(0.8, 0.8, 0.8);
+        var mat_roughness = 0.05;
+
+        if (mat_count > 0u && hit.mat_id < mat_count) {
+            let mat = materials[hit.mat_id];
+            mat_type = u32(mat.properties.x);
+            mat_roughness = mat.properties.y;
+            mat_albedo = mat.albedo.xyz;
+        } else {
+            if (hit.mat_id == 0u) {
+                mat_type = 0u;
+            } else if (hit.mat_id == 1u) {
+                mat_type = 1u;
+            } else {
+                mat_type = 2u;
+            }
+        }
+
+        if (mat_type == 0u) {
+            // Material 0: Dielectric with Sellmeier spectral dispersion
+            let hit_n = eval_material_ior(hit.mat_id, hero_wl);
             var next_dir: vec3<f32>;
-            let attenuation = evaluate_dielectric(ray_dir, hit.normal, 1.0, glass_n, &rng, &next_dir);
-            throughput *= attenuation;
+            let attenuation = evaluate_dielectric(ray_dir, hit.normal, 1.0, hit_n, &rng, &next_dir);
+            throughput *= attenuation * mat_albedo;
             ray_dir = next_dir;
             let nudge = sign(dot(ray_dir, hit.normal)) * hit.normal * 1e-4;
             ray_orig = hit.point + nudge;
-        } else if (hit.mat_id == 1u) {
+        } else if (mat_type == 1u) {
             // Material 1: Glossy Dark Floor Plane (GGX reflection + subtle floor grid)
-            let floor_roughness = 0.05;
-            let h = sample_ggx(hit.normal, floor_roughness, &rng);
+            let h = sample_ggx(hit.normal, mat_roughness, &rng);
             let spec_dir = reflect(ray_dir, h);
 
             let f0 = 0.04;
@@ -353,9 +401,9 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
                 throughput *= vec3<f32>(0.92, 0.92, 0.95);
             } else {
                 let grid_pos = fract(abs(hit.point.xz) * 0.04);
-                var floor_albedo = vec3<f32>(0.02, 0.022, 0.028);
+                var floor_albedo = mat_albedo;
                 if (grid_pos.x < 0.03 || grid_pos.y < 0.03) {
-                    floor_albedo = vec3<f32>(0.05, 0.055, 0.07);
+                    floor_albedo = mat_albedo * 2.5;
                 }
                 throughput *= floor_albedo;
                 let u1 = pcg32(&rng);
@@ -368,7 +416,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             ray_orig = hit.point + hit.normal * 1e-4;
         } else {
             // Diffuse receiver
-            throughput *= vec3<f32>(0.8, 0.8, 0.8);
+            throughput *= mat_albedo;
             ray_orig = hit.point + hit.normal * 1e-4;
             break;
         }

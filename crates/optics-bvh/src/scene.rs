@@ -296,4 +296,91 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_bvh_vs_brute_force_differential() -> TestResult {
+        // Build a scene with 32 randomized triangles
+        let mut triangles = Vec::new();
+        let mut state = 0x1234567890ABCDEF_u64;
+        let mut next_f64 = |min: f64, max: f64| -> f64 {
+            state ^= state >> 12;
+            state ^= state << 25;
+            state ^= state >> 27;
+            let val = state.wrapping_mul(0x2545F4914F6CDD1D);
+            let unit = (val >> 11) as f64 * (1.0 / (1u64 << 53) as f64);
+            min + unit * (max - min)
+        };
+
+        for i in 0..32 {
+            let cx = next_f64(-20.0, 20.0);
+            let cy = next_f64(-20.0, 20.0);
+            let cz = next_f64(10.0, 50.0);
+            let size = next_f64(1.0, 5.0);
+            let p0 = Vec3::new(cx - size, cy - size, cz);
+            let p1 = Vec3::new(cx + size, cy - size, cz);
+            let p2 = Vec3::new(cx, cy + size, cz);
+            triangles.push(Triangle::new(p0, p1, p2, i));
+        }
+
+        let mut scene_aabb = Aabb::empty();
+        for tri in &triangles {
+            scene_aabb = scene_aabb.union(&tri.aabb());
+        }
+        let instance = BlasInstance::new(0, &scene_aabb, Matrix4::identity());
+        let scene = BvhScene::build(vec![triangles.clone()], vec![instance]);
+
+        // Test 200 random query rays
+        for _ in 0..200 {
+            let ox = next_f64(-15.0, 15.0);
+            let oy = next_f64(-15.0, 15.0);
+            let dx = next_f64(-0.2, 0.2);
+            let dy = next_f64(-0.2, 0.2);
+            let ray = Ray::new(
+                Vec3::new(ox, oy, 0.0),
+                Vec3::new(dx, dy, 1.0).normalize(),
+                587.56,
+                1.0,
+            )?;
+
+            // 1. BVH Traversal
+            let bvh_hit = scene.intersect(&ray);
+
+            // 2. Brute-Force Traversal
+            let mut brute_hit: Option<HitRecord> = None;
+            let mut brute_t = f64::INFINITY;
+            for tri in &triangles {
+                if let Some(h) = tri.intersect(&ray, 0) {
+                    if h.t < brute_t {
+                        brute_t = h.t;
+                        brute_hit = Some(h);
+                    }
+                }
+            }
+
+            // Invariant: BVH hit and Brute-force hit must agree
+            match (bvh_hit, brute_hit) {
+                (None, None) => {}
+                (Some(h_bvh), Some(h_brute)) => {
+                    assert!(
+                        (h_bvh.t - h_brute.t).abs() < 1e-6,
+                        "BVH distance {:.6} deviates from brute force {:.6}",
+                        h_bvh.t,
+                        h_brute.t
+                    );
+                }
+                (Some(h_bvh), None) => {
+                    return Err(format!("BVH found false positive hit at t={}", h_bvh.t).into());
+                }
+                (None, Some(h_brute)) => {
+                    return Err(format!(
+                        "BVH missed hit that brute force found at t={}",
+                        h_brute.t
+                    )
+                    .into());
+                }
+            }
+        }
+
+        Ok(())
+    }
 }

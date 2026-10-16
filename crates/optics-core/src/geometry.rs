@@ -34,8 +34,10 @@ impl RefractiveIndex for Air {
     }
 }
 
+use serde::{Deserialize, Serialize};
+
 /// A 3D planar triangle with refractive media boundary specifications.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Triangle {
     /// First vertex coordinate in millimeters.
     pub v0: Vec3,

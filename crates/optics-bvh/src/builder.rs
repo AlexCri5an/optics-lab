@@ -194,7 +194,9 @@ pub fn build_bvh(triangles: &[Triangle]) -> (Vec<BvhNode>, Vec<usize>) {
     let mut indices: Vec<usize> = (0..triangles.len()).collect();
     let mut nodes = Vec::with_capacity(triangles.len() * 2);
 
-    subdivide_bvh_node(triangles, &mut indices, 0, triangles.len(), &mut nodes);
+    // Allocate root node at index 0
+    nodes.push(BvhNode::leaf(Aabb::empty(), 0, 0));
+    subdivide_bvh_node(triangles, &mut indices, 0, 0, triangles.len(), &mut nodes);
 
     (nodes, indices)
 }
@@ -202,19 +204,17 @@ pub fn build_bvh(triangles: &[Triangle]) -> (Vec<BvhNode>, Vec<usize>) {
 fn subdivide_bvh_node(
     triangles: &[Triangle],
     indices: &mut [usize],
+    node_idx: usize,
     start: usize,
     count: usize,
     nodes: &mut Vec<BvhNode>,
-) -> u32 {
-    let node_idx = nodes.len() as u32;
-    nodes.push(BvhNode::leaf(Aabb::empty(), start as u32, count as u32));
-
+) {
     // Compute bounding box of all primitives in this node
     let mut node_aabb = Aabb::empty();
     for &idx in &indices[start..start + count] {
         node_aabb = node_aabb.union(&triangles[idx].aabb());
     }
-    nodes[node_idx as usize].aabb = node_aabb;
+    nodes[node_idx].aabb = node_aabb;
 
     let decision = find_best_split(triangles, &indices[start..start + count], &node_aabb);
 
@@ -238,39 +238,36 @@ fn subdivide_bvh_node(
                 }
             }
 
-            let left_count = left - start;
+            let mut left_count = left - start;
             if left_count == 0 || left_count == count {
                 // Median spatial fallback if partitioning failed
-                let mid = start + count / 2;
-                indices[start..start + count].select_nth_unstable_by(count / 2, |&a, &b| {
+                left_count = count / 2;
+                indices[start..start + count].select_nth_unstable_by(left_count, |&a, &b| {
                     triangles[a].centroid()[axis].total_cmp(&triangles[b].centroid()[axis])
                 });
-
-                let left_child = subdivide_bvh_node(triangles, indices, start, count / 2, nodes);
-                let _right_child =
-                    subdivide_bvh_node(triangles, indices, mid, count - count / 2, nodes);
-
-                nodes[node_idx as usize] = BvhNode::internal(node_aabb, left_child);
-                return node_idx;
             }
 
-            let left_child = subdivide_bvh_node(triangles, indices, start, left_count, nodes);
-            let _right_child = subdivide_bvh_node(
+            let left_child_idx = nodes.len();
+            // Allocate left and right children consecutively
+            nodes.push(BvhNode::leaf(Aabb::empty(), 0, 0));
+            nodes.push(BvhNode::leaf(Aabb::empty(), 0, 0));
+
+            nodes[node_idx] = BvhNode::internal(node_aabb, left_child_idx as u32);
+
+            subdivide_bvh_node(triangles, indices, left_child_idx, start, left_count, nodes);
+            subdivide_bvh_node(
                 triangles,
                 indices,
+                left_child_idx + 1,
                 start + left_count,
                 count - left_count,
                 nodes,
             );
-
-            nodes[node_idx as usize] = BvhNode::internal(node_aabb, left_child);
         }
         SplitDecision::MakeLeaf => {
-            nodes[node_idx as usize] = BvhNode::leaf(node_aabb, start as u32, count as u32);
+            nodes[node_idx] = BvhNode::leaf(node_aabb, start as u32, count as u32);
         }
     }
-
-    node_idx
 }
 
 #[cfg(test)]

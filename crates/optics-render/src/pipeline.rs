@@ -8,6 +8,7 @@ use crate::bvh_upload::BvhBuffer;
 use crate::camera::ThinLensCamera;
 use crate::context::GpuContext;
 use crate::error::RenderError;
+use crate::material::{GpuMaterial, pack_materials_to_gpu_buffer};
 use crate::shaders::{PATH_TRACER_WGSL, TONEMAPPING_WGSL};
 use crate::target::{RenderTarget, ToneMapTarget};
 
@@ -95,6 +96,10 @@ pub struct PathTracingRenderer {
     pub sellmeier_b: [f32; 3],
     /// Active Sellmeier dispersion C coefficients [C1, C2, C3].
     pub sellmeier_c: [f32; 3],
+    /// Uploaded material storage buffer.
+    pub material_buffer: wgpu::Buffer,
+    /// Active material definitions.
+    pub materials: Vec<GpuMaterial>,
 }
 
 impl PathTracingRenderer {
@@ -150,6 +155,25 @@ impl PathTracingRenderer {
                 contents: bytemuck::bytes_of(&initial_params),
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
+
+        let default_materials = vec![
+            GpuMaterial::n_bk7(),
+            GpuMaterial::glossy(0.05, 0.04, [0.02, 0.022, 0.028]),
+            GpuMaterial::diffuse([0.8, 0.8, 0.8]),
+            GpuMaterial::sk16(),
+            GpuMaterial::f2(),
+            GpuMaterial::sf11(),
+            GpuMaterial::fused_silica(),
+        ];
+        let material_bytes = pack_materials_to_gpu_buffer(&default_materials);
+        let material_buffer =
+            context
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Material Storage Buffer"),
+                    contents: &material_bytes,
+                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                });
 
         let accum_size = (width.max(1) as u64) * (height.max(1) as u64) * 16;
         let accum_buffer = context.device.create_buffer(&wgpu::BufferDescriptor {
@@ -234,6 +258,16 @@ impl PathTracingRenderer {
                             },
                             count: None,
                         },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 6,
+                            visibility: wgpu::ShaderStages::COMPUTE,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
                     ],
                 });
 
@@ -266,6 +300,10 @@ impl PathTracingRenderer {
                     wgpu::BindGroupEntry {
                         binding: 5,
                         resource: accum_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 6,
+                        resource: material_buffer.as_entire_binding(),
                     },
                 ],
             });
@@ -389,7 +427,25 @@ impl PathTracingRenderer {
             max_bounces: 6,
             sellmeier_b: default_b,
             sellmeier_c: default_c,
+            material_buffer,
+            materials: default_materials,
         })
+    }
+
+    /// Updates the GPU material library buffer and resets sample accumulation.
+    pub fn update_materials(&mut self, materials: &[GpuMaterial]) {
+        self.materials = materials.to_vec();
+        let bytes = pack_materials_to_gpu_buffer(&self.materials);
+        self.material_buffer =
+            self.context
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Material Storage Buffer"),
+                    contents: &bytes,
+                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                });
+        self.rebuild_compute_bind_group();
+        self.reset_accumulation();
     }
 
     /// Updates the Sellmeier dispersion coefficients used for real glass spectral path tracing.
@@ -431,11 +487,12 @@ impl PathTracingRenderer {
     }
 
     /// Resizes the accumulation and display targets.
-    pub fn resize(&mut self, width: u32, height: u32) {
+    /// Returns `true` if targets were reallocated, `false` if dimensions were unchanged.
+    pub fn resize(&mut self, width: u32, height: u32) -> bool {
         let width = width.max(1);
         let height = height.max(1);
         if self.accumulation_target.width == width && self.accumulation_target.height == height {
-            return;
+            return false;
         }
 
         self.accumulation_target = RenderTarget::new(&self.context, width, height);
@@ -454,6 +511,7 @@ impl PathTracingRenderer {
         self.rebuild_compute_bind_group();
         self.rebuild_tonemap_bind_group();
         self.reset_accumulation();
+        true
     }
 
     fn rebuild_compute_bind_group(&mut self) {
@@ -489,6 +547,10 @@ impl PathTracingRenderer {
                         wgpu::BindGroupEntry {
                             binding: 5,
                             resource: self.accum_buffer.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 6,
+                            resource: self.material_buffer.as_entire_binding(),
                         },
                     ],
                 });
@@ -692,6 +754,112 @@ mod tests {
             assert_eq!(renderer.get_sample_count(), 0);
             renderer.render_frame();
             assert_eq!(renderer.get_sample_count(), 1);
+
+            Ok(())
+        };
+
+        block_on(fut)
+    }
+
+    #[test]
+    fn test_headless_render_tessellated_lens_multi_material() -> TestResult {
+        let fut = async {
+            let ctx = match GpuContext::create_headless().await {
+                Ok(c) => c,
+                Err(RenderError::AdapterRequestFailed) => {
+                    return Ok(());
+                }
+                Err(e) => return Err(Box::new(e) as Box<dyn std::error::Error>),
+            };
+
+            let prescription = optics_core::OpticalPrescription {
+                name: "Doublet System".to_string(),
+                entrance_pupil_diameter_mm: 10.0,
+                field_angles_deg: vec![0.0],
+                wavelengths_nm: vec![587.56],
+                primary_wavelength_index: 0,
+                surfaces: vec![
+                    optics_core::OpticalSurface {
+                        surface_index: 1,
+                        radius_mm: 45.0,
+                        conic_constant: 0.0,
+                        thickness_mm: 4.0,
+                        semi_diameter_mm: 8.0,
+                        material_name: "SK16".to_string(),
+                        is_stop: false,
+                    },
+                    optics_core::OpticalSurface {
+                        surface_index: 2,
+                        radius_mm: -30.0,
+                        conic_constant: 0.0,
+                        thickness_mm: 1.0,
+                        semi_diameter_mm: 8.0,
+                        material_name: "AIR".to_string(),
+                        is_stop: false,
+                    },
+                    optics_core::OpticalSurface {
+                        surface_index: 3,
+                        radius_mm: -30.0,
+                        conic_constant: 0.0,
+                        thickness_mm: 2.5,
+                        semi_diameter_mm: 8.0,
+                        material_name: "F2".to_string(),
+                        is_stop: false,
+                    },
+                    optics_core::OpticalSurface {
+                        surface_index: 4,
+                        radius_mm: -80.0,
+                        conic_constant: 0.0,
+                        thickness_mm: 40.0,
+                        semi_diameter_mm: 8.0,
+                        material_name: "AIR".to_string(),
+                        is_stop: false,
+                    },
+                ],
+            };
+
+            let (triangles, materials) =
+                optics_bvh::prescription_to_trimesh_with_materials(&prescription, 16, 8);
+            assert_eq!(materials.len(), 2);
+            assert_eq!(materials[0], "SK16");
+            assert_eq!(materials[1], "F2");
+
+            let aabb = optics_bvh::Aabb::from_points(
+                &triangles
+                    .iter()
+                    .flat_map(|t| [t.v0, t.v1, t.v2])
+                    .collect::<Vec<_>>(),
+            );
+            let inst = optics_bvh::BlasInstance::new(0, &aabb, nalgebra::Matrix4::identity());
+            let scene = BvhScene::build(vec![triangles], vec![inst]);
+
+            let camera = ThinLensCamera::new(
+                optics_core::Vec3::new(0.0, 0.0, -20.0),
+                optics_core::Vec3::new(0.0, 0.0, 10.0),
+                optics_core::Vec3::new(0.0, 1.0, 0.0),
+                50.0,
+                0.0,
+                30.0,
+            );
+
+            let mut renderer = PathTracingRenderer::new(
+                ctx,
+                &scene,
+                &camera,
+                64,
+                64,
+                wgpu::TextureFormat::Rgba8Unorm,
+            )?;
+
+            // Assign per-material Sellmeier formulas: Material 0 = SK16, Material 1 = F2
+            let gpu_mats = vec![GpuMaterial::sk16(), GpuMaterial::f2()];
+            renderer.update_materials(&gpu_mats);
+
+            assert_eq!(renderer.get_sample_count(), 0);
+            for _ in 0..4 {
+                renderer.render_frame();
+            }
+            assert_eq!(renderer.get_sample_count(), 4);
 
             Ok(())
         };

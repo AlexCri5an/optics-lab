@@ -156,6 +156,12 @@ impl ConicSurface {
 /// Returns [`OpticsError::GeometryOutsideAperture`] if $(1+k) c^2 r^2 > 1$, which corresponds
 /// to coordinates beyond the real turning point of the conic section (no real geometric solution).
 pub fn conic_sag(r: f64, c: f64, k: f64) -> Result<f64, OpticsError> {
+    if !r.is_finite() || !c.is_finite() || !k.is_finite() {
+        return Err(OpticsError::NumericalSingularity(
+            "Conic sag evaluated with non-finite parameters".to_string(),
+        ));
+    }
+
     if c.abs() < 1e-15 || r.abs() < 1e-15 {
         return Ok(0.0);
     }
@@ -185,11 +191,32 @@ pub fn conic_sag(r: f64, c: f64, k: f64) -> Result<f64, OpticsError> {
 /// complying with the repository-wide normal convention ($\mathbf{i} \cdot \mathbf{n} \le 0$).
 ///
 /// # Errors
-/// Returns [`OpticsError::NumericalSingularity`] if the gradient norm is near-zero or non-finite.
+/// Returns [`OpticsError::NumericalSingularity`] if hit point coordinates or surface parameters are non-finite,
+/// or if the gradient norm is near-zero.
+/// Returns [`OpticsError::GeometryOutsideAperture`] if $(1+k) c^2 r^2 > 1$, which corresponds
+/// to coordinates beyond the real turning point of the conic section (surface mathematically undefined).
 pub fn conic_normal(hit_point: Vec3, surface: &ConicSurface) -> Result<Vec3, OpticsError> {
-    let local_z = hit_point.z - surface.vertex_z;
+    if !hit_point.x.is_finite()
+        || !hit_point.y.is_finite()
+        || !hit_point.z.is_finite()
+        || !surface.curvature.is_finite()
+        || !surface.conic_constant.is_finite()
+        || !surface.vertex_z.is_finite()
+    {
+        return Err(OpticsError::NumericalSingularity(
+            "Conic normal hit point coordinates or surface parameters are non-finite".to_string(),
+        ));
+    }
+
     let c = surface.curvature;
     let k = surface.conic_constant;
+    let r_sq = hit_point.x * hit_point.x + hit_point.y * hit_point.y;
+    let radicand = 1.0 - (1.0 + k) * c * c * r_sq;
+    if radicand < 0.0 {
+        return Err(OpticsError::GeometryOutsideAperture);
+    }
+
+    let local_z = hit_point.z - surface.vertex_z;
 
     let gx = c * hit_point.x;
     let gy = c * hit_point.y;
@@ -535,6 +562,319 @@ mod tests {
         assert!(matches!(
             intersect_conic(&backward_ray, &surf, 0),
             Err(OpticsError::RayMissedSurface(_))
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn test_conic_normal_unit_length_across_conic_types() -> TestResult {
+        // Test suite covering spheres, ellipsoids, paraboloids, hyperboloids, and planes
+        let test_surfaces = [
+            ConicSurface::sphere(50.0, 25.0)?,            // Sphere (k = 0)
+            ConicSurface::from_radius(60.0, -0.5, 25.0)?, // Prolate ellipsoid
+            ConicSurface::from_radius(80.0, -1.0, 30.0)?, // Paraboloid
+            ConicSurface::from_radius(70.0, -2.5, 30.0)?, // Hyperboloid
+            ConicSurface::from_radius(45.0, 0.8, 20.0)?,  // Oblate spheroid
+            ConicSurface::plane(30.0)?,                   // Flat plane (c = 0)
+        ];
+
+        for surf in test_surfaces {
+            for (x, y) in [(0.0_f64, 0.0_f64), (3.0, 4.0), (-5.0, 8.0), (12.0, -7.0)] {
+                let r: f64 = (x * x + y * y).sqrt();
+                let z = conic_sag(r, surf.curvature, surf.conic_constant)?;
+                let hit_pt = Vec3::new(x, y, z + surf.vertex_z);
+
+                let normal = conic_normal(hit_pt, &surf)?;
+                let norm = normal.norm();
+                assert!(
+                    (norm - 1.0).abs() < 1e-14,
+                    "Unit normal length violation: got {norm} for R={}, k={}, r={r}",
+                    surf.radius_mm(),
+                    surf.conic_constant
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_conic_normal_agrees_with_independent_analytical_derivation() -> TestResult {
+        // Independent analytical formula:
+        // n = [c*x, c*y, -sqrt(1 - (1+k)*c^2*r^2)] / sqrt(1 - k*c^2*r^2)
+        let test_cases: [(f64, f64, f64, f64); 5] = [
+            (50.0, 0.0, 10.0, 15.0),   // Sphere
+            (60.0, -0.6, 8.0, 12.0),   // Ellipsoid
+            (100.0, -1.0, 14.0, 18.0), // Paraboloid
+            (75.0, -2.0, 9.0, 16.0),   // Hyperboloid
+            (40.0, 0.5, 5.0, 7.0),     // Oblate spheroid
+        ];
+
+        for (radius, k, x, y) in test_cases {
+            let surf = ConicSurface::from_radius(radius, k, 30.0)?;
+            let c = surf.curvature;
+            let r_sq: f64 = x * x + y * y;
+            let r = r_sq.sqrt();
+            let z = conic_sag(r, c, k)?;
+            let hit_pt = Vec3::new(x, y, z + surf.vertex_z);
+
+            let normal = conic_normal(hit_pt, &surf)?;
+
+            let radicand_z = 1.0 - (1.0 + k) * c * c * r_sq;
+            assert!(radicand_z >= 0.0);
+            let denom = (1.0 - k * c * c * r_sq).sqrt();
+
+            let expected_nx = c * x / denom;
+            let expected_ny = c * y / denom;
+            let expected_nz = -radicand_z.sqrt() / denom;
+
+            assert!(
+                (normal.x - expected_nx).abs() < 1e-12,
+                "Analytical nx mismatch: got {}, expected {}",
+                normal.x,
+                expected_nx
+            );
+            assert!(
+                (normal.y - expected_ny).abs() < 1e-12,
+                "Analytical ny mismatch: got {}, expected {}",
+                normal.y,
+                expected_ny
+            );
+            assert!(
+                (normal.z - expected_nz).abs() < 1e-12,
+                "Analytical nz mismatch: got {}, expected {}",
+                normal.z,
+                expected_nz
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_conic_normal_tangent_plane_orthogonality_analytic_and_numeric() -> TestResult {
+        let surf = ConicSurface::from_radius(55.0, -1.5, 25.0)?.with_vertex_z(12.0);
+        let x = 6.0_f64;
+        let y = 9.0_f64;
+        let r_sq: f64 = x * x + y * y;
+        let r = r_sq.sqrt();
+        let c = surf.curvature;
+        let k = surf.conic_constant;
+        let z_local = conic_sag(r, c, k)?;
+        let hit_pt = Vec3::new(x, y, z_local + surf.vertex_z);
+
+        let normal = conic_normal(hit_pt, &surf)?;
+
+        // 1. Analytical tangent plane vectors:
+        // dz/dx = c*x / sqrt(1 - (1+k)*c^2*r^2)
+        // dz/dy = c*y / sqrt(1 - (1+k)*c^2*r^2)
+        let sqrt_rad = (1.0 - (1.0 + k) * c * c * r_sq).sqrt();
+        let dz_dx = c * x / sqrt_rad;
+        let dz_dy = c * y / sqrt_rad;
+        let t_x_analytic = Vec3::new(1.0, 0.0, dz_dx);
+        let t_y_analytic = Vec3::new(0.0, 1.0, dz_dy);
+
+        assert!(
+            normal.dot(&t_x_analytic).abs() < 1e-13,
+            "Normal not orthogonal to analytic t_x: dot = {}",
+            normal.dot(&t_x_analytic)
+        );
+        assert!(
+            normal.dot(&t_y_analytic).abs() < 1e-13,
+            "Normal not orthogonal to analytic t_y: dot = {}",
+            normal.dot(&t_y_analytic)
+        );
+
+        // 2. Central finite difference numeric tangents:
+        let h = 1e-6;
+        let r_xp = ((x + h) * (x + h) + y * y).sqrt();
+        let r_xm = ((x - h) * (x - h) + y * y).sqrt();
+        let dz_dx_num = (conic_sag(r_xp, c, k)? - conic_sag(r_xm, c, k)?) / (2.0 * h);
+        let t_x_num = Vec3::new(1.0, 0.0, dz_dx_num).normalize();
+
+        let r_yp = (x * x + (y + h) * (y + h)).sqrt();
+        let r_ym = (x * x + (y - h) * (y - h)).sqrt();
+        let dz_dy_num = (conic_sag(r_yp, c, k)? - conic_sag(r_ym, c, k)?) / (2.0 * h);
+        let t_y_num = Vec3::new(0.0, 1.0, dz_dy_num).normalize();
+
+        assert!(
+            normal.dot(&t_x_num).abs() < 1e-6,
+            "Normal not orthogonal to numeric t_x: dot = {}",
+            normal.dot(&t_x_num)
+        );
+        assert!(
+            normal.dot(&t_y_num).abs() < 1e-6,
+            "Normal not orthogonal to numeric t_y: dot = {}",
+            normal.dot(&t_y_num)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_spherical_normal_at_off_axis_points() -> TestResult {
+        // Positive radius (convex toward -z, center of curvature at (0, 0, zv + R))
+        let r_pos = 100.0;
+        let zv = 15.0;
+        let sphere_pos = ConicSurface::sphere(r_pos, 60.0)?.with_vertex_z(zv);
+        let center_pos = Vec3::new(0.0, 0.0, zv + r_pos);
+
+        let (x, y) = (28.0_f64, 35.0_f64);
+        let r: f64 = (x * x + y * y).sqrt();
+        let z_local = sphere_pos.radius_mm()
+            - (sphere_pos.radius_mm() * sphere_pos.radius_mm() - r * r).sqrt();
+        let hit_pt = Vec3::new(x, y, zv + z_local);
+
+        let normal = conic_normal(hit_pt, &sphere_pos)?;
+
+        // Vector from center of curvature toward surface hit point
+        let expected_dir = (hit_pt - center_pos).normalize();
+        assert!(
+            (normal.x - expected_dir.x).abs() < 1e-14,
+            "Sphere normal x mismatch: got {}, expected {}",
+            normal.x,
+            expected_dir.x
+        );
+        assert!(
+            (normal.y - expected_dir.y).abs() < 1e-14,
+            "Sphere normal y mismatch: got {}, expected {}",
+            normal.y,
+            expected_dir.y
+        );
+        assert!(
+            (normal.z - expected_dir.z).abs() < 1e-14,
+            "Sphere normal z mismatch: got {}, expected {}",
+            normal.z,
+            expected_dir.z
+        );
+
+        // Negative radius (concave toward -z, center of curvature at (0, 0, zv + R))
+        let r_neg = -100.0;
+        let sphere_neg = ConicSurface::from_radius(r_neg, 0.0, 60.0)?.with_vertex_z(zv);
+        let center_neg = Vec3::new(0.0, 0.0, zv + r_neg);
+        let z_local_neg = conic_sag(r, sphere_neg.curvature, 0.0)?;
+        let hit_pt_neg = Vec3::new(x, y, zv + z_local_neg);
+
+        let normal_neg = conic_normal(hit_pt_neg, &sphere_neg)?;
+        // For R < 0, (hit_pt - center) has length |R| and z-component > 0.
+        // The normal toward incident medium points against +z, so -(hit_pt - center)/|R|:
+        let expected_dir_neg = (center_neg - hit_pt_neg).normalize();
+        assert!(
+            (normal_neg.x - expected_dir_neg.x).abs() < 1e-14,
+            "Concave sphere normal x mismatch"
+        );
+        assert!(
+            (normal_neg.y - expected_dir_neg.y).abs() < 1e-14,
+            "Concave sphere normal y mismatch"
+        );
+        assert!(
+            (normal_neg.z - expected_dir_neg.z).abs() < 1e-14,
+            "Concave sphere normal z mismatch"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_planar_conic_normal_exactness() -> TestResult {
+        let plane = ConicSurface::plane(50.0)?.with_vertex_z(10.0);
+
+        // Everywhere on a plane with light travelling +z, the unit normal must be (0, 0, -1)
+        for (x, y) in [
+            (0.0_f64, 0.0_f64),
+            (10.0, 20.0),
+            (-35.0, 15.0),
+            (45.0, -45.0),
+        ] {
+            let hit_pt = Vec3::new(x, y, 10.0);
+            let normal = conic_normal(hit_pt, &plane)?;
+
+            assert_eq!(normal.x, 0.0);
+            assert_eq!(normal.y, 0.0);
+            assert_eq!(normal.z, -1.0);
+            assert_eq!(normal.norm(), 1.0);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_domain_boundary_valid_and_invalid_cases() -> TestResult {
+        let radius = 50.0;
+        let sphere = ConicSurface::sphere(radius, 50.0)?;
+
+        // 1. Valid exact boundary: r = R = 50.0 mm
+        let boundary_pt = Vec3::new(radius, 0.0, radius);
+        let boundary_normal = conic_normal(boundary_pt, &sphere)?;
+        assert!((boundary_normal.norm() - 1.0).abs() < 1e-14);
+        assert!((boundary_normal.x - 1.0).abs() < 1e-14);
+        assert_eq!(boundary_normal.y, 0.0);
+        assert!(boundary_normal.z.abs() < 1e-14);
+
+        // 2. Valid near-boundary: r = 49.999 mm
+        let r_near = 49.999;
+        let z_near = conic_sag(r_near, sphere.curvature, 0.0)?;
+        let near_pt = Vec3::new(r_near, 0.0, z_near);
+        let near_normal = conic_normal(near_pt, &sphere)?;
+        assert!((near_normal.norm() - 1.0).abs() < 1e-14);
+
+        // 3. Invalid beyond boundary: r = 50.001 mm and r = 60.0 mm ((1+k)*c^2*r^2 > 1)
+        let outside_pt1 = Vec3::new(50.001, 0.0, 50.0);
+        let res1 = conic_normal(outside_pt1, &sphere);
+        assert!(matches!(res1, Err(OpticsError::GeometryOutsideAperture)));
+
+        let outside_pt2 = Vec3::new(0.0, 60.0, 50.0);
+        let res2 = conic_normal(outside_pt2, &sphere);
+        assert!(matches!(res2, Err(OpticsError::GeometryOutsideAperture)));
+
+        // 4. Oblate spheroid boundary: k = 1.0, r_max = R / sqrt(2)
+        let oblate = ConicSurface::from_radius(50.0, 1.0, 40.0)?;
+        let r_max = 50.0 / 2.0_f64.sqrt(); // ~35.3553 mm
+        let oblate_outside = Vec3::new(r_max + 1.0, 0.0, 10.0);
+        let res_oblate = conic_normal(oblate_outside, &oblate);
+        assert!(matches!(
+            res_oblate,
+            Err(OpticsError::GeometryOutsideAperture)
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn test_non_finite_inputs_and_numerical_singularities() -> TestResult {
+        let sphere = ConicSurface::sphere(50.0, 25.0)?;
+
+        // NaN hit point coordinates
+        let nan_x = Vec3::new(f64::NAN, 5.0, 1.0);
+        assert!(matches!(
+            conic_normal(nan_x, &sphere),
+            Err(OpticsError::NumericalSingularity(_))
+        ));
+
+        let nan_z = Vec3::new(5.0, 5.0, f64::NAN);
+        assert!(matches!(
+            conic_normal(nan_z, &sphere),
+            Err(OpticsError::NumericalSingularity(_))
+        ));
+
+        // Infinite hit point coordinates
+        let inf_x = Vec3::new(f64::INFINITY, 0.0, 0.0);
+        assert!(matches!(
+            conic_normal(inf_x, &sphere),
+            Err(OpticsError::NumericalSingularity(_))
+        ));
+
+        // Vanishing gradient singularity: hit point at the center of curvature (0, 0, zv + R)
+        let center_of_curv = Vec3::new(0.0, 0.0, 50.0);
+        assert!(matches!(
+            conic_normal(center_of_curv, &sphere),
+            Err(OpticsError::NumericalSingularity(_))
+        ));
+
+        // Non-finite surface parameters
+        let invalid_surf = ConicSurface {
+            vertex_z: 0.0,
+            curvature: f64::NAN,
+            conic_constant: 0.0,
+            semi_diam_mm: 10.0,
+        };
+        assert!(matches!(
+            conic_normal(Vec3::new(0.0, 0.0, 0.0), &invalid_surf),
+            Err(OpticsError::NumericalSingularity(_))
         ));
         Ok(())
     }

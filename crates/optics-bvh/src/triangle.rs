@@ -40,7 +40,21 @@ impl Triangle {
             material_id,
         }
     }
+}
 
+impl From<optics_core::Triangle> for Triangle {
+    fn from(t: optics_core::Triangle) -> Self {
+        Self {
+            v0: t.v0,
+            v1: t.v1,
+            v2: t.v2,
+            normal: t.normal,
+            material_id: t.medium_inside as u32,
+        }
+    }
+}
+
+impl Triangle {
     /// Computes the bounding box enclosing the triangle.
     #[must_use]
     pub fn aabb(&self) -> Aabb {

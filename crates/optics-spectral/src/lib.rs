@@ -9,8 +9,10 @@
 
 pub mod abbe;
 pub mod color;
+pub mod dispersion;
 pub mod hero;
 pub mod sellmeier;
+pub mod thermal;
 
 pub use abbe::{
     LAMBDA_C_NM, LAMBDA_C_UM, LAMBDA_D_NM, LAMBDA_D_UM, LAMBDA_F_NM, LAMBDA_F_UM, abbe_vd,
@@ -20,10 +22,19 @@ pub use color::{
     cie_1931_cmf, d65_normalization_factor, d65_spd, display_color_for_wavelength, linear_to_srgb,
     spectrum_to_srgb, srgb_to_linear, wavelength_to_xyz, xyz_to_linear_srgb, xyz_to_srgb,
 };
+pub use dispersion::{
+    conrady_dispersion, extended_1, extended_2, extended_cauchy, handbook_of_optics_1,
+    handbook_of_optics_2, herzberger_dispersion, schott_dispersion, sellmeier_1, sellmeier_2,
+    sellmeier_3, sellmeier_4, sellmeier_5,
+};
 pub use hero::{
     DynamicHeroSpectrum, HeroBundle4, HeroSpectrum, hero_sample_wavelengths, sample_hero_bundle,
 };
 pub use sellmeier::{cauchy_dispersion, sellmeier_formula_1, sellmeier_formula_2};
+pub use thermal::{
+    SchottThermalModel, edlen_air_refractive_index, internal_transmittance_to_absorption_coeff,
+    ray_path_transmittance,
+};
 
 #[cfg(test)]
 mod tests {

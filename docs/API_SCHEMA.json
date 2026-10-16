@@ -1,0 +1,137 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "OpticsLab Unified Engine API Schema",
+  "description": "Standardized JSON Schema specification for OpticsLab high-level Engine API contracts, commands, analysis requests, results, and diagnostics.",
+  "version": "1.0.0",
+  "definitions": {
+    "OpticalSurface": {
+      "type": "object",
+      "required": ["surface_index", "radius_mm", "conic_constant", "thickness_mm", "semi_diameter_mm", "material_name", "is_stop"],
+      "properties": {
+        "surface_index": { "type": "integer", "minimum": 0 },
+        "radius_mm": { "type": "number", "description": "Curvature radius in mm. Planar surfaces are represented as Infinity (or 1e30 in JSON)." },
+        "conic_constant": { "type": "number", "description": "Conic constant kappa (0=sphere, -1=parabola, <-1=hyperbola)." },
+        "thickness_mm": { "type": "number", "description": "Axial distance to next surface in mm." },
+        "semi_diameter_mm": { "type": "number", "minimum": 0, "description": "Clear aperture semi-diameter in mm." },
+        "material_name": { "type": "string", "description": "Glass catalog name or AIR." },
+        "is_stop": { "type": "boolean", "description": "Whether this surface acts as system aperture stop." }
+      }
+    },
+    "OpticalPrescription": {
+      "type": "object",
+      "required": ["name", "entrance_pupil_diameter_mm", "field_angles_deg", "wavelengths_nm", "primary_wavelength_index", "surfaces"],
+      "properties": {
+        "name": { "type": "string" },
+        "entrance_pupil_diameter_mm": { "type": "number", "exclusiveMinimum": 0 },
+        "field_angles_deg": { "type": "array", "items": { "type": "number" } },
+        "wavelengths_nm": { "type": "array", "items": { "type": "number" }, "minItems": 1 },
+        "primary_wavelength_index": { "type": "integer", "minimum": 0 },
+        "surfaces": { "type": "array", "items": { "$ref": "#/definitions/OpticalSurface" } }
+      }
+    },
+    "EngineCommand": {
+      "type": "object",
+      "required": ["command"],
+      "properties": {
+        "command": {
+          "type": "string",
+          "enum": [
+            "SetPrescription",
+            "AddSurface",
+            "RemoveSurface",
+            "EditSurface",
+            "SetApertureStop",
+            "SetEntrancePupilDiameter",
+            "SetWavelengths",
+            "SetFieldAngles"
+          ]
+        },
+        "args": { "type": "object" }
+      }
+    },
+    "AnalysisRequest": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "Paraxial",
+            "SpotDiagram",
+            "RayFan",
+            "Wavefront",
+            "Seidel",
+            "Psf",
+            "Mtf",
+            "FieldCurves",
+            "RayTable",
+            "Ghosts",
+            "ThroughFocus",
+            "FullReport"
+          ]
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "field_index": { "type": "integer", "default": 0 },
+            "wavelength_nm": { "type": ["number", "null"] },
+            "ray_count": { "type": "integer", "default": 256 },
+            "num_rays": { "type": "integer", "default": 64 },
+            "grid_size": { "type": "integer", "default": 64 },
+            "zernike_terms": { "type": "integer", "default": 36 },
+            "num_points": { "type": "integer", "default": 50 },
+            "max_freq_lp_mm": { "type": "number", "default": 100.0 },
+            "pupil_x": { "type": "number", "default": 0.0 },
+            "pupil_y": { "type": "number", "default": 1.0 },
+            "range_mm": { "type": "number", "default": 0.5 },
+            "steps": { "type": "integer", "default": 41 }
+          }
+        }
+      }
+    },
+    "EngineStatus": {
+      "type": "object",
+      "required": [
+        "revision",
+        "system_name",
+        "surface_count",
+        "stop_surface_index",
+        "entrance_pupil_diameter_mm",
+        "primary_wavelength_nm",
+        "wavelengths_nm",
+        "field_angles_deg",
+        "total_track_mm",
+        "is_dirty",
+        "can_undo",
+        "can_redo"
+      ],
+      "properties": {
+        "revision": { "type": "integer" },
+        "system_name": { "type": "string" },
+        "surface_count": { "type": "integer" },
+        "stop_surface_index": { "type": "integer" },
+        "entrance_pupil_diameter_mm": { "type": "number" },
+        "primary_wavelength_nm": { "type": "number" },
+        "wavelengths_nm": { "type": "array", "items": { "type": "number" } },
+        "field_angles_deg": { "type": "array", "items": { "type": "number" } },
+        "total_track_mm": { "type": "number" },
+        "efl_mm": { "type": ["number", "null"] },
+        "is_dirty": { "type": "boolean" },
+        "can_undo": { "type": "boolean" },
+        "can_redo": { "type": "boolean" }
+      }
+    },
+    "DiagnosticMessage": {
+      "type": "object",
+      "required": ["level", "code", "message"],
+      "properties": {
+        "level": { "type": "string", "enum": ["Info", "Warning", "Error"] },
+        "code": { "type": "string" },
+        "message": { "type": "string" },
+        "surface_index": { "type": ["integer", "null"] },
+        "field_index": { "type": ["integer", "null"] },
+        "recommendation": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

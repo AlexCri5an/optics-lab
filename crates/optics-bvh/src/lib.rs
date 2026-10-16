@@ -23,6 +23,7 @@ pub mod builder;
 pub mod cost;
 pub mod gpu;
 pub mod scene;
+pub mod tessellate;
 pub mod triangle;
 
 pub use aabb::{Aabb, ray_aabb_slab_test};
@@ -33,4 +34,5 @@ pub use builder::{
 pub use cost::trace_bvh_cost;
 pub use gpu::{GpuBvhNode, GpuTriangle, pack_bvh_to_gpu_buffer, pack_triangles_to_gpu_buffer};
 pub use scene::{BlasInstance, BvhScene};
+pub use tessellate::{prescription_to_trimesh, prescription_to_trimesh_with_materials};
 pub use triangle::Triangle;

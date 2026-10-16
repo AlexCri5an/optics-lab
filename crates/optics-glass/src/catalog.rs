@@ -101,6 +101,9 @@ impl GlassCatalogDb {
                     nd: 1.5,
                     vd: 50.0,
                     dispersion: dispersion.clone(),
+                    thermal: None,
+                    internal_transmittance: Vec::new(),
+                    test_thickness_mm: 10.0,
                 };
                 mat.refractive_index(587.56)
             });
@@ -113,6 +116,9 @@ impl GlassCatalogDb {
                 nd,
                 vd,
                 dispersion,
+                thermal: None,
+                internal_transmittance: Vec::new(),
+                test_thickness_mm: 10.0,
             };
 
             glasses_by_name.insert(raw.name.to_uppercase(), material);
@@ -168,6 +174,25 @@ impl GlassCatalogDb {
     /// Returns an iterator over all loaded glasses in the database.
     pub fn all_glasses(&self) -> impl Iterator<Item = &GlassMaterial> {
         self.glasses_by_name.values()
+    }
+
+    /// Searches the glass database for all materials matching refractive index and Abbe number intervals.
+    ///
+    /// Ranges are supplied as `(min, max)` tuples. If a range is inverted (e.g. `(max, min)`),
+    /// it is automatically normalized.
+    #[must_use]
+    pub fn search_by_nd_vd(
+        &self,
+        nd_range: (f64, f64),
+        vd_range: (f64, f64),
+    ) -> Vec<&GlassMaterial> {
+        let (nd_min, nd_max) = (nd_range.0.min(nd_range.1), nd_range.0.max(nd_range.1));
+        let (vd_min, vd_max) = (vd_range.0.min(vd_range.1), vd_range.0.max(vd_range.1));
+
+        self.glasses_by_name
+            .values()
+            .filter(|g| g.nd >= nd_min && g.nd <= nd_max && g.vd >= vd_min && g.vd <= vd_max)
+            .collect()
     }
 }
 

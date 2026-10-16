@@ -16,6 +16,7 @@ pub mod camera;
 pub mod context;
 pub mod convergence;
 pub mod error;
+pub mod material;
 pub mod pipeline;
 pub mod shaders;
 pub mod target;
@@ -25,5 +26,6 @@ pub use camera::{CameraUniform, OrthographicCamera, ThinLensCamera, concentric_d
 pub use context::GpuContext;
 pub use convergence::{ConvergenceTracker, compute_rmse};
 pub use error::RenderError;
+pub use material::{GpuMaterial, GpuMaterialType, pack_materials_to_gpu_buffer};
 pub use pipeline::{PathTracingRenderer, RenderMode, RenderParams};
 pub use target::{RenderTarget, ToneMapTarget, resize_render_targets};

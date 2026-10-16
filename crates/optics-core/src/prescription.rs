@@ -22,16 +22,59 @@ use crate::geometry::{Air, RefractiveIndex};
 use crate::snell::snell_refract;
 use crate::types::{BounceEvent, Ray, RayBounce, Vec3};
 
+/// Custom serde helper to losslessly serialize/deserialize `f64::INFINITY` in JSON.
+pub mod f64_infinity_serde {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    /// Serializes an f64, mapping infinite values to 1e30 for valid JSON emission.
+    pub fn serialize<S>(value: &f64, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        if value.is_infinite() {
+            if *value > 0.0 {
+                serializer.serialize_f64(1e30)
+            } else {
+                serializer.serialize_f64(-1e30)
+            }
+        } else {
+            serializer.serialize_f64(*value)
+        }
+    }
+
+    /// Deserializes an f64, handling `null`, large boundary values (>= 1e29), or standard numbers.
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<f64, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let opt = Option::<f64>::deserialize(deserializer)?;
+        match opt {
+            Some(v) => {
+                if v >= 1e29 {
+                    Ok(f64::INFINITY)
+                } else if v <= -1e29 {
+                    Ok(f64::NEG_INFINITY)
+                } else {
+                    Ok(v)
+                }
+            }
+            None => Ok(f64::INFINITY),
+        }
+    }
+}
+
 /// A single unresolved optical surface in a sequential prescription.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OpticalSurface {
     /// 0-based surface index (0 = Object, 1 = first optical surface, ..., N = Image plane).
     pub surface_index: usize,
     /// Radius of curvature in millimeters ($R = 1/c$). Infinity for planar surfaces.
+    #[serde(with = "f64_infinity_serde")]
     pub radius_mm: f64,
     /// Conic constant $k$ (0 for sphere, -1 for parabola, $< -1$ for hyperbola).
     pub conic_constant: f64,
     /// Axial distance to the next surface vertex along $+z$ in millimeters.
+    #[serde(with = "f64_infinity_serde")]
     pub thickness_mm: f64,
     /// Clear aperture semi-diameter in millimeters.
     pub semi_diameter_mm: f64,

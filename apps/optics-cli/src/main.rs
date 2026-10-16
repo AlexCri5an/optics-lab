@@ -2,15 +2,33 @@
 
 use clap::{Parser, Subcommand};
 use optics_bvh::{Aabb, BlasInstance, BvhScene, Triangle as BvhTriangle};
-use optics_core::analysis::{PupilPattern, trace_ray_fan, trace_spot_diagram};
+use optics_core::analysis::{
+    PupilPattern, compute_diffraction_mtf, compute_fft_psf, compute_field_curves,
+    compute_footprint_diagram, compute_ray_table, compute_seidel_coefficients,
+    compute_two_bounce_ghosts, compute_wavefront_map, fit_zernike_noll,
+    generate_prescription_summary, trace_ray_fan, trace_spot_diagram,
+};
+use optics_core::conic::{ConicSurface, conic_normal, conic_sag};
+use optics_core::fresnel::fresnel_dielectric;
 use optics_core::prescription::calculate_paraxial_properties;
+use optics_core::snell::snell_refract;
 use optics_core::{
-    Air, PathRecord, Ray, RayBranchPolicy, RefractiveIndex, Scene, Triangle, Vec3, spectral_fan,
+    Air, OpticalPrescription, PathRecord, Ray, RayBranchPolicy, RefractiveIndex, Scene, Triangle,
+    Vec3, spectral_fan,
+};
+use optics_engine::{AnalysisRequest, AnalysisResult, EngineCommand, OpticalEngine, SurfaceUpdate};
+use optics_ffi::{
+    optics_engine_create, optics_engine_export_svg, optics_engine_free,
+    optics_engine_get_status_json, optics_string_free,
 };
 use optics_glass::{DispersionModel, GlassCatalogDb, GlassMaterial};
 use optics_spectral::{LAMBDA_C_NM, LAMBDA_D_NM, LAMBDA_F_NM, display_color_for_wavelength};
-use optics_zemax::parse_zmx_bytes;
 use optics_zemax::presets::{cooke_triplet_f4_5, double_gauss_50mm, plano_convex_100mm};
+use optics_zemax::{
+    CodeVSystem, DxfConfig, Iso10110DrawingSheet, OpticsProjectWorkspace, OsloSystem, SvgConfig,
+    export_dxf_layout, export_obj_system, export_stl_lens, export_svg_layout, parse_len, parse_seq,
+    parse_zmx_bytes, write_len, write_seq,
+};
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
@@ -114,6 +132,281 @@ enum Commands {
         #[arg(long, default_value_t = false)]
         json: bool,
     },
+
+    /// Computes third-order Seidel aberration coefficients and chromatic contributions.
+    Seidel {
+        #[arg(long, default_value = "cooke")]
+        preset: String,
+        #[arg(long)]
+        zmx: Option<PathBuf>,
+        #[arg(long, default_value_t = 0.0)]
+        field: f64,
+        #[arg(long, default_value_t = 587.56)]
+        wavelength: f64,
+    },
+
+    /// Computes 2D Wavefront OPD map and Zernike circular polynomial decomposition.
+    Wavefront {
+        #[arg(long, default_value = "cooke")]
+        preset: String,
+        #[arg(long)]
+        zmx: Option<PathBuf>,
+        #[arg(long, default_value_t = 0.0)]
+        field: f64,
+        #[arg(long, default_value_t = 587.56)]
+        wavelength: f64,
+        #[arg(long, default_value_t = 32)]
+        grid: usize,
+        #[arg(long, default_value_t = true)]
+        remove_tilt: bool,
+        #[arg(long, default_value_t = 15)]
+        zernike_terms: usize,
+    },
+
+    /// Computes Point Spread Function (FFT PSF), Strehl ratio, and encircled energy.
+    Psf {
+        #[arg(long, default_value = "cooke")]
+        preset: String,
+        #[arg(long)]
+        zmx: Option<PathBuf>,
+        #[arg(long, default_value_t = 0.0)]
+        field: f64,
+        #[arg(long, default_value_t = 587.56)]
+        wavelength: f64,
+        #[arg(long, default_value_t = 32)]
+        pupil_grid: usize,
+        #[arg(long, default_value_t = 64)]
+        fft_size: usize,
+    },
+
+    /// Computes Modulation Transfer Function (Diffraction MTF) frequency sweep.
+    Mtf {
+        #[arg(long, default_value = "cooke")]
+        preset: String,
+        #[arg(long)]
+        zmx: Option<PathBuf>,
+        #[arg(long, default_value_t = 0.0)]
+        field: f64,
+        #[arg(long, default_value_t = 587.56)]
+        wavelength: f64,
+        #[arg(long, default_value_t = 25)]
+        frequencies: usize,
+    },
+
+    /// Computes distortion, field curvature, lateral color, and relative illumination.
+    FieldCurves {
+        #[arg(long, default_value = "cooke")]
+        preset: String,
+        #[arg(long)]
+        zmx: Option<PathBuf>,
+        #[arg(long, default_value_t = 10.0)]
+        max_field: f64,
+        #[arg(long, default_value_t = 9)]
+        steps: usize,
+        #[arg(long, default_value_t = 587.56)]
+        wavelength: f64,
+    },
+
+    /// Outputs surface-by-surface ray coordinates, direction cosines, and OPL.
+    RayTable {
+        #[arg(long, default_value = "cooke")]
+        preset: String,
+        #[arg(long)]
+        zmx: Option<PathBuf>,
+        #[arg(long, default_value_t = 0.0)]
+        px: f64,
+        #[arg(long, default_value_t = 0.5)]
+        py: f64,
+        #[arg(long, default_value_t = 0.0)]
+        field: f64,
+        #[arg(long, default_value_t = 587.56)]
+        wavelength: f64,
+    },
+
+    /// Computes beam footprint on a designated optical surface.
+    Footprint {
+        #[arg(long, default_value = "cooke")]
+        preset: String,
+        #[arg(long)]
+        zmx: Option<PathBuf>,
+        #[arg(long, default_value_t = 3)]
+        surface: usize,
+        #[arg(long, default_value_t = 6)]
+        rings: usize,
+        #[arg(long, default_value_t = 0.0)]
+        field: f64,
+        #[arg(long, default_value_t = 587.56)]
+        wavelength: f64,
+    },
+
+    /// Evaluates sequential two-bounce ghost reflections and prescription summary.
+    Ghost {
+        #[arg(long, default_value = "cooke")]
+        preset: String,
+        #[arg(long)]
+        zmx: Option<PathBuf>,
+        #[arg(long, default_value_t = 587.56)]
+        wavelength: f64,
+        #[arg(long, default_value_t = 0.005)]
+        reflectance: f64,
+    },
+
+    /// Performs Damped Least Squares (Levenberg-Marquardt) optimization to minimize merit function.
+    Optimize {
+        #[arg(long, default_value = "cooke")]
+        preset: String,
+        #[arg(long)]
+        zmx: Option<PathBuf>,
+        #[arg(long, default_value_t = 50.0)]
+        target_efl: f64,
+        #[arg(long, default_value_t = 30)]
+        iterations: usize,
+    },
+
+    /// Performs optical tolerancing sensitivity analysis and Monte Carlo simulation.
+    Tolerance {
+        /// Preset lens name: "cooke", "double-gauss", or "plano-convex"
+        #[arg(long, default_value = "cooke")]
+        preset: String,
+        /// Path to a Zemax .zmx prescription file (overrides --preset)
+        #[arg(long)]
+        zmx: Option<PathBuf>,
+        /// Number of Monte Carlo trials
+        #[arg(long, default_value_t = 50)]
+        trials: usize,
+        /// Deterministic PRNG seed
+        #[arg(long, default_value_t = 42)]
+        seed: u64,
+        /// Evaluation wavelength in nanometers
+        #[arg(long, default_value_t = 587.56)]
+        wavelength: f64,
+        /// Field angle in degrees
+        #[arg(long, default_value_t = 0.0)]
+        field: f64,
+    },
+    /// Performs non-sequential ray tracing, Fresnel splitting, and detector irradiance accumulation.
+    NonSeq {
+        /// Preset system: "slab", "pipe", or "singlet"
+        #[arg(long, default_value = "singlet")]
+        preset: String,
+        /// Number of rays to launch
+        #[arg(long, default_value_t = 1000)]
+        rays: usize,
+        /// Maximum allowed bounces
+        #[arg(long, default_value_t = 20)]
+        max_bounces: usize,
+        /// Minimum power cutoff threshold in Watts
+        #[arg(long, default_value_t = 1e-6)]
+        min_power: f64,
+        /// Output report as JSON
+        #[arg(long, default_value_t = false)]
+        json: bool,
+    },
+
+    /// Exports a 2D SVG cross-sectional technical drawing of the optical system.
+    ExportSvg {
+        #[arg(long, default_value = "cooke")]
+        preset: String,
+        #[arg(long)]
+        zmx: Option<PathBuf>,
+        #[arg(long, default_value = "layout.svg")]
+        output: PathBuf,
+    },
+
+    /// Exports an AutoCAD Release 12 ASCII DXF file (2D layout or 3D mesh).
+    ExportDxf {
+        #[arg(long, default_value = "cooke")]
+        preset: String,
+        #[arg(long)]
+        zmx: Option<PathBuf>,
+        #[arg(long, default_value = "layout.dxf")]
+        output: PathBuf,
+        #[arg(long, default_value_t = false)]
+        three_d: bool,
+    },
+
+    /// Exports a 3D STL mesh of the lens system (binary or ASCII).
+    ExportStl {
+        #[arg(long, default_value = "cooke")]
+        preset: String,
+        #[arg(long)]
+        zmx: Option<PathBuf>,
+        #[arg(long, default_value = "lens.stl")]
+        output: PathBuf,
+        #[arg(long, default_value_t = true)]
+        binary: bool,
+        #[arg(long, default_value_t = 32)]
+        slices: u32,
+        #[arg(long, default_value_t = 12)]
+        rings: u32,
+    },
+
+    /// Exports a Wavefront 3D OBJ mesh and companion MTL material template.
+    ExportObj {
+        #[arg(long, default_value = "cooke")]
+        preset: String,
+        #[arg(long)]
+        zmx: Option<PathBuf>,
+        #[arg(long, default_value = "system.obj")]
+        output: PathBuf,
+        #[arg(long, default_value_t = 32)]
+        slices: u32,
+        #[arg(long, default_value_t = 12)]
+        rings: u32,
+    },
+
+    /// Generates an ISO 10110 optical element drawing data sheet (Markdown or JSON).
+    ExportIso10110 {
+        #[arg(long, default_value = "cooke")]
+        preset: String,
+        #[arg(long)]
+        zmx: Option<PathBuf>,
+        #[arg(long, default_value_t = false)]
+        json: bool,
+    },
+
+    /// Parses or exports a CODE V .seq sequential prescription file.
+    CodeV {
+        #[arg(long)]
+        seq: Option<PathBuf>,
+        #[arg(long, default_value = "cooke")]
+        preset: String,
+        #[arg(long)]
+        zmx: Option<PathBuf>,
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+
+    /// Parses or exports an OSLO .len sequential prescription file.
+    Oslo {
+        #[arg(long)]
+        len: Option<PathBuf>,
+        #[arg(long, default_value = "cooke")]
+        preset: String,
+        #[arg(long)]
+        zmx: Option<PathBuf>,
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+
+    /// Interacts directly with the unified OpticalEngine facade.
+    Engine {
+        /// Optional path to a Zemax .zmx file to load
+        #[arg(long)]
+        zmx: Option<PathBuf>,
+
+        /// Print system status as JSON
+        #[arg(long, default_value_t = false)]
+        status: bool,
+
+        /// Validate system diagnostics and print as JSON
+        #[arg(long, default_value_t = false)]
+        validate: bool,
+
+        /// Run an AnalysisRequest JSON string
+        #[arg(long)]
+        analyze: Option<String>,
+    },
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -160,7 +453,690 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }),
         Commands::Glass { name, json } => run_glass_command(&name, json),
         Commands::Benchmark { scene, rays, json } => run_benchmark_command(&scene, rays, json),
+        Commands::Seidel {
+            preset,
+            zmx,
+            field,
+            wavelength,
+        } => {
+            let (_name, resolved) = resolve_cli_prescription(&preset, zmx.as_ref())?;
+            let seidel = compute_seidel_coefficients(&resolved, field, wavelength)?;
+            println!("{}", serde_json::to_string_pretty(&seidel)?);
+            Ok(())
+        }
+        Commands::Wavefront {
+            preset,
+            zmx,
+            field,
+            wavelength,
+            grid,
+            remove_tilt,
+            zernike_terms,
+        } => {
+            let (name, resolved) = resolve_cli_prescription(&preset, zmx.as_ref())?;
+            let wf = compute_wavefront_map(&resolved, grid, field, wavelength, remove_tilt)?;
+            let zernike = fit_zernike_noll(&wf, zernike_terms)?;
+            let output = serde_json::json!({
+                "system": name,
+                "wavefront": wf,
+                "zernike": zernike,
+            });
+            println!("{}", serde_json::to_string_pretty(&output)?);
+            Ok(())
+        }
+        Commands::Psf {
+            preset,
+            zmx,
+            field,
+            wavelength,
+            pupil_grid,
+            fft_size,
+        } => {
+            let (_name, resolved) = resolve_cli_prescription(&preset, zmx.as_ref())?;
+            let psf = compute_fft_psf(&resolved, pupil_grid, fft_size, field, wavelength)?;
+            println!("{}", serde_json::to_string_pretty(&psf)?);
+            Ok(())
+        }
+        Commands::Mtf {
+            preset,
+            zmx,
+            field,
+            wavelength,
+            frequencies,
+        } => {
+            let (_name, resolved) = resolve_cli_prescription(&preset, zmx.as_ref())?;
+            let mtf = compute_diffraction_mtf(&resolved, frequencies, field, wavelength)?;
+            println!("{}", serde_json::to_string_pretty(&mtf)?);
+            Ok(())
+        }
+        Commands::FieldCurves {
+            preset,
+            zmx,
+            max_field,
+            steps,
+            wavelength,
+        } => {
+            let (_name, resolved) = resolve_cli_prescription(&preset, zmx.as_ref())?;
+            let curves = compute_field_curves(&resolved, steps, max_field, wavelength)?;
+            println!("{}", serde_json::to_string_pretty(&curves)?);
+            Ok(())
+        }
+        Commands::RayTable {
+            preset,
+            zmx,
+            px,
+            py,
+            field,
+            wavelength,
+        } => {
+            let (_name, resolved) = resolve_cli_prescription(&preset, zmx.as_ref())?;
+            let table = compute_ray_table(&resolved, px, py, field, wavelength)?;
+            println!("{}", serde_json::to_string_pretty(&table)?);
+            Ok(())
+        }
+        Commands::Footprint {
+            preset,
+            zmx,
+            surface,
+            rings,
+            field,
+            wavelength,
+        } => {
+            let (_name, resolved) = resolve_cli_prescription(&preset, zmx.as_ref())?;
+            let footprint = compute_footprint_diagram(
+                &resolved,
+                surface,
+                PupilPattern::Hexapolar { num_rings: rings },
+                field,
+                wavelength,
+            )?;
+            println!("{}", serde_json::to_string_pretty(&footprint)?);
+            Ok(())
+        }
+        Commands::Ghost {
+            preset,
+            zmx,
+            wavelength,
+            reflectance,
+        } => {
+            let (_name, resolved) = resolve_cli_prescription(&preset, zmx.as_ref())?;
+            let summary = generate_prescription_summary(&resolved, wavelength)?;
+            let ghosts = compute_two_bounce_ghosts(&resolved, wavelength, reflectance)?;
+            let output = serde_json::json!({
+                "summary": summary,
+                "ghost_analysis": ghosts,
+            });
+            println!("{}", serde_json::to_string_pretty(&output)?);
+            Ok(())
+        }
+        Commands::Optimize {
+            preset,
+            zmx,
+            target_efl,
+            iterations,
+        } => {
+            let (name, presc) = resolve_cli_raw_prescription(&preset, zmx.as_ref())?;
+            let catalog = GlassCatalogDb::load_bundled()?;
+            let mut vars = optics_optimize::VariableSet::new();
+            for i in 0..presc.surfaces.len().saturating_sub(1) {
+                if !presc.surfaces[i].is_stop {
+                    vars.add_with_bounds(
+                        optics_optimize::VariableType::Curvature { surface_index: i },
+                        -0.1,
+                        0.1,
+                    );
+                }
+            }
+            let mf = optics_optimize::MeritFunction::default_rms_spot(&presc, Some(target_efl));
+            let optimizer = optics_optimize::DlsOptimizer::new(optics_optimize::DlsConfig {
+                max_iterations: iterations,
+                ..Default::default()
+            });
+            let result = optimizer.optimize(&presc, &vars, &mf, &catalog, None)?;
+            let output = serde_json::json!({
+                "system": name,
+                "initial_merit": result.initial_merit,
+                "final_merit": result.final_merit,
+                "iterations": result.iterations,
+                "converged": result.converged,
+                "optimized_surfaces": result.optimized_prescription.surfaces,
+            });
+            println!("{}", serde_json::to_string_pretty(&output)?);
+            Ok(())
+        }
+        Commands::Tolerance {
+            preset,
+            zmx,
+            trials,
+            seed,
+            wavelength,
+            field,
+        } => {
+            let (name, presc) = resolve_cli_raw_prescription(&preset, zmx.as_ref())?;
+            let catalog = GlassCatalogDb::load_bundled()?;
+            let mut operands = Vec::new();
+            for i in 0..presc.surfaces.len().saturating_sub(1) {
+                if presc.surfaces[i].radius_mm.is_finite()
+                    && presc.surfaces[i].radius_mm.abs() > 1e-6
+                {
+                    operands.push(optics_tolerance::ToleranceOperand::new(
+                        format!("TRAD_S{}", i),
+                        optics_tolerance::ToleranceOperandType::Radius {
+                            surface_index: i,
+                            delta_radius_mm: 0.05,
+                            fringes: None,
+                        },
+                    ));
+                }
+                if presc.surfaces[i].thickness_mm > 0.0 {
+                    operands.push(optics_tolerance::ToleranceOperand::new(
+                        format!("TTHI_S{}", i),
+                        optics_tolerance::ToleranceOperandType::Thickness {
+                            surface_index: i,
+                            delta_thickness_mm: 0.02,
+                        },
+                    ));
+                }
+            }
+            let criterion = optics_tolerance::ToleranceCriterion::RmsSpotRadius {
+                field_angle_deg: field,
+                wavelength_nm: wavelength,
+            };
+            let compensator = optics_tolerance::Compensator::ParaxialRefocus {
+                wavelength_nm: wavelength,
+            };
+            let sensitivity = optics_tolerance::SensitivityAnalyzer::analyze(
+                &presc,
+                &operands,
+                &criterion,
+                &compensator,
+                &catalog,
+            )?;
+            let mc_sim =
+                optics_tolerance::MonteCarloSimulator::new(optics_tolerance::MonteCarloConfig {
+                    num_trials: trials,
+                    seed,
+                    yield_threshold: Some(sensitivity.nominal_value * 2.0),
+                });
+            let mc_report = mc_sim.run(&presc, &operands, &criterion, &compensator, &catalog)?;
+            let output = serde_json::json!({
+                "system": name,
+                "sensitivity": sensitivity,
+                "monte_carlo": mc_report,
+            });
+            println!("{}", serde_json::to_string_pretty(&output)?);
+            Ok(())
+        }
+        Commands::NonSeq {
+            preset,
+            rays,
+            max_bounces,
+            min_power,
+            json,
+        } => run_nonseq_command(&preset, rays, max_bounces, min_power, json),
+        Commands::ExportSvg {
+            preset,
+            zmx,
+            output,
+        } => {
+            let (name, presc) = resolve_cli_raw_prescription(&preset, zmx.as_ref())?;
+            let svg = export_svg_layout(&presc, None, &SvgConfig::default())?;
+            std::fs::write(&output, svg)?;
+            println!(
+                "Exported 2D SVG layout for '{name}' to {}",
+                output.display()
+            );
+            Ok(())
+        }
+        Commands::ExportDxf {
+            preset,
+            zmx,
+            output,
+            three_d,
+        } => {
+            let (name, presc) = resolve_cli_raw_prescription(&preset, zmx.as_ref())?;
+            let config = DxfConfig {
+                export_3d: three_d,
+                ..Default::default()
+            };
+            let dxf = export_dxf_layout(&presc, None, &config)?;
+            std::fs::write(&output, dxf)?;
+            let mode = if three_d { "3D" } else { "2D" };
+            println!(
+                "Exported {mode} AutoCAD DXF for '{name}' to {}",
+                output.display()
+            );
+            Ok(())
+        }
+        Commands::ExportStl {
+            preset,
+            zmx,
+            output,
+            binary,
+            slices,
+            rings,
+        } => {
+            let (name, presc) = resolve_cli_raw_prescription(&preset, zmx.as_ref())?;
+            let stl_bytes = export_stl_lens(&presc, binary, slices, rings);
+            std::fs::write(&output, stl_bytes)?;
+            let fmt = if binary { "binary" } else { "ASCII" };
+            println!(
+                "Exported 3D STL ({fmt}) for '{name}' to {}",
+                output.display()
+            );
+            Ok(())
+        }
+        Commands::ExportObj {
+            preset,
+            zmx,
+            output,
+            slices,
+            rings,
+        } => {
+            let (name, presc) = resolve_cli_raw_prescription(&preset, zmx.as_ref())?;
+            let (obj_data, mtl_data) = export_obj_system(&presc, slices, rings);
+            std::fs::write(&output, obj_data)?;
+            let mtl_path = output.with_extension("mtl");
+            std::fs::write(&mtl_path, mtl_data)?;
+            println!(
+                "Exported 3D OBJ & MTL for '{name}' to {} and {}",
+                output.display(),
+                mtl_path.display()
+            );
+            Ok(())
+        }
+        Commands::ExportIso10110 { preset, zmx, json } => {
+            let (_name, presc) = resolve_cli_raw_prescription(&preset, zmx.as_ref())?;
+            let catalog = GlassCatalogDb::load_bundled().ok();
+            let sheet = Iso10110DrawingSheet::from_prescription(&presc, catalog.as_ref());
+            if json {
+                println!(
+                    "{}",
+                    sheet
+                        .to_json()
+                        .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?
+                );
+            } else {
+                println!("{}", sheet.to_markdown_table());
+            }
+            Ok(())
+        }
+        Commands::CodeV {
+            seq,
+            preset,
+            zmx,
+            output,
+        } => {
+            if let Some(path) = seq {
+                let content = std::fs::read_to_string(&path)?;
+                let sys = parse_seq(&content)?;
+                println!(
+                    "Parsed CODE V file: '{}' with {} surfaces",
+                    sys.title,
+                    sys.surfaces.len()
+                );
+                if let Some(out_path) = output {
+                    let rx = sys.to_optical_prescription();
+                    let serialized = write_seq(&CodeVSystem::from_optical_prescription(&rx));
+                    std::fs::write(&out_path, serialized)?;
+                    println!(
+                        "Wrote CODE V sequential prescription to {}",
+                        out_path.display()
+                    );
+                }
+            } else {
+                let (name, presc) = resolve_cli_raw_prescription(&preset, zmx.as_ref())?;
+                let sys = CodeVSystem::from_optical_prescription(&presc);
+                let text = write_seq(&sys);
+                if let Some(out_path) = output {
+                    std::fs::write(&out_path, text)?;
+                    println!(
+                        "Exported CODE V sequential file for '{name}' to {}",
+                        out_path.display()
+                    );
+                } else {
+                    println!("{text}");
+                }
+            }
+            Ok(())
+        }
+        Commands::Oslo {
+            len,
+            preset,
+            zmx,
+            output,
+        } => {
+            if let Some(path) = len {
+                let content = std::fs::read_to_string(&path)?;
+                let sys = parse_len(&content)?;
+                println!(
+                    "Parsed OSLO file: '{}' with {} surfaces",
+                    sys.title,
+                    sys.surfaces.len()
+                );
+                if let Some(out_path) = output {
+                    let rx = sys.to_optical_prescription();
+                    let serialized = write_len(&OsloSystem::from_optical_prescription(&rx));
+                    std::fs::write(&out_path, serialized)?;
+                    println!("Wrote OSLO prescription to {}", out_path.display());
+                }
+            } else {
+                let (name, presc) = resolve_cli_raw_prescription(&preset, zmx.as_ref())?;
+                let sys = OsloSystem::from_optical_prescription(&presc);
+                let text = write_len(&sys);
+                if let Some(out_path) = output {
+                    std::fs::write(&out_path, text)?;
+                    println!(
+                        "Exported OSLO prescription for '{name}' to {}",
+                        out_path.display()
+                    );
+                } else {
+                    println!("{text}");
+                }
+            }
+            Ok(())
+        }
+        Commands::Engine {
+            zmx,
+            status,
+            validate,
+            analyze,
+        } => run_engine_command(zmx, status, validate, analyze),
     }
+}
+
+fn run_engine_command(
+    zmx: Option<PathBuf>,
+    status: bool,
+    validate: bool,
+    analyze: Option<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut engine = OpticalEngine::new()?;
+    if let Some(path) = zmx {
+        let content = std::fs::read_to_string(path)?;
+        engine.load_zmx_str(&content)?;
+    }
+
+    if status {
+        let st = engine.status();
+        println!("{}", serde_json::to_string_pretty(&st)?);
+    }
+
+    if validate {
+        let diags = engine.validate();
+        println!("{}", serde_json::to_string_pretty(&diags)?);
+    }
+
+    if let Some(req_str) = analyze {
+        let req: AnalysisRequest = serde_json::from_str(&req_str)?;
+        let res = engine.run_analysis(&req)?;
+        println!("{}", serde_json::to_string_pretty(&res)?);
+    }
+
+    Ok(())
+}
+
+fn run_nonseq_command(
+    preset: &str,
+    rays: usize,
+    max_bounces: usize,
+    min_power: f64,
+    json: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use optics_nonseq::*;
+
+    let catalog = optics_glass::catalog::GlassCatalogDb::load_bundled()?;
+    let mut scene = NonSeqScene::new();
+
+    let ray_list = match preset {
+        "slab" => {
+            let slab = NonSeqObject {
+                id: 0,
+                name: "DielectricSlab".to_string(),
+                geometry: PrimitiveGeometry::Box {
+                    half_x: 50.0,
+                    half_y: 50.0,
+                    half_z: 2.5,
+                },
+                transform: Transform3D::from_translation(0.0, 0.0, 2.5),
+                material: NonSeqMaterial::dielectric(OpticalMedium::Constant { n: 1.5 }),
+                is_active: true,
+            };
+            scene.add_object(slab);
+
+            let det_trans = Detector2D::new(
+                0,
+                "TransmittedDetector",
+                optics_core::Vec3::new(0.0, 0.0, 10.0),
+                optics_core::Vec3::new(0.0, 0.0, 1.0),
+                optics_core::Vec3::new(0.0, 1.0, 0.0),
+                100.0,
+                100.0,
+                20,
+                20,
+            )?;
+            scene.add_detector(det_trans);
+
+            let det_refl = Detector2D::new(
+                1,
+                "ReflectedDetector",
+                optics_core::Vec3::new(0.0, 0.0, -10.0),
+                optics_core::Vec3::new(0.0, 0.0, -1.0),
+                optics_core::Vec3::new(0.0, 1.0, 0.0),
+                100.0,
+                100.0,
+                20,
+                20,
+            )?;
+            scene.add_detector(det_refl);
+
+            let source = RaySource::CollimatedBeam {
+                center: optics_core::Vec3::new(0.0, 0.0, -5.0),
+                direction: optics_core::Vec3::new(0.0, 0.0, 1.0),
+                radius: 10.0,
+                total_flux_watts: 1.0,
+                spectrum: SourceSpectrum::Monochromatic {
+                    wavelength_nm: 587.56,
+                },
+            };
+            source.generate_rays(rays, 42)?
+        }
+        "pipe" => {
+            let pipe = NonSeqObject {
+                id: 0,
+                name: "LightPipe".to_string(),
+                geometry: PrimitiveGeometry::Cylinder {
+                    radius: 5.0,
+                    half_length: 25.0,
+                },
+                transform: Transform3D::from_translation(0.0, 0.0, 25.0),
+                material: NonSeqMaterial::dielectric(OpticalMedium::Constant { n: 1.5168 }),
+                is_active: true,
+            };
+            scene.add_object(pipe);
+
+            let det = Detector2D::new(
+                0,
+                "ExitDetector",
+                optics_core::Vec3::new(0.0, 0.0, 50.1),
+                optics_core::Vec3::new(0.0, 0.0, 1.0),
+                optics_core::Vec3::new(0.0, 1.0, 0.0),
+                20.0,
+                20.0,
+                20,
+                20,
+            )?;
+            scene.add_detector(det);
+
+            let source = RaySource::CollimatedBeam {
+                center: optics_core::Vec3::new(0.0, 0.0, 1.0),
+                direction: optics_core::Vec3::new(0.1, 0.0, 0.99).normalize(),
+                radius: 3.0,
+                total_flux_watts: 1.0,
+                spectrum: SourceSpectrum::Monochromatic {
+                    wavelength_nm: 587.56,
+                },
+            };
+            let mut launched = source.generate_rays(rays, 42)?;
+            for r in &mut launched {
+                r.medium_stack = vec![0];
+            }
+            launched
+        }
+        _ => {
+            let presc = plano_convex_100mm()?;
+            let _lens_id = scene.add_prescription_lens(
+                "PlanoConvexSinglet",
+                &presc,
+                0,
+                1,
+                NonSeqMaterial::dielectric(OpticalMedium::GlassCatalog {
+                    name: "N-BK7".to_string(),
+                }),
+                32,
+                16,
+            )?;
+
+            let det = Detector2D::new(
+                0,
+                "FocalDetector",
+                optics_core::Vec3::new(0.0, 0.0, 98.4),
+                optics_core::Vec3::new(0.0, 0.0, 1.0),
+                optics_core::Vec3::new(0.0, 1.0, 0.0),
+                10.0,
+                10.0,
+                50,
+                50,
+            )?;
+            scene.add_detector(det);
+
+            let source = RaySource::CollimatedBeam {
+                center: optics_core::Vec3::new(0.0, 0.0, -10.0),
+                direction: optics_core::Vec3::new(0.0, 0.0, 1.0),
+                radius: 4.0,
+                total_flux_watts: 1.0,
+                spectrum: SourceSpectrum::Monochromatic {
+                    wavelength_nm: 587.56,
+                },
+            };
+            source.generate_rays(rays, 42)?
+        }
+    };
+
+    let tracer = NonSeqTracer::new(NonSeqTraceConfig {
+        max_bounces,
+        min_power_threshold: min_power,
+        enable_branching: true,
+        record_paths: false,
+    });
+
+    let start = std::time::Instant::now();
+    let report = tracer.trace_rays(&mut scene, &ray_list, Some(&catalog))?;
+    let elapsed = start.elapsed();
+
+    if json {
+        let json_val = serde_json::json!({
+            "preset": preset,
+            "rays_launched": report.total_rays_traced,
+            "total_interactions": report.total_interactions,
+            "launched_flux_watts": report.launched_flux_watts,
+            "detected_flux_watts": report.detected_flux_watts,
+            "absorbed_flux_watts": report.absorbed_flux_watts,
+            "escaped_flux_watts": report.escaped_flux_watts,
+            "energy_conservation_ratio": report.energy_conservation_ratio(),
+            "elapsed_ms": elapsed.as_secs_f64() * 1000.0,
+            "detectors": scene.detectors.iter().map(|d| {
+                let (cx, cy) = d.centroid_mm();
+                serde_json::json!({
+                    "id": d.id,
+                    "name": d.name,
+                    "total_flux_watts": d.total_flux_watts,
+                    "total_lumens": d.total_lumens,
+                    "rays_hit": d.total_rays_hit,
+                    "centroid_mm": [cx, cy],
+                    "rms_radius_mm": d.rms_radius_mm(),
+                })
+            }).collect::<Vec<_>>()
+        });
+        println!("{}", serde_json::to_string_pretty(&json_val)?);
+    } else {
+        println!("============================================================");
+        println!("OpticsLab Non-Sequential Ray Tracing Report");
+        println!("Preset: {preset}");
+        println!("============================================================");
+        println!("Rays Launched:        {}", report.total_rays_traced);
+        println!("Total Interactions:   {}", report.total_interactions);
+        println!("Launched Flux:        {:.6} W", report.launched_flux_watts);
+        println!("Detected Flux:        {:.6} W", report.detected_flux_watts);
+        println!("Absorbed Flux:        {:.6} W", report.absorbed_flux_watts);
+        println!("Escaped Flux:         {:.6} W", report.escaped_flux_watts);
+        println!(
+            "Conservation Ratio:   {:.8}",
+            report.energy_conservation_ratio()
+        );
+        println!(
+            "Trace Time:           {:.2} ms",
+            elapsed.as_secs_f64() * 1000.0
+        );
+        println!("------------------------------------------------------------");
+        for d in &scene.detectors {
+            let (cx, cy) = d.centroid_mm();
+            println!("Detector #{}: '{}'", d.id, d.name);
+            println!(
+                "  Captured Flux:    {:.6} W ({:.4} lm)",
+                d.total_flux_watts, d.total_lumens
+            );
+            println!("  Rays Hit:         {}", d.total_rays_hit);
+            println!("  Centroid:         ({:.4}, {:.4}) mm", cx, cy);
+            println!("  RMS Spot Radius:  {:.4} mm", d.rms_radius_mm());
+        }
+        println!("============================================================");
+    }
+
+    Ok(())
+}
+
+fn resolve_cli_raw_prescription(
+    preset: &str,
+    zmx: Option<&PathBuf>,
+) -> Result<(String, OpticalPrescription), Box<dyn std::error::Error>> {
+    if let Some(path) = zmx {
+        let bytes = std::fs::read(path)?;
+        let p = parse_zmx_bytes(&bytes)?.to_optical_prescription();
+        let fname = path
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or("Zemax System")
+            .to_string();
+        Ok((fname, p))
+    } else {
+        match preset.to_lowercase().replace('_', "-").as_str() {
+            "cooke" | "cooke-triplet" => {
+                Ok(("Cooke Triplet F/4.5".to_string(), cooke_triplet_f4_5()?))
+            }
+            "double-gauss" | "doublegauss" => {
+                Ok(("Double Gauss F/2.0".to_string(), double_gauss_50mm()?))
+            }
+            "plano-convex" | "singlet" => {
+                Ok(("Plano-Convex Singlet".to_string(), plano_convex_100mm()?))
+            }
+            other => Err(format!(
+                "Unknown preset '{other}'. Valid options: cooke, double-gauss, plano-convex"
+            )
+            .into()),
+        }
+    }
+}
+
+fn resolve_cli_prescription(
+    preset: &str,
+    zmx: Option<&PathBuf>,
+) -> Result<(String, optics_core::prescription::ResolvedPrescription), Box<dyn std::error::Error>> {
+    let (name, prescription) = resolve_cli_raw_prescription(preset, zmx)?;
+
+    let catalog = GlassCatalogDb::load_bundled()?;
+    let resolved = prescription.resolve(&catalog)?;
+    Ok((name, resolved))
 }
 
 fn run_prism_command(
@@ -695,12 +1671,22 @@ fn run_glass_command(name: &str, json: bool) -> Result<(), Box<dyn std::error::E
             println!("   B2 = {:>14.8e},  C2 = {:>14.8e} µm²", b[1], c[1]);
             println!("   B3 = {:>14.8e},  C3 = {:>14.8e} µm²", b[2], c[2]);
         }
-        DispersionModel::Sellmeier2 { a, b } => {
+        DispersionModel::Sellmeier2 { a, b, c } => {
             println!("   Type: Sellmeier Formula 2 (λ in µm)");
-            println!("   Formula: n²(λ) - 1 = A1·λ²/(λ²-B1²) + A2·λ²/(λ²-B2²) + A3·λ²/(λ²-B3²)");
-            println!("   A1 = {:>14.8e},  B1 = {:>14.8e} µm", a[0], b[0]);
-            println!("   A2 = {:>14.8e},  B2 = {:>14.8e} µm", a[1], b[1]);
-            println!("   A3 = {:>14.8e},  B3 = {:>14.8e} µm", a[2], b[2]);
+            println!("   Formula: n²(λ) - 1 = A + B1·λ²/(λ²-C1) + B2·λ²/(λ²-C2)");
+            println!("   A  = {:>14.8e}", a);
+            println!("   B1 = {:>14.8e},  C1 = {:>14.8e} µm²", b[0], c[0]);
+            println!("   B2 = {:>14.8e},  C2 = {:>14.8e} µm²", b[1], c[1]);
+        }
+        DispersionModel::Schott { a } => {
+            println!("   Type: Schott Empirical Formula (λ in µm)");
+            println!("   Formula: n²(λ) = a0 + a1·λ² + a2·λ⁻² + a3·λ⁻⁴ + a4·λ⁻⁶ + a5·λ⁻⁸");
+            for (idx, coeff) in a.iter().enumerate() {
+                println!("   a{idx} = {:>14.8e}", coeff);
+            }
+        }
+        DispersionModel::ModelGlass { nd, vd, d_pgf, .. } => {
+            println!("   Type: Model Glass (nd={nd:.4}, Vd={vd:.2}, ΔPgF={d_pgf:.4})");
         }
         DispersionModel::Cauchy { a, b } => {
             println!("   Type: Cauchy Dispersion (λ in µm)");
@@ -713,6 +1699,12 @@ fn run_glass_command(name: &str, json: bool) -> Result<(), Box<dyn std::error::E
         }
         DispersionModel::Air => {
             println!("   Type: Standard Air (n = 1.000000)");
+        }
+        DispersionModel::Mirror => {
+            println!("   Type: Ideal Mirror (n = -1.000000)");
+        }
+        other => {
+            println!("   Type: Extended Dispersion Model ({:?})", other);
         }
     }
     println!();
@@ -860,6 +1852,7 @@ fn run_benchmark_command(
     Ok(())
 }
 
+#[allow(unsafe_code)]
 fn run_self_test() -> Result<(), Box<dyn std::error::Error>> {
     println!("============================================================");
     println!("OpticsLab Automated Headless Self-Test");
@@ -979,8 +1972,359 @@ fn run_self_test() -> Result<(), Box<dyn std::error::Error>> {
         elapsed_bvh.as_secs_f64() * 1000.0
     );
 
+    // 6. Tolerancing Engine: Sensitivity & Monte Carlo Simulation
+    let start_tol = std::time::Instant::now();
+    let cooke_raw = cooke_triplet_f4_5()?;
+    let tol_operands = vec![
+        optics_tolerance::ToleranceOperand::new(
+            "TRAD_S0",
+            optics_tolerance::ToleranceOperandType::Radius {
+                surface_index: 0,
+                delta_radius_mm: 0.05,
+                fringes: None,
+            },
+        ),
+        optics_tolerance::ToleranceOperand::new(
+            "TTHI_S0",
+            optics_tolerance::ToleranceOperandType::Thickness {
+                surface_index: 0,
+                delta_thickness_mm: 0.02,
+            },
+        ),
+    ];
+    let criterion = optics_tolerance::ToleranceCriterion::RmsSpotRadius {
+        field_angle_deg: 0.0,
+        wavelength_nm: LAMBDA_D_NM,
+    };
+    let compensator = optics_tolerance::Compensator::ParaxialRefocus {
+        wavelength_nm: LAMBDA_D_NM,
+    };
+    let sens_report = optics_tolerance::SensitivityAnalyzer::analyze(
+        &cooke_raw,
+        &tol_operands,
+        &criterion,
+        &compensator,
+        &catalog,
+    )?;
+    if sens_report.records.len() != 2 || sens_report.estimated_rss_degradation <= 0.0 {
+        return Err("Tolerancing sensitivity analysis validation failed".into());
+    }
+    let mc_sim = optics_tolerance::MonteCarloSimulator::new(optics_tolerance::MonteCarloConfig {
+        num_trials: 20,
+        seed: 42,
+        yield_threshold: Some(sens_report.nominal_value * 2.5),
+    });
+    let mc_report = mc_sim.run(
+        &cooke_raw,
+        &tol_operands,
+        &criterion,
+        &compensator,
+        &catalog,
+    )?;
+    if mc_report.total_trials != 20 || mc_report.percentiles.p50 <= 0.0 {
+        return Err("Monte Carlo simulation percentile calculation failed".into());
+    }
+    let elapsed_tol = start_tol.elapsed();
+    println!(
+        "[PASS] Tolerancing Sensitivity & Monte Carlo Simulation ({:.2} ms)",
+        elapsed_tol.as_secs_f64() * 1000.0
+    );
+
+    // 7. Non-Sequential Ray Tracing Engine (Fresnel splitting & detector accumulation)
+    let start_nonseq = std::time::Instant::now();
+    let mut ns_scene = optics_nonseq::NonSeqScene::new();
+    let ns_slab = optics_nonseq::NonSeqObject {
+        id: 0,
+        name: "DielectricSlab".to_string(),
+        geometry: optics_nonseq::PrimitiveGeometry::Box {
+            half_x: 50.0,
+            half_y: 50.0,
+            half_z: 2.5,
+        },
+        transform: optics_nonseq::Transform3D::from_translation(0.0, 0.0, 2.5),
+        material: optics_nonseq::NonSeqMaterial::dielectric(
+            optics_nonseq::OpticalMedium::Constant { n: 1.5 },
+        ),
+        is_active: true,
+    };
+    ns_scene.add_object(ns_slab);
+    let ns_det_trans = optics_nonseq::Detector2D::new(
+        0,
+        "TransmittedDetector",
+        optics_core::Vec3::new(0.0, 0.0, 10.0),
+        optics_core::Vec3::new(0.0, 0.0, 1.0),
+        optics_core::Vec3::new(0.0, 1.0, 0.0),
+        100.0,
+        100.0,
+        10,
+        10,
+    )?;
+    ns_scene.add_detector(ns_det_trans);
+    let ns_det_refl = optics_nonseq::Detector2D::new(
+        1,
+        "ReflectedDetector",
+        optics_core::Vec3::new(0.0, 0.0, -10.0),
+        optics_core::Vec3::new(0.0, 0.0, -1.0),
+        optics_core::Vec3::new(0.0, 1.0, 0.0),
+        100.0,
+        100.0,
+        10,
+        10,
+    )?;
+    ns_scene.add_detector(ns_det_refl);
+    let ns_ray = optics_core::Ray::new(
+        optics_core::Vec3::new(0.0, 0.0, -5.0),
+        optics_core::Vec3::new(0.0, 0.0, 1.0),
+        587.56,
+        1.0,
+    )?;
+    let ns_rays = vec![optics_nonseq::NonSeqRay::new(ns_ray, 0)];
+    let ns_tracer = optics_nonseq::NonSeqTracer::new(optics_nonseq::NonSeqTraceConfig {
+        max_bounces: 20,
+        min_power_threshold: 1e-12,
+        enable_branching: true,
+        record_paths: false,
+    });
+    let ns_report = ns_tracer.trace_rays(&mut ns_scene, &ns_rays, None)?;
+    let p_tot = ns_scene.detectors[0].total_flux_watts + ns_scene.detectors[1].total_flux_watts;
+    if (p_tot - 1.0).abs() > 1e-5 || (ns_report.energy_conservation_ratio() - 1.0).abs() > 1e-5 {
+        return Err("Non-sequential energy conservation validation failed".into());
+    }
+    let elapsed_nonseq = start_nonseq.elapsed();
+    println!(
+        "[PASS] Non-Sequential Ray Tracing & Fresnel Branching ({:.2} ms)",
+        elapsed_nonseq.as_secs_f64() * 1000.0
+    );
+
+    // 8. CAD Export & Multi-Format Optical Interoperability (SVG, DXF, STL, OBJ, CODE V, OSLO, ISO 10110)
+    let start_cad = std::time::Instant::now();
+    let cooke_rx = cooke_triplet_f4_5()?;
+
+    // 8a. CODE V round-trip
+    let codev_sys = CodeVSystem::from_optical_prescription(&cooke_rx);
+    let codev_str = write_seq(&codev_sys);
+    let codev_reparsed = parse_seq(&codev_str)?;
+    if codev_reparsed.surfaces.len() != codev_sys.surfaces.len() {
+        return Err("CODE V .seq round-trip surface count mismatch".into());
+    }
+
+    // 8b. OSLO round-trip
+    let oslo_sys = OsloSystem::from_optical_prescription(&cooke_rx);
+    let oslo_str = write_len(&oslo_sys);
+    let oslo_reparsed = parse_len(&oslo_str)?;
+    if oslo_reparsed.surfaces.len() != oslo_sys.surfaces.len() {
+        return Err("OSLO .len round-trip surface count mismatch".into());
+    }
+
+    // 8c. ISO 10110 drawing data sheet
+    let iso_sheet = Iso10110DrawingSheet::from_prescription(&cooke_rx, Some(&catalog));
+    let iso_md = iso_sheet.to_markdown_table();
+    if !iso_md.contains("ISO 10110") || iso_sheet.elements.len() != 3 {
+        return Err("ISO 10110 drawing table generation failed".into());
+    }
+
+    // 8d. CAD Exports (SVG, DXF, STL, OBJ)
+    let svg_out = export_svg_layout(&cooke_rx, None, &SvgConfig::default())?;
+    if !svg_out.contains("<svg") || !svg_out.contains("</svg>") {
+        return Err("CAD 2D SVG layout export failed".into());
+    }
+
+    let dxf_out = export_dxf_layout(&cooke_rx, None, &DxfConfig::default())?;
+    if !dxf_out.contains("SECTION") || !dxf_out.contains("EOF") {
+        return Err("CAD 2D DXF export failed".into());
+    }
+
+    let stl_bin = export_stl_lens(&cooke_rx, true, 16, 6);
+    if stl_bin.len() <= 84 {
+        return Err("CAD 3D STL binary export failed".into());
+    }
+
+    let (obj_str, mtl_str) = export_obj_system(&cooke_rx, 16, 6);
+    if !obj_str.contains("v ") || !mtl_str.contains("newmtl") {
+        return Err("CAD 3D Wavefront OBJ/MTL export failed".into());
+    }
+
+    // 8e. Unified Project Workspace
+    let project = OpticsProjectWorkspace::new("Cooke Triplet Project", cooke_rx);
+    let proj_json = project.to_json()?;
+    let proj_loaded = OpticsProjectWorkspace::from_json(&proj_json)?;
+    if proj_loaded.configurations.len() != 1 || proj_loaded.name != "Cooke Triplet Project" {
+        return Err("OpticsProjectWorkspace JSON round-trip failed".into());
+    }
+
+    let elapsed_cad = start_cad.elapsed();
+    println!(
+        "[PASS] CAD Export & Multi-Format Optical Interoperability (SVG, DXF, STL, OBJ, CODE V, OSLO, ISO 10110) ({:.2} ms)",
+        elapsed_cad.as_secs_f64() * 1000.0
+    );
+
+    // 9. Unified OpticalEngine Facade, Undo/Redo & C FFI ABI Boundary
+    let start_engine = std::time::Instant::now();
+    let mut engine = OpticalEngine::new()?;
+    let status = engine.status();
+    if status.surface_count != 7 || status.system_name != "Cooke Triplet F/4.5" {
+        return Err("OpticalEngine initial status mismatch".into());
+    }
+
+    // Paraxial & Spot Analysis via Engine
+    let paraxial_res = engine.run_analysis(&AnalysisRequest::Paraxial)?;
+    if !matches!(paraxial_res, AnalysisResult::Paraxial(_)) {
+        return Err("OpticalEngine paraxial analysis failed".into());
+    }
+
+    let spot_res = engine.run_analysis(&AnalysisRequest::SpotDiagram {
+        field_index: 0,
+        wavelength_nm: None,
+        ray_count: 64,
+    })?;
+    if let AnalysisResult::SpotDiagram(s) = spot_res {
+        if s.metrics.rms_radius_um >= 50.0 {
+            return Err("OpticalEngine spot RMS blur exceeds design threshold".into());
+        }
+    } else {
+        return Err("OpticalEngine spot analysis failed".into());
+    }
+
+    // Undo / Redo / Dirty Invalidation
+    let orig_r = engine.prescription().surfaces[1].radius_mm;
+    engine.execute(EngineCommand::EditSurface {
+        index: 1,
+        update: SurfaceUpdate {
+            radius_mm: Some(30.0),
+            ..Default::default()
+        },
+    })?;
+    if !engine.is_dirty()
+        || engine.revision() != 2
+        || (engine.prescription().surfaces[1].radius_mm - 30.0).abs() > 1e-6
+    {
+        return Err("OpticalEngine command execution failed".into());
+    }
+    engine.undo()?;
+    if (engine.prescription().surfaces[1].radius_mm - orig_r).abs() > 1e-6 || !engine.can_redo() {
+        return Err("OpticalEngine undo failed".into());
+    }
+    engine.redo()?;
+    if (engine.prescription().surfaces[1].radius_mm - 30.0).abs() > 1e-6 {
+        return Err("OpticalEngine redo failed".into());
+    }
+
+    // C FFI ABI Boundary Verification
+    let ffi_engine = optics_engine_create();
+    if ffi_engine.is_null() {
+        return Err("optics_engine_create returned NULL".into());
+    }
+    let status_ptr = unsafe { optics_engine_get_status_json(ffi_engine) };
+    if status_ptr.is_null() {
+        unsafe { optics_engine_free(ffi_engine) };
+        return Err("optics_engine_get_status_json returned NULL".into());
+    }
+    let status_str = unsafe { std::ffi::CStr::from_ptr(status_ptr) }.to_str()?;
+    if !status_str.contains("Cooke Triplet") {
+        unsafe {
+            optics_string_free(status_ptr);
+            optics_engine_free(ffi_engine);
+        }
+        return Err("C FFI status JSON did not contain expected preset".into());
+    }
+    let svg_ptr = unsafe { optics_engine_export_svg(ffi_engine) };
+    if svg_ptr.is_null() {
+        unsafe { optics_engine_free(ffi_engine) };
+        return Err("optics_engine_export_svg returned NULL".into());
+    }
+    let svg_str = unsafe { std::ffi::CStr::from_ptr(svg_ptr) }.to_str()?;
+    if !svg_str.contains("<svg") {
+        unsafe {
+            optics_string_free(svg_ptr);
+            optics_engine_free(ffi_engine);
+        }
+        return Err("C FFI SVG export did not contain <svg tag".into());
+    }
+    unsafe {
+        optics_string_free(svg_ptr);
+        optics_engine_free(ffi_engine);
+    }
+
+    let elapsed_engine = start_engine.elapsed();
+    println!(
+        "[PASS] Unified OpticalEngine Facade, Undo/Redo & C FFI ABI Boundary ({:.2} ms)",
+        elapsed_engine.as_secs_f64() * 1000.0
+    );
+
+    // 10. Independent Golden Cross-Validation, Numerical Invariants & Robustness Fuzzing
+    let start_validation = std::time::Instant::now();
+
+    // 10a. Golden paraxial benchmarks: Cooke Triplet EFL (50.02 mm) & spot RMS (< 5.0 um)
+    let cooke_val = cooke_triplet_f4_5()?.resolve(&catalog)?;
+    let cooke_px = calculate_paraxial_properties(&cooke_val, LAMBDA_D_NM)?;
+    if (cooke_px.efl_mm - 50.02).abs() / 50.02 > 0.001 {
+        return Err(
+            "Golden benchmark validation failed: Cooke Triplet EFL deviates from 50.02 mm".into(),
+        );
+    }
+    let spot_val = trace_spot_diagram(
+        &cooke_val,
+        (0.0, 0.0),
+        LAMBDA_D_NM,
+        PupilPattern::Hexapolar { num_rings: 6 },
+    )?;
+    if spot_val.metrics.rms_radius_um >= 5.0 {
+        return Err(
+            "Golden benchmark validation failed: Cooke Triplet spot RMS blur exceeds 5.0 um".into(),
+        );
+    }
+
+    // 10b. Plano-convex Petzval sum golden check
+    let plano_val = plano_convex_100mm()?.resolve(&catalog)?;
+    let seidel_plano = compute_seidel_coefficients(&plano_val, 0.0, LAMBDA_D_NM)?;
+    if (seidel_plano.petzval_sum - 0.006593).abs() / 0.006593 > 0.01 {
+        return Err("Golden benchmark validation failed: Plano-Convex Petzval sum error".into());
+    }
+
+    // 10c. Numerical Snell law vector cross-product invariant: n1 * (s x n) == n2 * (s' x n)
+    let n_in = 1.0;
+    let n_out = 1.5168;
+    let norm_vec = Vec3::new(0.0, 0.0, 1.0);
+    let ray_dir = Vec3::new(0.5, 0.0, -0.8660254037844386).normalize();
+    let refr_dir = snell_refract(ray_dir, norm_vec, n_in, n_out)?;
+    let cross_in = ray_dir.cross(&norm_vec) * n_in;
+    let cross_out = refr_dir.cross(&norm_vec) * n_out;
+    if (cross_in - cross_out).norm() > 1e-12 {
+        return Err("Vector Snell cross-product invariant failed".into());
+    }
+    let (rs, rp) = fresnel_dielectric(0.8660254037844386, n_in, n_out);
+    if ((rs + (1.0 - rs)) - 1.0).abs() > 1e-12 || ((rp + (1.0 - rp)) - 1.0).abs() > 1e-12 {
+        return Err("Fresnel energy conservation invariant failed".into());
+    }
+
+    // 10d. Normal unit length & non-finite input rejection
+    let surf_conic = ConicSurface::from_radius(100.0, -1.0, 25.0)?;
+    let hit_norm = conic_normal(Vec3::new(10.0, 0.0, 0.5), &surf_conic)?;
+    if (hit_norm.norm() - 1.0).abs() > 1e-12 {
+        return Err("Conic normal unit length invariant failed".into());
+    }
+    if conic_sag(f64::NAN, 0.01, 0.0).is_ok()
+        || snell_refract(Vec3::new(f64::NAN, 0.0, 1.0), norm_vec, 1.0, 1.5).is_ok()
+    {
+        return Err("Non-finite input rejection failed: expected Err on NaN input".into());
+    }
+
+    // 10e. Fuzzing parser resilience on extreme/malformed tokens
+    let malformed_zmx = "VERS 0\nSURF 1\n CURV NaN\n DISZ 1e99999\n DIAM Infinity\n";
+    let _ = optics_zemax::parse_zmx(malformed_zmx);
+    let malformed_seq = "TIT 'Malformed'\nSO 0\nS 1\nRDY NaN\nTHI 1e-99999\n";
+    let _ = parse_seq(malformed_seq);
+    let malformed_len = "LEN NEW\nSURF 1\nRD null\nTH undefined\n";
+    let _ = parse_len(malformed_len);
+
+    let elapsed_val = start_validation.elapsed();
+    println!(
+        "[PASS] Independent Golden Cross-Validation, Numerical Invariants & Robustness Fuzzing ({:.2} ms)",
+        elapsed_val.as_secs_f64() * 1000.0
+    );
+
     println!("============================================================");
-    println!("All 5 automated self-test suites passed successfully.");
+    println!("All 10 automated self-test suites passed successfully.");
     println!("============================================================");
     Ok(())
 }

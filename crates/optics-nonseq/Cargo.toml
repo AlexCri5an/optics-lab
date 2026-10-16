@@ -1,0 +1,24 @@
+[package]
+name        = "optics-nonseq"
+description = "Non-sequential optical ray tracing, 3D geometry primitives, radiometric detectors, and stray light analysis"
+version.workspace    = true
+edition.workspace    = true
+authors.workspace    = true
+license.workspace    = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+optics-core     = { workspace = true }
+optics-bvh      = { workspace = true }
+optics-spectral = { workspace = true }
+optics-glass    = { workspace = true }
+nalgebra        = { workspace = true }
+serde           = { workspace = true }
+serde_json      = { workspace = true }
+thiserror       = { workspace = true }
+
+[dev-dependencies]
+optics-zemax = { workspace = true }

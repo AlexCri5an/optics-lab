@@ -4,29 +4,7 @@ OpticsLab incorporates or links with the following third-party open-source compo
 
 ---
 
-## 1. Phosphor Icons
-
-- **Component**: Phosphor Icons (Regular weight)
-- **Crate**: `egui-phosphor` (v0.10.0)
-- **License**: MIT License
-- **Copyright**: (c) 2020–2024 Phosphor Icons (Helena Zhang & Tobias Fried)
-- **Repository**: https://github.com/phosphor-icons/core / https://github.com/amPerl/egui-phosphor
-- **License Text**: Located in `assets/PHOSPHOR_LICENSE`
-- **Usage**: Clean vector icon glyphs for scientific tools, viewports, modes, dialogs, and navigation controls.
-
----
-
-## 2. egui & eframe
-
-- **Component**: egui, eframe, epaint
-- **License**: MIT OR Apache-2.0
-- **Copyright**: (c) 2018–2025 Emil Ernerfeldt
-- **Repository**: https://github.com/emilk/egui
-- **Usage**: Immediate mode graphical user interface framework.
-
----
-
-## 3. wgpu
+## 1. wgpu
 
 - **Component**: wgpu, wgpu-core, wgpu-types, naga
 - **License**: MIT OR Apache-2.0
@@ -36,7 +14,7 @@ OpticsLab incorporates or links with the following third-party open-source compo
 
 ---
 
-## 4. nalgebra
+## 2. nalgebra
 
 - **Component**: nalgebra
 - **License**: Apache-2.0

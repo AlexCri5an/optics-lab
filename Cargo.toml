@@ -8,9 +8,12 @@ members = [
     "crates/optics-bvh",
     "crates/optics-zemax",
     "crates/optics-render",
-    "crates/optics-ui",
+    "crates/optics-optimize",
+    "crates/optics-tolerance",
+    "crates/optics-nonseq",
+    "crates/optics-engine",
+    "crates/optics-ffi",
     # Application targets
-    "apps/optics-lab",
     "apps/optics-cli",
 ]
 
@@ -18,7 +21,7 @@ members = [
 version     = "0.0.1"
 edition     = "2024"
 authors     = ["OpticsLab Contributors"]
-license     = "MIT"
+license     = "MIT OR Apache-2.0"
 repository  = "https://github.com/AlexCri5an/optics-lab"
 rust-version = "1.87"
 
@@ -60,12 +63,6 @@ wgpu       = { version = "25", features = ["fragile-send-sync-non-atomic-wasm"] 
 bytemuck   = { version = "1", features = ["derive"] }
 half       = "2"
 
-# UI
-egui          = "0.32"
-egui-wgpu     = { version = "0.32.3", default-features = false, features = ["fragile-send-sync-non-atomic-wasm"] }
-eframe        = { version = "0.32.3", default-features = false, features = ["wgpu", "default_fonts"] }
-egui-phosphor = { version = "0.10.0", default-features = false, features = ["regular"] }
-
 # Internal crates
 optics-core     = { path = "crates/optics-core" }
 optics-spectral = { path = "crates/optics-spectral" }
@@ -73,4 +70,9 @@ optics-glass    = { path = "crates/optics-glass" }
 optics-bvh      = { path = "crates/optics-bvh" }
 optics-zemax    = { path = "crates/optics-zemax" }
 optics-render   = { path = "crates/optics-render" }
-optics-ui       = { path = "crates/optics-ui" }
+optics-optimize = { path = "crates/optics-optimize" }
+optics-tolerance = { path = "crates/optics-tolerance" }
+optics-nonseq    = { path = "crates/optics-nonseq" }
+optics-engine    = { path = "crates/optics-engine" }
+optics-ffi       = { path = "crates/optics-ffi" }
+

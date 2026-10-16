@@ -6,11 +6,15 @@
 #![deny(missing_docs)]
 #![deny(unsafe_code)]
 
+pub mod agf;
 pub mod catalog;
 pub mod material;
+pub mod yaml_loader;
 
+pub use agf::parse_agf;
 pub use catalog::GlassCatalogDb;
 pub use material::{DispersionModel, GlassCatalog, GlassMaterial};
+pub use yaml_loader::parse_refractiveindex_yaml;
 
 #[cfg(test)]
 mod tests {
@@ -143,6 +147,34 @@ mod tests {
 
         // Blue deflects more than Yellow, which deflects more than Red
         assert!(delta_f > delta_d && delta_d > delta_c);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_search_by_nd_vd() -> TestResult {
+        let db = GlassCatalogDb::load_bundled()?;
+
+        // Search around N-BK7: nd in [1.51, 1.53], vd in [60.0, 66.0]
+        let results = db.search_by_nd_vd((1.51, 1.53), (60.0, 66.0));
+        assert!(!results.is_empty(), "Expected matches in N-BK7 region");
+        assert!(
+            results.iter().any(|g| g.name == "N-BK7"),
+            "Expected N-BK7 to be found"
+        );
+
+        for glass in &results {
+            assert!(glass.nd >= 1.51 && glass.nd <= 1.53);
+            assert!(glass.vd >= 60.0 && glass.vd <= 66.0);
+        }
+
+        // Test inverted range normalization
+        let results_inverted = db.search_by_nd_vd((1.53, 1.51), (66.0, 60.0));
+        assert_eq!(results.len(), results_inverted.len());
+
+        // Disjoint range test
+        let empty = db.search_by_nd_vd((3.0, 4.0), (10.0, 20.0));
+        assert!(empty.is_empty());
 
         Ok(())
     }

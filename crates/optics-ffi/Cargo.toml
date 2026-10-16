@@ -1,0 +1,22 @@
+[package]
+name        = "optics-ffi"
+description = "C FFI ABI boundary and foreign language integration library for OpticsLab"
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+optics-core   = { workspace = true }
+optics-glass  = { workspace = true }
+optics-zemax  = { workspace = true }
+optics-engine = { workspace = true }
+serde_json    = { workspace = true }
+
+[lints]
+workspace = true

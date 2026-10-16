@@ -9,9 +9,10 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-nalgebra  = { workspace = true }
-serde     = { workspace = true }
-thiserror = { workspace = true }
+nalgebra   = { workspace = true }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+thiserror  = { workspace = true }
 
 [lints]
 workspace = true

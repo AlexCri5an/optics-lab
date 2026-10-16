@@ -1,0 +1,25 @@
+[package]
+name        = "optics-engine"
+description = "High-level unified optical engine facade orchestrating all computational modules"
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+optics-core      = { workspace = true }
+optics-spectral  = { workspace = true }
+optics-glass     = { workspace = true }
+optics-bvh       = { workspace = true }
+optics-zemax     = { workspace = true }
+optics-optimize  = { workspace = true }
+optics-tolerance = { workspace = true }
+optics-nonseq    = { workspace = true }
+serde            = { workspace = true }
+serde_json       = { workspace = true }
+thiserror        = { workspace = true }
+
+[lints]
+workspace = true
