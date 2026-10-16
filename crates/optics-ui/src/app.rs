@@ -2734,10 +2734,10 @@ impl OpticsLabApp {
                 });
             });
     }
-}
-
-impl eframe::App for OpticsLabApp {
-    fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
+    /// Executes a complete UI update pass for the given egui context.
+    ///
+    /// Can be called directly in headless tests or by `eframe::App::update`.
+    pub fn update_ui(&mut self, ctx: &Context) {
         if !self.fonts_initialized {
             init_icon_fonts(ctx);
             self.fonts_initialized = true;
@@ -2805,6 +2805,12 @@ impl eframe::App for OpticsLabApp {
         for cmd in queued {
             self.dispatch(cmd, &mut platform);
         }
+    }
+}
+
+impl eframe::App for OpticsLabApp {
+    fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
+        self.update_ui(ctx);
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
