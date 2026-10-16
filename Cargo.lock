@@ -2355,6 +2355,8 @@ name = "optics-cli"
 version = "0.0.1"
 dependencies = [
  "clap",
+ "nalgebra",
+ "optics-bvh",
  "optics-core",
  "optics-glass",
  "optics-spectral",

@@ -10,6 +10,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 
 ### Added
 
+#### Phase 11 & Phase 14.1: CLI Diagnostic Tools & End-to-End Integration Suite (`optics-cli`, `optics-zemax`)
+- **Optical Glass Material Diagnostics (`optics-cli glass`):**
+  - Added `glass --name <name> [--json]` subcommand to inspect dispersion equations, Sellmeier resonance coefficients, and Fraunhofer line refractive indices ($F, d, C, e, g$).
+  - Outputs Abbe number $V_d$, principal/partial dispersion ratios, optical glass region classification (Crown vs Flint), visible spectrum table ($380\dots780\,\text{nm}$), and ASCII Abbe coordinate location.
+  - Supports full JSON structured output for automated pipelines.
+- **BVH Ray Traversal Benchmark (`optics-cli benchmark`):**
+  - Added `benchmark [--scene <scene>] [--rays <N>] [--json]` subcommand running multi-level BVH slab intersections against 3D optical meshes.
+  - Measures BVH build latency, total ray traversal duration, intersection hit rates, throughput in MRAYS/s, and average traversal latency in ns/ray.
+- **Spot Diagram CSV Export (`optics-cli analyze --csv`):**
+  - Added `--csv <path>` flag to `optics-cli analyze` exporting per-ray pupil and image coordinate data ($P_x, P_y, x, y, \text{intensity}, \lambda$) for external analysis.
+- **End-to-End Integration Test Suite (`crates/optics-zemax/tests/e2e_integration_tests.rs`):**
+  - `test_e2e_cooke_triplet_efl_within_0_1_percent`: Verifies that parsing canonical Cooke Triplet `.zmx` and calculating paraxial properties produces EFL within 0.1% of nominal 50.0 mm (verified 50.021 mm, 0.042% error).
+  - `test_e2e_cooke_triplet_spot_rms_under_50um`: Traces hexapolar spot diagram on Cooke Triplet at 0° field and asserts RMS blur radius $< 50\,\mu\text{m}$ (verified 4.70 µm).
+  - `test_e2e_round_trip_zmx_all_presets`: Verifies round-trip parse $\to$ write $\to$ parse across Cooke Triplet, Double Gauss, and Plano-Convex presets with identical optical surface geometries and materials.
+
 #### Phase 9.5 & 9.8: Glass Catalog Browser, Abbe Diagram & Interactive Widgets (`optics-ui`, `optics-glass`)
 - **Technical UI Widgets (`optics-ui::widgets`):**
   - `scrub_field`: Drag-to-edit numerical parameter field with fine/coarse drag sensitivity, hover state feedback, and boundary clamping.
