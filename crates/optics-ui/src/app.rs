@@ -170,8 +170,6 @@ pub struct OpticsLabApp {
     pub scene_tree_scene_open: bool,
     /// Prism sub-node expansion state.
     pub scene_tree_prism_open: bool,
-    /// Ground sub-node expansion state.
-    pub scene_tree_ground_open: bool,
     /// Selected object in scene tree.
     pub selected_scene_object: Option<String>,
     /// Active tab in the right inspector panel.
@@ -237,7 +235,6 @@ impl Default for OpticsLabApp {
             inspector_state: RayInspectorState::default(),
             scene_tree_scene_open: true,
             scene_tree_prism_open: true,
-            scene_tree_ground_open: false,
             selected_scene_object: Some("Prism".into()),
             right_panel_tab: default_right_tab,
             glass_db: GlassCatalogDb::load_bundled().ok(),
@@ -952,25 +949,14 @@ impl OpticsLabApp {
 
                             if self.scene_tree_prism_open {
                                 ui.indent("prism_children", |ui| {
-                                    if ui
-                                        .selectable_label(
-                                            self.selected_scene_object.as_deref()
-                                                == Some("Glass (BK7)"),
-                                            "Glass (BK7)",
-                                        )
-                                        .clicked()
-                                    {
-                                        self.selected_scene_object = Some("Glass (BK7)".into());
-                                    }
-                                    if ui
-                                        .selectable_label(
-                                            self.selected_scene_object.as_deref()
-                                                == Some("Material"),
-                                            "Material",
-                                        )
-                                        .clicked()
-                                    {
-                                        self.selected_scene_object = Some("Material".into());
+                                    let glass_label = format!("Glass ({})", self.sim.glass_name);
+                                    let is_glass_sel =
+                                        self.selected_scene_object.as_deref() == Some("Glass");
+                                    if ui.selectable_label(is_glass_sel, &glass_label).clicked() {
+                                        self.selected_scene_object = Some("Glass".into());
+                                        self.right_panel_tab = RightPanelTab::GlassCatalog;
+                                        self.glass_browser_state.selected_glass =
+                                            self.sim.glass_name.clone();
                                     }
                                 });
                             }
@@ -979,28 +965,11 @@ impl OpticsLabApp {
                             if ui
                                 .selectable_label(
                                     self.selected_scene_object.as_deref() == Some("Light"),
-                                    format!("{} Light", IconId::LightSource.glyph()),
+                                    format!("{} Collimated Beam", IconId::LightSource.glyph()),
                                 )
                                 .clicked()
                             {
                                 self.selected_scene_object = Some("Light".into());
-                            }
-
-                            // Ground (expandable)
-                            let ground_glyph = if self.scene_tree_ground_open {
-                                IconId::CaretDown.glyph()
-                            } else {
-                                IconId::CaretRight.glyph()
-                            };
-                            if ui
-                                .selectable_label(
-                                    self.selected_scene_object.as_deref() == Some("Ground"),
-                                    format!("{ground_glyph} Ground"),
-                                )
-                                .clicked()
-                            {
-                                self.scene_tree_ground_open = !self.scene_tree_ground_open;
-                                self.selected_scene_object = Some("Ground".into());
                             }
                         });
                     }
