@@ -33,3 +33,7 @@ dist/
 .trunk/
 **/.trunk/
 
+# OS artifacts
+.DS_Store
+**/.DS_Store
+

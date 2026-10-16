@@ -1,6 +1,6 @@
 # OpticsLab — Master Implementation Plan & Task List
 
-> **Status:** Phase 1 ✅ complete. Phase 2.1–2.6, 2.8–2.10 ✅ complete. Phase 3.1–3.4 ✅ complete. Phase 4.1–4.3 ✅ complete. Phase 5.1–5.3, 5.5 ✅ complete (Zemax .zmx parser, serializer, presets). Phase 6 ✅ complete (2-level BVH, SAH builder, GPU layout). Phase 7 ✅ complete (wgpu path tracer pipeline, WGSL shaders, headless tests). Phase 8.1–8.2 ✅ complete (Spot diagrams & ray fans). Phase 9.1, 9.3–9.8 ✅ complete (UI system, 3D viewport, glass catalog browser, Abbe diagram, widgets). Slices A, B, C, D core ✅ COMPLETE.
+> **Status:** Slice A (Prism Dispersion Demo) ✅ complete. Slice B (Lens Systems & Sequential Diagnostics) ✅ complete. Slice C (Acceleration, GPU Path Tracing) in progress (Phase 6 BVH & Phase 7 wgpu shaders complete; UI integration pending). Slice D (UI Overhaul, Themes, Full Catalog & Polish) active.
 >
 > Legend: `[ ]` = todo · `[x]` = done · `[~]` = in progress · `[-]` = deferred
 

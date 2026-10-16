@@ -43,3 +43,11 @@ OpticsLab is an open-source educational optics tool (Rust workspace, egui, optio
 ## Honesty rules
 - Never claim the UI "looks good" or "works" unless you ran it. If you cannot run a GUI, say so explicitly and list what remains unverified.
 - Report format: (1) summary, (2) files changed, (3) tests added (names), (4) gate results, (5) deviations from the request, (6) known issues, (7) proposed next step with acceptance criteria. Then stop and wait.
+
+
+## UI rules (added)
+- Visual style is defined in docs/ui-style.md ("Classic desktop"); do not deviate without updating that doc.
+- wgpu is allowed as a dev-dependency of optics-ui (snapshot tests only). Runtime wgpu in optics-ui only behind the Slice C GPU viewport.
+- No decorative or fake data anywhere in the UI. Every control either works, or is disabled with a tooltip saying why. Empty states say what is missing.
+- Every UI change must be verified by snapshot images that you open and look at. Never claim a visual result you did not see.
+- Icons are real assets (font or SVG files) with licenses listed in THIRD_PARTY_NOTICES.md. No icons drawn from ASCII/Unicode characters, no emoji, no Painter-drawn icons.
