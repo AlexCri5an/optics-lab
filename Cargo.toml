@@ -26,7 +26,7 @@ repository  = "https://github.com/AlexCri5an/optics-lab"
 rust-version = "1.87"
 
 # ---------------------------------------------------------------------------
-# Workspace-wide lint policy (VectorCraft zero-panic standard)
+# Workspace-wide lint policy (Zero-panic standard)
 # ---------------------------------------------------------------------------
 [workspace.lints.rust]
 unsafe_code = "deny"
