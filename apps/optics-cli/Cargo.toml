@@ -25,7 +25,6 @@ optics-engine    = { workspace = true }
 optics-ffi       = { workspace = true }
 nalgebra         = { workspace = true }
 clap             = { workspace = true }
-serde            = { workspace = true }
 serde_json       = { workspace = true }
 
 [lints]

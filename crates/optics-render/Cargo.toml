@@ -17,8 +17,6 @@ nalgebra    = { workspace = true }
 # also upgrading eframe.
 wgpu        = { workspace = true }
 bytemuck    = { workspace = true }
-half        = { workspace = true }
-serde       = { workspace = true }
 thiserror   = { workspace = true }
 
 [lints]

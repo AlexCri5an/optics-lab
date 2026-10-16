@@ -750,7 +750,6 @@ dependencies = [
  "bytemuck",
  "nalgebra",
  "optics-core",
- "serde",
 ]
 
 [[package]]
@@ -769,7 +768,6 @@ dependencies = [
  "optics-spectral",
  "optics-tolerance",
  "optics-zemax",
- "serde",
  "serde_json",
 ]
 
@@ -787,7 +785,6 @@ dependencies = [
 name = "optics-engine"
 version = "0.0.1"
 dependencies = [
- "optics-bvh",
  "optics-core",
  "optics-glass",
  "optics-nonseq",
@@ -804,10 +801,7 @@ dependencies = [
 name = "optics-ffi"
 version = "0.0.1"
 dependencies = [
- "optics-core",
  "optics-engine",
- "optics-glass",
- "optics-zemax",
  "serde_json",
 ]
 
@@ -819,7 +813,6 @@ dependencies = [
  "optics-spectral",
  "serde",
  "serde_json",
- "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -833,7 +826,6 @@ dependencies = [
  "optics-spectral",
  "optics-zemax",
  "serde",
- "serde_json",
  "thiserror 2.0.21",
 ]
 
@@ -846,7 +838,6 @@ dependencies = [
  "optics-glass",
  "optics-zemax",
  "serde",
- "serde_json",
  "thiserror 2.0.21",
 ]
 
@@ -855,11 +846,9 @@ name = "optics-render"
 version = "0.0.1"
 dependencies = [
  "bytemuck",
- "half",
  "nalgebra",
  "optics-bvh",
  "optics-core",
- "serde",
  "thiserror 2.0.21",
  "wgpu",
 ]
@@ -870,7 +859,6 @@ version = "0.0.1"
 dependencies = [
  "optics-core",
  "serde",
- "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -883,7 +871,6 @@ dependencies = [
  "optics-optimize",
  "optics-zemax",
  "serde",
- "serde_json",
  "thiserror 2.0.21",
 ]
 

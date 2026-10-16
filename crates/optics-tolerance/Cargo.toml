@@ -16,7 +16,6 @@ optics-glass    = { workspace = true }
 optics-optimize = { workspace = true }
 nalgebra        = { workspace = true }
 serde           = { workspace = true }
-serde_json      = { workspace = true }
 thiserror       = { workspace = true }
 
 [dev-dependencies]
