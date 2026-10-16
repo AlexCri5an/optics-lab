@@ -13,7 +13,12 @@ optics-core     = { workspace = true }
 optics-spectral = { workspace = true }
 optics-glass    = { workspace = true }
 optics-zemax    = { workspace = true }
+optics-bvh      = { workspace = true }
+optics-render   = { workspace = true }
+nalgebra        = { workspace = true }
 egui            = { workspace = true }
+egui-wgpu       = { workspace = true }
+wgpu            = { workspace = true }
 eframe          = { workspace = true, features = ["accesskit"] }
 egui-phosphor   = { workspace = true }
 serde           = { workspace = true }

@@ -237,6 +237,8 @@ pub struct OpticsLabApp {
     pub show_preferences: bool,
     /// Whether full screen viewport mode is active.
     pub is_fullscreen: bool,
+    /// Hardware-accelerated GPU viewport and path tracing state.
+    pub gpu_state: crate::viewport_3d::GpuViewportState,
     /// Per-frame UI registry tracking all interactive controls.
     pub ui_registry: crate::registry::UiRegistry,
 }
@@ -290,6 +292,7 @@ impl Default for OpticsLabApp {
             convergence_spp: 128,
             fonts_initialized: false,
             prefs,
+            gpu_state: crate::viewport_3d::GpuViewportState::default(),
             ui_registry: crate::registry::UiRegistry::default(),
         }
     }
@@ -314,6 +317,12 @@ impl OpticsLabApp {
         let system_is_dark = cc.egui_ctx.style().visuals.dark_mode;
         app.tokens = resolve_theme(app.prefs.theme, system_is_dark);
         app.fonts_initialized = true;
+
+        if let Some(wgpu_state) = &cc.wgpu_render_state {
+            app.gpu_state
+                .init_from_wgpu_render_state(wgpu_state, &app.sim);
+        }
+
         app
     }
 
@@ -1167,50 +1176,71 @@ impl OpticsLabApp {
 
                     ui.separator();
 
-                    // Mode
-                    let mode_str = match self.app_mode {
-                        AppMode::PrismDispersion => "Mode: Prism Dispersion",
-                        AppMode::LensSystem => "Mode: Lens System",
+                    // Real Render State
+                    let render_state_str = if self.gpu_state.is_paused {
+                        "Render: Paused"
+                    } else if self.gpu_state.sample_count >= self.gpu_state.target_spp as u64 {
+                        "Render: Converged"
+                    } else if self.gpu_state.is_available {
+                        "Render: Tracing"
+                    } else {
+                        "Render: Idle"
                     };
                     ui.label(
-                        egui::RichText::new(mode_str)
+                        egui::RichText::new(render_state_str)
                             .size(11.0)
                             .color(self.tokens.text_secondary),
                     );
 
-                    // Right items: units, ray count, zoom %
+                    ui.separator();
+
+                    // Real accumulated SPP
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "SPP: {}/{}",
+                            self.gpu_state.sample_count, self.gpu_state.target_spp
+                        ))
+                        .size(11.0)
+                        .color(self.tokens.text_secondary),
+                    );
+
+                    // Right items: units, GPU Adapter & Backend, FPS & Frame Time
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        let fps_str = format!(
+                            "{:.1} ms ({:.0} FPS)",
+                            self.gpu_state.last_frame_time_ms, self.gpu_state.measured_fps
+                        );
+                        ui.label(
+                            egui::RichText::new(fps_str)
+                                .size(11.0)
+                                .color(self.tokens.text_muted),
+                        );
+
+                        ui.separator();
+
+                        let gpu_info_str = format!(
+                            "GPU: {} ({})",
+                            self.gpu_state.adapter_name, self.gpu_state.backend_name
+                        );
+                        ui.label(
+                            egui::RichText::new(gpu_info_str)
+                                .size(11.0)
+                                .color(self.tokens.text_muted),
+                        );
+
+                        ui.separator();
+
+                        let scale_pct = (self.gpu_state.resolution_scale * 100.0).round() as i32;
+                        ui.label(
+                            egui::RichText::new(format!("Scale: {scale_pct}%"))
+                                .size(11.0)
+                                .color(self.tokens.text_muted),
+                        );
+
+                        ui.separator();
+
                         ui.label(
                             egui::RichText::new("Units: mm / nm")
-                                .size(11.0)
-                                .color(self.tokens.text_muted),
-                        );
-
-                        ui.separator();
-
-                        let zoom_pct = (self.prefs.ui_scale * 100.0).round() as i32;
-                        ui.label(
-                            egui::RichText::new(format!("Zoom: {zoom_pct}%"))
-                                .size(11.0)
-                                .color(self.tokens.text_muted),
-                        );
-
-                        ui.separator();
-
-                        let rays_label = match self.app_mode {
-                            AppMode::PrismDispersion => {
-                                format!("CPU ({} rays)", self.sim.rays.len())
-                            }
-                            AppMode::LensSystem => {
-                                if let Some(ref sim) = self.lens_sim {
-                                    format!("CPU ({} rays)", sim.cross_section_rays.len())
-                                } else {
-                                    "CPU (0 rays)".to_string()
-                                }
-                            }
-                        };
-                        ui.label(
-                            egui::RichText::new(rays_label)
                                 .size(11.0)
                                 .color(self.tokens.text_muted),
                         );
@@ -1414,24 +1444,14 @@ impl OpticsLabApp {
                         avail_rect,
                         &self.sim,
                         &self.tokens,
-                        &mut self.selected_ray_index,
-                        &mut self.hovered_ray_index,
-                        self.prefs.soft_glow,
+                        &mut self.gpu_state,
                     );
                 }
                 ViewportMode::View2D => {
                     if let Some(lens_sim) = &mut self.lens_sim {
                         render_lens_system_panel(ui, lens_sim, &mut self.lens_view, &self.tokens);
                     } else {
-                        render_viewport_3d(
-                            ui,
-                            avail_rect,
-                            &self.sim,
-                            &self.tokens,
-                            &mut self.selected_ray_index,
-                            &mut self.hovered_ray_index,
-                            self.prefs.soft_glow,
-                        );
+                        self.render_2d_prism_view(ui, avail_rect);
                     }
                 }
                 ViewportMode::Spectral => {
@@ -1445,6 +1465,183 @@ impl OpticsLabApp {
                 }
             }
         });
+    }
+
+    /// Renders the 2D plane-of-incidence cross-section view of the prism experiment.
+    fn render_2d_prism_view(&mut self, ui: &mut egui::Ui, screen_rect: Rect) {
+        let (response, painter) = ui.allocate_painter(screen_rect.size(), Sense::click_and_drag());
+
+        // Auto-fit bounds on first frame or on Reset view
+        if self.needs_fit && screen_rect.width() > 10.0 && screen_rect.height() > 10.0 {
+            self.view
+                .fit_to_rect(self.sim.bounds_world, screen_rect, 40.0);
+            self.needs_fit = false;
+        }
+
+        // Handle double-click for Reset view
+        if response.double_clicked() {
+            self.view
+                .fit_to_rect(self.sim.bounds_world, screen_rect, 40.0);
+        }
+
+        // Handle Pan: Middle-drag or Alt+Left-drag
+        if response.dragged() {
+            let (is_middle, is_alt) = ui.input(|i| (i.pointer.middle_down(), i.modifiers.alt));
+            if is_middle || is_alt {
+                self.view.pan_by_screen_delta(response.drag_delta());
+            }
+        }
+
+        // Handle Zoom: Cursor-centered scroll wheel
+        let scroll_delta = ui.input(|i| i.raw_scroll_delta.y);
+        if scroll_delta.abs() > 0.0 {
+            if let Some(cursor) = response.hover_pos() {
+                let factor = if scroll_delta > 0.0 { 1.1 } else { 0.909 };
+                self.view.zoom_at(factor, cursor, screen_rect);
+            }
+        }
+
+        // Convert ray polylines to screen space for rendering and hit testing
+        let mut screen_rays: Vec<Vec<Pos2>> = Vec::with_capacity(self.sim.rays.len());
+        for ray in &self.sim.rays {
+            let pts: Vec<Pos2> = ray
+                .points_world
+                .iter()
+                .map(|&p| self.view.world_to_screen(p, screen_rect))
+                .collect();
+            screen_rays.push(pts);
+        }
+
+        // Hit-test for hover
+        if let Some(cursor) = response.hover_pos() {
+            self.hovered_ray_index =
+                crate::hit_test::find_hovered_ray_index(cursor, &screen_rays, 8.0);
+        } else {
+            self.hovered_ray_index = None;
+        }
+
+        // Left-click to select ray (if in Select or RayProbe tool and not Alt-panning)
+        if response.clicked() && !ui.input(|i| i.modifiers.alt) {
+            if let Some(hovered) = self.hovered_ray_index {
+                self.selected_ray_index = Some(hovered);
+            } else {
+                self.selected_ray_index = None;
+            }
+        }
+
+        // Esc key deselects
+        if ui.input(|i| i.key_pressed(Key::Escape)) {
+            self.selected_ray_index = None;
+        }
+
+        // --- Painting 2D Scene ---
+        // 1. Canvas background
+        painter.rect_filled(screen_rect, CornerRadius::ZERO, self.tokens.canvas);
+
+        // 2. Prism polygon
+        let s_left = self.view.world_to_screen(self.sim.v_left, screen_rect);
+        let s_apex = self.view.world_to_screen(self.sim.v_apex, screen_rect);
+        let s_right = self.view.world_to_screen(self.sim.v_right, screen_rect);
+
+        let prism_points = vec![s_left, s_apex, s_right];
+        painter.add(egui::Shape::convex_polygon(
+            prism_points,
+            Color32::from_rgba_premultiplied(80, 140, 220, 28),
+            Stroke::new(2.0, Color32::from_rgb(0x4a, 0x80, 0xc0)),
+        ));
+
+        // 3. Incoming white D65 ray
+        let s_in_orig = self
+            .view
+            .world_to_screen(self.sim.incoming_origin, screen_rect);
+        let s_in_hit = self
+            .view
+            .world_to_screen(self.sim.incoming_hit, screen_rect);
+        painter.line_segment([s_in_orig, s_in_hit], Stroke::new(2.0, Color32::WHITE));
+        let label_pos = Pos2::new(s_in_orig.x - 12.0, s_in_orig.y - 12.0);
+        painter.text(
+            label_pos,
+            egui::Align2::CENTER_CENTER,
+            "D65 Beam",
+            egui::FontId::proportional(11.0),
+            self.tokens.text_secondary,
+        );
+
+        // 4. Spectral fan rays
+        for (i, pts) in screen_rays.iter().enumerate() {
+            if pts.len() < 2 {
+                continue;
+            }
+            let is_selected = self.selected_ray_index == Some(i);
+            let is_hovered = self.hovered_ray_index == Some(i);
+            let ray_data = &self.sim.rays[i];
+
+            let stroke_color =
+                crate::theme::ray_color_for_background(ray_data.wavelength_nm, self.tokens.canvas);
+
+            let stroke_width = if is_selected {
+                3.0
+            } else if is_hovered {
+                2.2
+            } else {
+                1.5
+            };
+
+            for window in pts.windows(2) {
+                painter.line_segment(
+                    [window[0], window[1]],
+                    Stroke::new(stroke_width, stroke_color),
+                );
+            }
+
+            // Draw reflected branches if enabled
+            if self.show_reflections {
+                for branch in &ray_data.reflected_branches {
+                    let b_start = self.view.world_to_screen(branch.start, screen_rect);
+                    let b_end = self.view.world_to_screen(branch.end, screen_rect);
+                    let alpha = branch.alpha;
+                    let branch_color = Color32::from_rgba_premultiplied(
+                        (f32::from(stroke_color.r()) * alpha) as u8,
+                        (f32::from(stroke_color.g()) * alpha) as u8,
+                        (f32::from(stroke_color.b()) * alpha) as u8,
+                        (alpha * 255.0) as u8,
+                    );
+                    painter.line_segment([b_start, b_end], Stroke::new(1.0, branch_color));
+                }
+            }
+        }
+
+        // 5. Watermark / 2D plane HUD
+        let hud_rect = Rect::from_min_size(
+            Pos2::new(screen_rect.min.x + 12.0, screen_rect.min.y + 12.0),
+            Vec2::new(220.0, 48.0),
+        );
+        painter.rect_filled(hud_rect, CornerRadius::same(3), self.tokens.panel_secondary);
+        painter.rect_stroke(
+            hud_rect,
+            CornerRadius::same(3),
+            Stroke::new(1.0, self.tokens.border),
+            StrokeKind::Inside,
+        );
+        painter.text(
+            Pos2::new(hud_rect.min.x + 8.0, hud_rect.min.y + 6.0),
+            egui::Align2::LEFT_TOP,
+            format!("2D Cross Section • {}", self.sim.glass_name),
+            egui::FontId::proportional(11.0),
+            self.tokens.text_primary,
+        );
+        painter.text(
+            Pos2::new(hud_rect.min.x + 8.0, hud_rect.min.y + 24.0),
+            egui::Align2::LEFT_TOP,
+            format!(
+                "α = {:.1}°  θi = {:.1}°  {} rays",
+                self.sim.apex_deg,
+                self.sim.incidence_deg,
+                self.sim.rays.len()
+            ),
+            egui::FontId::proportional(10.0),
+            self.tokens.text_secondary,
+        );
     }
 
     /// Dedicated full-screen spectral analysis workbench.

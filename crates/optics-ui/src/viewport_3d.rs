@@ -1,462 +1,559 @@
-//! 3D perspective viewport for realistic glass prism ray-tracing and spectral dispersion.
+//! Real hardware-accelerated 3D viewport powered by WebGPU / wgpu path tracing.
 //!
-//! Provides realistic perspective projection, physical glass refraction,
-//! multi-wavelength spectral fan dispersion, floor reflection grid, and coordinate gizmo.
+//! Provides progressive path tracing of physical glass dispersion, Sellmeier materials,
+//! GGX glossy reflection floor, full camera orbit/pan/zoom controls, and vector overlays.
 
-use egui::epaint::PathShape;
 use egui::{Color32, Pos2, Rect, Stroke, Vec2};
+use nalgebra::Matrix4;
+use optics_bvh::{Aabb, BlasInstance, BvhScene, Triangle};
+use optics_core::Vec3;
+use optics_render::{GpuContext, PathTracingRenderer, RenderMode, ThinLensCamera};
+use std::sync::{Arc, Mutex};
 
 use crate::sim::PrismSimulation;
-use crate::theme::{OpticsTokens, ray_color_for_background};
+use crate::theme::OpticsTokens;
 
-/// Represents a 3D point in world space.
-#[derive(Clone, Copy, Debug)]
-pub struct Vec3D {
-    /// X coordinate.
-    pub x: f32,
-    /// Y coordinate.
-    pub y: f32,
-    /// Z coordinate.
-    pub z: f32,
+/// Orbital camera model for 3D viewport navigation.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct OrbitCamera {
+    /// Azimuthal angle around target in radians.
+    pub yaw: f32,
+    /// Elevation angle in radians [-1.55, 1.55].
+    pub pitch: f32,
+    /// Distance from target in millimeters.
+    pub distance: f32,
+    /// Center point of focus [x, y, z] in mm.
+    pub target: [f32; 3],
+    /// Vertical field of view in degrees.
+    pub fov_deg: f32,
 }
 
-impl Vec3D {
-    /// Creates a new 3D vector.
-    pub const fn new(x: f32, y: f32, z: f32) -> Self {
-        Self { x, y, z }
-    }
-}
-
-/// Simple camera model for 3D perspective projection.
-#[derive(Clone, Copy, Debug)]
-pub struct Camera3D {
-    /// Eye position in world space.
-    pub eye: Vec3D,
-    /// Look-at target in world space.
-    pub target: Vec3D,
-    /// Field of view scaling factor.
-    pub fov_scale: f32,
-}
-
-impl Default for Camera3D {
+impl Default for OrbitCamera {
     fn default() -> Self {
         Self {
-            eye: Vec3D::new(-20.0, 140.0, -320.0),
-            target: Vec3D::new(-15.0, 15.0, 0.0),
-            fov_scale: 480.0,
+            yaw: 0.52,
+            pitch: 0.38,
+            distance: 280.0,
+            target: [-10.0, 35.0, 0.0],
+            fov_deg: 45.0,
         }
     }
 }
 
-impl Camera3D {
-    /// Projects a 3D world coordinate into 2D screen space relative to viewport center.
-    pub fn project(&self, pt: Vec3D, screen_center: Pos2) -> Pos2 {
-        // Simple orbital / look-at projection:
-        let dx = pt.x - self.target.x;
-        let dy = pt.y - self.target.y;
-        let dz = pt.z - self.target.z;
+impl OrbitCamera {
+    /// Computes the camera eye position in 3D world space.
+    #[must_use]
+    pub fn eye(&self) -> Vec3 {
+        let x = self.target[0] as f64
+            + (self.distance as f64) * (self.pitch as f64).cos() * (self.yaw as f64).sin();
+        let y = self.target[1] as f64 + (self.distance as f64) * (self.pitch as f64).sin();
+        let z = self.target[2] as f64
+            + (self.distance as f64) * (self.pitch as f64).cos() * (self.yaw as f64).cos();
+        Vec3::new(x, y, z)
+    }
 
-        // Yaw and pitch rotation relative to target
-        let yaw = 0.42_f32; // slight angle from the side
-        let pitch = 0.32_f32; // looking down at an angle
-
-        let x1 = dx * yaw.cos() - dz * yaw.sin();
-        let z1 = dx * yaw.sin() + dz * yaw.cos();
-
-        let y2 = dy * pitch.cos() - z1 * pitch.sin();
-        let z2 = dy * pitch.sin() + z1 * pitch.cos();
-
-        let depth = 380.0 + z2;
-        let scale = if depth > 10.0 {
-            self.fov_scale / depth
-        } else {
-            1.0
-        };
-
-        Pos2::new(
-            screen_center.x + x1 * scale,
-            screen_center.y - y2 * scale, // invert y for screen space
+    /// Converts to a [`ThinLensCamera`] for GPU path tracing.
+    #[must_use]
+    pub fn to_thin_lens_camera(&self) -> ThinLensCamera {
+        let eye = self.eye();
+        let target = Vec3::new(
+            self.target[0] as f64,
+            self.target[1] as f64,
+            self.target[2] as f64,
+        );
+        let dist = (eye - target).norm();
+        ThinLensCamera::new(
+            eye,
+            target,
+            Vec3::new(0.0, 1.0, 0.0),
+            self.fov_deg as f64,
+            0.0,
+            dist,
         )
+    }
+
+    /// Projects a 3D point into 2D viewport coordinates.
+    #[must_use]
+    pub fn project(&self, pt: [f32; 3], screen_center: Pos2, rect: Rect) -> Option<Pos2> {
+        let eye = self.eye();
+        let p_rel = [
+            pt[0] - eye.x as f32,
+            pt[1] - eye.y as f32,
+            pt[2] - eye.z as f32,
+        ];
+
+        let cos_y = self.yaw.cos();
+        let sin_y = self.yaw.sin();
+        let cos_p = self.pitch.cos();
+        let sin_p = self.pitch.sin();
+
+        let right = [cos_y, 0.0, -sin_y];
+        let forward = [-cos_p * sin_y, -sin_p, -cos_p * cos_y];
+        let up = [-sin_p * sin_y, cos_p, -sin_p * cos_y];
+
+        let depth = p_rel[0] * forward[0] + p_rel[1] * forward[1] + p_rel[2] * forward[2];
+        if depth <= 1.0 {
+            return None;
+        }
+
+        let fov_rad = (self.fov_deg * std::f32::consts::PI / 180.0) * 0.5;
+        let scale = (rect.height() * 0.5) / (fov_rad.tan() * depth);
+
+        let x = (p_rel[0] * right[0] + p_rel[1] * right[1] + p_rel[2] * right[2]) * scale;
+        let y = (p_rel[0] * up[0] + p_rel[1] * up[1] + p_rel[2] * up[2]) * scale;
+
+        Some(Pos2::new(screen_center.x + x, screen_center.y - y))
     }
 }
 
-/// Renders the 3D realistic glass prism viewport.
+/// Constructs a watertight 3D [`BvhScene`] representing the prism and glossy floor plane.
+#[must_use]
+pub fn build_prism_scene_bvh(sim: &PrismSimulation) -> BvhScene {
+    let half_apex_rad = (sim.apex_deg * 0.5).to_radians();
+    let base_width = 80.0;
+    let height = (base_width * 0.5) / half_apex_rad.tan().max(0.1);
+    let depth_half = 40.0;
+
+    let v_apex_front = Vec3::new(0.0, height, depth_half);
+    let v_left_front = Vec3::new(-base_width * 0.5, 0.0, depth_half);
+    let v_right_front = Vec3::new(base_width * 0.5, 0.0, depth_half);
+
+    let v_apex_back = Vec3::new(0.0, height, -depth_half);
+    let v_left_back = Vec3::new(-base_width * 0.5, 0.0, -depth_half);
+    let v_right_back = Vec3::new(base_width * 0.5, 0.0, -depth_half);
+
+    let prism_triangles = vec![
+        // Front face
+        Triangle::new(v_left_front, v_right_front, v_apex_front, 0),
+        // Back face
+        Triangle::new(v_right_back, v_left_back, v_apex_back, 0),
+        // Left entry face (2 triangles)
+        Triangle::new(v_left_back, v_left_front, v_apex_front, 0),
+        Triangle::new(v_left_back, v_apex_front, v_apex_back, 0),
+        // Right exit face (2 triangles)
+        Triangle::new(v_right_front, v_right_back, v_apex_front, 0),
+        Triangle::new(v_right_back, v_apex_back, v_apex_front, 0),
+        // Bottom face (2 triangles)
+        Triangle::new(v_left_front, v_left_back, v_right_front, 0),
+        Triangle::new(v_right_front, v_left_back, v_right_back, 0),
+    ];
+
+    // Floor plane (2 triangles, material 1)
+    let floor_size = 500.0;
+    let f0 = Vec3::new(-floor_size, -0.01, -floor_size);
+    let f1 = Vec3::new(floor_size, -0.01, -floor_size);
+    let f2 = Vec3::new(floor_size, -0.01, floor_size);
+    let f3 = Vec3::new(-floor_size, -0.01, floor_size);
+
+    let floor_triangles = vec![Triangle::new(f0, f1, f2, 1), Triangle::new(f0, f2, f3, 1)];
+
+    let prism_aabb = prism_triangles
+        .iter()
+        .fold(Aabb::empty(), |a, t| a.union(&t.aabb()));
+    let floor_aabb = floor_triangles
+        .iter()
+        .fold(Aabb::empty(), |a, t| a.union(&t.aabb()));
+
+    let mesh_geometries = vec![prism_triangles, floor_triangles];
+    let instances = vec![
+        BlasInstance::new(0, &prism_aabb, Matrix4::identity()),
+        BlasInstance::new(1, &floor_aabb, Matrix4::identity()),
+    ];
+
+    BvhScene::build(mesh_geometries, instances)
+}
+
+/// Dynamic GPU path tracer viewport state and real telemetry counters.
+#[derive(Debug)]
+pub struct GpuViewportState {
+    /// Physical GPU adapter brand/model.
+    pub adapter_name: String,
+    /// Active GPU graphics API backend (e.g. Metal, Vulkan, DX12, WebGPU).
+    pub backend_name: String,
+    /// Selected GPU device type (Discrete, Integrated, CPU).
+    pub device_type: String,
+    /// Whether hardware acceleration is successfully active.
+    pub is_available: bool,
+    /// Hardware validation error string if captured.
+    pub validation_error: Option<String>,
+    /// Accumulated sample count for the current scene configuration.
+    pub sample_count: u64,
+    /// Target sample count before convergence pausing.
+    pub target_spp: u32,
+    /// Whether rendering loop is paused.
+    pub is_paused: bool,
+    /// Super-sampling or sub-sampling scale factor.
+    pub resolution_scale: f32,
+    /// Active rendering diagnostic mode.
+    pub render_mode: RenderMode,
+    /// Whether bloom post-processing is enabled.
+    pub bloom_enabled: bool,
+    /// Monotonic duration of last frame in milliseconds.
+    pub last_frame_time_ms: f64,
+    /// Exponentially smoothed real frame rate.
+    pub measured_fps: f64,
+    /// Interactive orbital camera.
+    pub camera: OrbitCamera,
+    /// Path tracer pipeline instance.
+    pub renderer: Option<Arc<Mutex<PathTracingRenderer>>>,
+    /// Registered egui texture identifier for viewport blit.
+    pub egui_texture_id: Option<egui::TextureId>,
+}
+
+impl Default for GpuViewportState {
+    fn default() -> Self {
+        Self {
+            adapter_name: "Unavailable (Headless / WebGPU unsupported)".into(),
+            backend_name: "None".into(),
+            device_type: "Unknown".into(),
+            is_available: false,
+            validation_error: None,
+            sample_count: 0,
+            target_spp: 256,
+            is_paused: false,
+            resolution_scale: 1.0,
+            render_mode: RenderMode::Standard,
+            bloom_enabled: false,
+            last_frame_time_ms: 0.0,
+            measured_fps: 60.0,
+            camera: OrbitCamera::default(),
+            renderer: None,
+            egui_texture_id: None,
+        }
+    }
+}
+
+impl GpuViewportState {
+    /// Resets progressive path tracing sample accumulation.
+    pub fn reset_accumulation(&mut self) {
+        self.sample_count = 0;
+        if let Some(r) = &self.renderer {
+            if let Ok(mut lock) = r.lock() {
+                lock.reset_accumulation();
+            }
+        }
+    }
+
+    /// Initializes hardware acceleration using the given `eframe` wgpu render state.
+    pub fn init_from_wgpu_render_state(
+        &mut self,
+        wgpu_state: &egui_wgpu::RenderState,
+        sim: &PrismSimulation,
+    ) {
+        let adapter_info = wgpu_state.adapter.get_info();
+        self.adapter_name = adapter_info.name.clone();
+        self.backend_name = format!("{:?}", adapter_info.backend);
+        self.device_type = format!("{:?}", adapter_info.device_type);
+
+        let instance = wgpu::Instance::default();
+        let gpu_ctx = GpuContext::from_parts(
+            instance,
+            wgpu_state.adapter.clone(),
+            wgpu_state.device.clone(),
+            wgpu_state.queue.clone(),
+        );
+
+        let scene = build_prism_scene_bvh(sim);
+        let camera = self.camera.to_thin_lens_camera();
+        let initial_w = 800;
+        let initial_h = 600;
+
+        match PathTracingRenderer::new(
+            gpu_ctx,
+            &scene,
+            &camera,
+            initial_w,
+            initial_h,
+            wgpu_state.target_format,
+        ) {
+            Ok(renderer) => {
+                let tex_id = wgpu_state.renderer.write().register_native_texture(
+                    &wgpu_state.device,
+                    &renderer.display_target.view,
+                    wgpu::FilterMode::Linear,
+                );
+                self.renderer = Some(Arc::new(Mutex::new(renderer)));
+                self.egui_texture_id = Some(tex_id);
+                self.is_available = true;
+            }
+            Err(e) => {
+                self.validation_error = Some(format!("GPU Renderer initialization failed: {e}"));
+            }
+        }
+    }
+}
+
+/// Callback for executing path tracing passes inside `egui_wgpu`.
+struct PathTracerCallback {
+    renderer: Arc<Mutex<PathTracingRenderer>>,
+    width: u32,
+    height: u32,
+}
+
+impl egui_wgpu::CallbackTrait for PathTracerCallback {
+    fn prepare(
+        &self,
+        _device: &wgpu::Device,
+        _queue: &wgpu::Queue,
+        _screen_descriptor: &egui_wgpu::ScreenDescriptor,
+        _egui_encoder: &mut wgpu::CommandEncoder,
+        _callback_resources: &mut egui_wgpu::CallbackResources,
+    ) -> Vec<wgpu::CommandBuffer> {
+        if let Ok(mut r) = self.renderer.lock() {
+            r.resize(self.width, self.height);
+            r.render_frame();
+        }
+        Vec::new()
+    }
+
+    fn paint(
+        &self,
+        _info: egui::PaintCallbackInfo,
+        _render_pass: &mut wgpu::RenderPass<'static>,
+        _callback_resources: &egui_wgpu::CallbackResources,
+    ) {
+    }
+}
+
+/// Renders the real 3D hardware-accelerated viewport with camera orbit/pan/zoom and overlays.
+#[allow(clippy::too_many_lines)]
 pub fn render_viewport_3d(
     ui: &mut egui::Ui,
     rect: Rect,
     sim: &PrismSimulation,
     tokens: &OpticsTokens,
-    selected_ray: &mut Option<usize>,
-    hovered_ray: &mut Option<usize>,
-    soft_glow: bool,
+    gpu_state: &mut GpuViewportState,
 ) {
-    let painter = ui.painter_at(rect);
-    let center = rect.center();
-    let camera = Camera3D::default();
+    let ppp = ui.ctx().pixels_per_point();
+    let target_pixel_w = ((rect.width() * ppp * gpu_state.resolution_scale).round() as u32).max(64);
+    let target_pixel_h =
+        ((rect.height() * ppp * gpu_state.resolution_scale).round() as u32).max(64);
 
-    // 1. Flat Canvas Background (no decorative gradient/vignette)
-    painter.rect_filled(rect, egui::CornerRadius::ZERO, tokens.canvas);
+    let (response, painter) = ui.allocate_painter(rect.size(), egui::Sense::drag());
 
-    let is_light_canvas =
-        tokens.canvas.r() > 180 && tokens.canvas.g() > 180 && tokens.canvas.b() > 180;
+    // 1. Interactive orbital camera handling
+    let mut camera_moved = false;
 
-    // 2. Perspective Floor Grid using theme tokens
-    let grid_stroke = Stroke::new(1.0, tokens.grid);
-    let floor_y = -35.0;
+    if response.dragged_by(egui::PointerButton::Secondary)
+        || (response.dragged() && ui.input(|i| i.modifiers.alt))
+    {
+        let delta = response.drag_delta();
+        gpu_state.camera.yaw += delta.x * 0.008;
+        gpu_state.camera.pitch = (gpu_state.camera.pitch + delta.y * 0.008).clamp(-1.5, 1.5);
+        camera_moved = true;
+    }
 
-    // Longitudinal grid lines
-    for x_step in (-12..=12).step_by(2) {
-        let x = (x_step as f32) * 22.0;
-        let p_start = camera.project(Vec3D::new(x, floor_y, -260.0), center);
-        let p_end = camera.project(Vec3D::new(x, floor_y, 260.0), center);
-        if rect.contains(p_start) || rect.contains(p_end) {
-            painter.line_segment([p_start, p_end], grid_stroke);
+    if response.dragged_by(egui::PointerButton::Middle)
+        || (response.dragged() && ui.input(|i| i.modifiers.shift))
+    {
+        let delta = response.drag_delta();
+        let scale = gpu_state.camera.distance * 0.002;
+        gpu_state.camera.target[0] -= delta.x * scale;
+        gpu_state.camera.target[1] += delta.y * scale;
+        camera_moved = true;
+    }
+
+    if response.hovered() {
+        let scroll = ui.input(|i| i.smooth_scroll_delta.y);
+        if scroll.abs() > 0.1 {
+            gpu_state.camera.distance =
+                (gpu_state.camera.distance - scroll * 0.6).clamp(30.0, 900.0);
+            camera_moved = true;
         }
     }
 
-    // Transverse grid lines
-    for z_step in (-10..=12).step_by(2) {
-        let z = (z_step as f32) * 22.0;
-        let p_start = camera.project(Vec3D::new(-260.0, floor_y, z), center);
-        let p_end = camera.project(Vec3D::new(260.0, floor_y, z), center);
-        if rect.contains(p_start) || rect.contains(p_end) {
-            painter.line_segment([p_start, p_end], grid_stroke);
+    if camera_moved {
+        gpu_state.reset_accumulation();
+        if let Some(r) = &gpu_state.renderer {
+            if let Ok(mut lock) = r.lock() {
+                lock.update_camera(&gpu_state.camera.to_thin_lens_camera());
+            }
         }
+        ui.ctx().request_repaint();
     }
 
-    // 3. Prism 3D Geometry Definition
-    // An equilateral upright triangular prism
-    let prism_center_x = -25.0;
-    let prism_h = 95.0;
-    let prism_w = 85.0;
-    let depth_half = 42.0;
-
-    let v_top_f = Vec3D::new(prism_center_x, floor_y + prism_h, depth_half);
-    let v_bl_f = Vec3D::new(prism_center_x - prism_w * 0.5, floor_y, depth_half);
-    let v_br_f = Vec3D::new(prism_center_x + prism_w * 0.5, floor_y, depth_half);
-
-    let v_top_b = Vec3D::new(prism_center_x, floor_y + prism_h, -depth_half);
-    let v_bl_b = Vec3D::new(prism_center_x - prism_w * 0.5, floor_y, -depth_half);
-    let v_br_b = Vec3D::new(prism_center_x + prism_w * 0.5, floor_y, -depth_half);
-
-    let p_top_f = camera.project(v_top_f, center);
-    let p_bl_f = camera.project(v_bl_f, center);
-    let p_br_f = camera.project(v_br_f, center);
-
-    let p_top_b = camera.project(v_top_b, center);
-    let p_bl_b = camera.project(v_bl_b, center);
-    let p_br_b = camera.project(v_br_b, center);
-
-    // Floor contact shadow / reflection under prism
-    let shadow_pts = vec![p_bl_f, p_br_f, p_br_b, p_bl_b];
-    painter.add(PathShape::convex_polygon(
-        shadow_pts,
-        Color32::from_rgba_premultiplied(10, 16, 24, 140),
-        Stroke::NONE,
-    ));
-
-    // Back face (transparent glass)
-    painter.add(PathShape::convex_polygon(
-        vec![p_top_b, p_br_b, p_bl_b],
-        Color32::from_rgba_premultiplied(18, 28, 42, 60),
-        Stroke::new(1.0, Color32::from_rgba_premultiplied(50, 75, 105, 50)),
-    ));
-
-    // Base face
-    painter.add(PathShape::convex_polygon(
-        vec![p_bl_f, p_br_f, p_br_b, p_bl_b],
-        Color32::from_rgba_premultiplied(15, 24, 36, 75),
-        Stroke::new(1.0, Color32::from_rgba_premultiplied(60, 90, 120, 50)),
-    ));
-
-    // Left slanted entrance face
-    painter.add(PathShape::convex_polygon(
-        vec![p_top_b, p_top_f, p_bl_f, p_bl_b],
-        Color32::from_rgba_premultiplied(22, 34, 50, 80),
-        Stroke::new(1.0, Color32::from_rgba_premultiplied(85, 120, 160, 80)),
-    ));
-
-    // 4. Incident Ray (contrasting against canvas)
-    let inc_start_3d = Vec3D::new(prism_center_x - 170.0, floor_y + 42.0, 0.0);
-    let hit_enter_3d = Vec3D::new(prism_center_x - prism_w * 0.28, floor_y + 49.0, 0.0);
-
-    let p_inc_start = camera.project(inc_start_3d, center);
-    let p_hit_enter = camera.project(hit_enter_3d, center);
-
-    let incident_color = if is_light_canvas {
-        Color32::from_rgb(45, 52, 65)
-    } else {
-        Color32::WHITE
-    };
-
-    if soft_glow {
-        painter.line_segment(
-            [p_inc_start, p_hit_enter],
-            Stroke::new(
-                4.5,
-                Color32::from_rgba_premultiplied(
-                    incident_color.r(),
-                    incident_color.g(),
-                    incident_color.b(),
-                    40,
-                ),
-            ),
-        );
-        painter.line_segment(
-            [p_inc_start, p_hit_enter],
-            Stroke::new(
-                2.0,
-                Color32::from_rgba_premultiplied(
-                    incident_color.r(),
-                    incident_color.g(),
-                    incident_color.b(),
-                    160,
-                ),
-            ),
-        );
-        painter.circle_filled(
-            p_hit_enter,
-            4.0,
-            Color32::from_rgba_premultiplied(
-                incident_color.r(),
-                incident_color.g(),
-                incident_color.b(),
-                120,
-            ),
-        );
-    }
-    painter.line_segment([p_inc_start, p_hit_enter], Stroke::new(1.5, incident_color));
-    painter.circle_filled(p_hit_enter, 2.0, incident_color);
-
-    // 5. Internal and Emerging Spectral Ray Fan
-    let ray_count = sim.rays.len().max(16);
-    let mouse_pos = ui.ctx().pointer_hover_pos();
-    let mut closest_idx = None;
-    let mut min_dist = 16.0;
-
-    for (idx, ray) in sim.rays.iter().enumerate() {
-        let t = idx as f32 / (ray_count.max(1) - 1) as f32;
-        let color = ray_color_for_background(ray.wavelength_nm, tokens.canvas);
-
-        // Dispersed exit point along right face (internal ray)
-        let hit_exit_3d = Vec3D::new(
-            prism_center_x + prism_w * (0.24 + t * 0.06),
-            floor_y + 44.0 - t * 6.0,
-            (t - 0.5) * 12.0,
-        );
-        let p_hit_exit = camera.project(hit_exit_3d, center);
-
-        // Internal refracted ray
-        let internal_alpha = if is_light_canvas { 180 } else { 140 };
-        let internal_color =
-            Color32::from_rgba_premultiplied(color.r(), color.g(), color.b(), internal_alpha);
-        painter.line_segment([p_hit_enter, p_hit_exit], Stroke::new(1.2, internal_color));
-
-        // External dispersed spectral ray projecting rightwards and spreading
-        let spread_angle = (t - 0.5) * 0.22;
-        let ray_len = 240.0;
-        let fan_end_3d = Vec3D::new(
-            hit_exit_3d.x + ray_len * 0.95,
-            hit_exit_3d.y - ray_len * (0.15 + t * 0.12),
-            hit_exit_3d.z + ray_len * spread_angle * 0.4,
-        );
-        let p_fan_end = camera.project(fan_end_3d, center);
-
-        let is_selected = *selected_ray == Some(idx);
-        let is_hovered = *hovered_ray == Some(idx);
-
-        // Crisp lines by default, width & markers on hover/selected
-        let (stroke_w, glow_w, alpha_glow) = if is_selected {
-            (2.4, 6.0, 160)
-        } else if is_hovered {
-            (2.0, 5.0, 120)
+    // 2. Hardware Path Tracing presentation
+    if gpu_state.is_available && gpu_state.renderer.is_some() {
+        let renderer_arc = if let Some(r) = &gpu_state.renderer {
+            r.clone()
         } else {
-            (1.5, 3.5, 60)
+            return;
         };
 
-        if soft_glow {
-            let glow_color =
-                Color32::from_rgba_premultiplied(color.r(), color.g(), color.b(), alpha_glow);
-            painter.line_segment([p_hit_exit, p_fan_end], Stroke::new(glow_w, glow_color));
+        // Execute frame pass if active and not paused
+        if !gpu_state.is_paused && gpu_state.sample_count < gpu_state.target_spp as u64 {
+            let start = std::time::Instant::now();
+            if let Ok(mut r) = renderer_arc.lock() {
+                r.render_mode = gpu_state.render_mode;
+                r.resize(target_pixel_w, target_pixel_h);
+                r.render_frame();
+                gpu_state.sample_count = r.get_sample_count();
+            }
+            let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
+            gpu_state.last_frame_time_ms = elapsed_ms;
+            if elapsed_ms > 0.0 {
+                let current_fps = 1000.0 / elapsed_ms;
+                gpu_state.measured_fps = gpu_state.measured_fps * 0.9 + current_fps * 0.1;
+            }
+            ui.ctx().request_repaint();
         }
-        // Sharp core ray
-        painter.line_segment([p_hit_exit, p_fan_end], Stroke::new(stroke_w, color));
 
-        // Markers for selection and hover (differing by markers + width, not color alone)
-        if is_selected {
-            painter.circle_filled(p_hit_exit, 2.5, color);
-            painter.circle_filled(p_fan_end, 3.2, color);
-        } else if is_hovered {
-            painter.circle_filled(p_hit_exit, 2.0, color);
-            painter.circle_filled(p_fan_end, 2.5, color);
-        }
-
-        if soft_glow {
-            // Floor light projection strip
-            let floor_proj_end =
-                camera.project(Vec3D::new(fan_end_3d.x, floor_y, fan_end_3d.z), center);
-            let floor_alpha = alpha_glow / 4;
-            painter.line_segment(
-                [p_hit_exit, floor_proj_end],
-                Stroke::new(
-                    1.0,
-                    Color32::from_rgba_premultiplied(color.r(), color.g(), color.b(), floor_alpha),
-                ),
+        // Draw texture if registered
+        if let Some(tex_id) = gpu_state.egui_texture_id {
+            painter.image(
+                tex_id,
+                rect,
+                Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(1.0, 1.0)),
+                Color32::WHITE,
             );
         }
 
-        // Hit testing for ray inspection
-        if let Some(pos) = mouse_pos {
-            let d_mid = (pos - (p_hit_exit + (p_fan_end - p_hit_exit) * 0.5)).length();
-            if d_mid < min_dist {
-                min_dist = d_mid;
-                closest_idx = Some(idx);
-            }
-        }
+        // Add egui_wgpu callback to integrate into the render loop
+        painter.add(egui_wgpu::Callback::new_paint_callback(
+            rect,
+            PathTracerCallback {
+                renderer: renderer_arc,
+                width: target_pixel_w,
+                height: target_pixel_h,
+            },
+        ));
+    } else {
+        // Fallback for headless environments or unsupported WebGPU
+        painter.rect_filled(rect, egui::CornerRadius::ZERO, tokens.canvas);
+
+        let msg = if let Some(err) = &gpu_state.validation_error {
+            err.as_str()
+        } else {
+            "3D Viewport: WebGPU hardware acceleration is not active.\nUse Chrome 113+ / Edge with WebGPU enabled or native desktop build."
+        };
+
+        painter.text(
+            rect.center(),
+            egui::Align2::CENTER_CENTER,
+            msg,
+            egui::FontId::proportional(13.0),
+            tokens.text_secondary,
+        );
     }
 
-    // Update hovered ray index
-    *hovered_ray = closest_idx;
-    if ui.input(|i| i.pointer.primary_clicked()) && closest_idx.is_some() {
-        *selected_ray = closest_idx;
-    }
+    // 3. Viewport vector overlays
+    render_viewport_overlays(&painter, rect, tokens, gpu_state, sim);
+}
 
-    // Right slanted exit face (rendered in front of internal rays for depth)
-    painter.add(PathShape::convex_polygon(
-        vec![p_top_f, p_top_b, p_br_b, p_br_f],
-        Color32::from_rgba_premultiplied(26, 40, 58, 85),
-        Stroke::new(1.2, Color32::from_rgba_premultiplied(140, 185, 230, 95)),
-    ));
+/// Renders orientation axis gizmo and live telemetry tags over the viewport.
+fn render_viewport_overlays(
+    painter: &egui::Painter,
+    rect: Rect,
+    tokens: &OpticsTokens,
+    gpu_state: &GpuViewportState,
+    sim: &PrismSimulation,
+) {
+    // A. 3D Coordinate Axis Orientation Gizmo in bottom-left
+    let gizmo_center = Pos2::new(rect.left() + 45.0, rect.bottom() - 45.0);
+    let cos_y = gpu_state.camera.yaw.cos();
+    let sin_y = gpu_state.camera.yaw.sin();
+    let cos_p = gpu_state.camera.pitch.cos();
+    let sin_p = gpu_state.camera.pitch.sin();
 
-    // Front triangular face
-    painter.add(PathShape::convex_polygon(
-        vec![p_top_f, p_br_f, p_bl_f],
-        Color32::from_rgba_premultiplied(32, 48, 70, 70),
-        Stroke::new(1.2, Color32::from_rgba_premultiplied(160, 205, 245, 110)),
-    ));
+    let right = [cos_y, 0.0, -sin_y];
+    let up = [-sin_p * sin_y, cos_p, -sin_p * cos_y];
 
-    // Front specular ridge highlight (white crest reflection)
-    painter.line_segment(
-        [p_top_f, p_top_b],
-        Stroke::new(1.6, Color32::from_rgba_premultiplied(255, 255, 255, 180)),
-    );
-    painter.line_segment(
-        [p_top_f, p_bl_f],
-        Stroke::new(1.2, Color32::from_rgba_premultiplied(220, 240, 255, 140)),
-    );
-    painter.line_segment(
-        [p_top_f, p_br_f],
-        Stroke::new(1.5, Color32::from_rgba_premultiplied(240, 250, 255, 190)),
-    );
-
-    // 6. Coordinate Axes Gizmo in lower-left corner
-    let gizmo_origin = Pos2::new(rect.left() + 45.0, rect.bottom() - 40.0);
-    let axis_len = 24.0;
+    let axis_len = 28.0;
 
     // X axis (Red)
-    let p_x = gizmo_origin + Vec2::new(axis_len * 0.9, axis_len * 0.2);
+    let p_x = Pos2::new(
+        gizmo_center.x + right[0] * axis_len,
+        gizmo_center.y - up[0] * axis_len,
+    );
     painter.line_segment(
-        [gizmo_origin, p_x],
-        Stroke::new(1.8, Color32::from_rgb(0xff, 0x52, 0x52)),
+        [gizmo_center, p_x],
+        Stroke::new(2.0, Color32::from_rgb(220, 60, 60)),
     );
     painter.text(
-        p_x + Vec2::new(5.0, -1.0),
-        egui::Align2::LEFT_CENTER,
+        p_x,
+        egui::Align2::CENTER_CENTER,
         "X",
-        egui::FontId::proportional(11.0),
-        Color32::from_rgb(0xff, 0x52, 0x52),
-    );
-
-    // Y axis (Green, Up)
-    let p_y = gizmo_origin + Vec2::new(0.0, -axis_len);
-    painter.line_segment(
-        [gizmo_origin, p_y],
-        Stroke::new(1.8, Color32::from_rgb(0x69, 0xf0, 0xae)),
-    );
-    painter.text(
-        p_y + Vec2::new(0.0, -6.0),
-        egui::Align2::CENTER_BOTTOM,
-        "Y",
-        egui::FontId::proportional(11.0),
-        Color32::from_rgb(0x69, 0xf0, 0xae),
-    );
-
-    // Z axis (Blue, Depth)
-    let p_z = gizmo_origin + Vec2::new(-axis_len * 0.65, axis_len * 0.45);
-    painter.line_segment(
-        [gizmo_origin, p_z],
-        Stroke::new(1.8, Color32::from_rgb(0x44, 0x8a, 0xff)),
-    );
-    painter.text(
-        p_z + Vec2::new(-6.0, 2.0),
-        egui::Align2::RIGHT_CENTER,
-        "Z",
-        egui::FontId::proportional(11.0),
-        Color32::from_rgb(0x44, 0x8a, 0xff),
-    );
-
-    // 7. Classic CAD Scale Bar in lower-right corner
-    let scale_len_px = 75.0;
-    let scale_origin = Pos2::new(rect.right() - scale_len_px - 28.0, rect.bottom() - 32.0);
-    let scale_end = Pos2::new(scale_origin.x + scale_len_px, scale_origin.y);
-    let scale_stroke = Stroke::new(1.0, tokens.text_secondary);
-
-    painter.line_segment([scale_origin, scale_end], scale_stroke);
-    painter.line_segment(
-        [
-            Pos2::new(scale_origin.x, scale_origin.y - 3.5),
-            Pos2::new(scale_origin.x, scale_origin.y + 3.5),
-        ],
-        scale_stroke,
-    );
-    painter.line_segment(
-        [
-            Pos2::new(scale_end.x, scale_end.y - 3.5),
-            Pos2::new(scale_end.x, scale_end.y + 3.5),
-        ],
-        scale_stroke,
-    );
-    painter.text(
-        Pos2::new(scale_origin.x + scale_len_px * 0.5, scale_origin.y - 6.0),
-        egui::Align2::CENTER_BOTTOM,
-        "50 mm",
         egui::FontId::monospace(10.0),
-        tokens.text_secondary,
+        Color32::from_rgb(220, 60, 60),
     );
 
-    // 8. Classic Wavelength Legend Bar centered near bottom
-    let legend_width = (rect.width() * 0.42).clamp(220.0, 440.0);
-    let legend_rect = Rect::from_center_size(
-        Pos2::new(rect.center().x, rect.bottom() - 28.0),
-        Vec2::new(legend_width, 24.0),
+    // Y axis (Green)
+    let p_y = Pos2::new(
+        gizmo_center.x + right[1] * axis_len,
+        gizmo_center.y - up[1] * axis_len,
     );
-    if legend_rect.width() > 120.0 && legend_rect.top() > rect.top() + 80.0 {
-        crate::legend::draw_wavelength_legend(
-            &painter,
-            legend_rect,
-            &sim.rays,
-            *selected_ray,
-            tokens,
-        );
+    painter.line_segment(
+        [gizmo_center, p_y],
+        Stroke::new(2.0, Color32::from_rgb(60, 200, 60)),
+    );
+    painter.text(
+        p_y,
+        egui::Align2::CENTER_CENTER,
+        "Y",
+        egui::FontId::monospace(10.0),
+        Color32::from_rgb(60, 200, 60),
+    );
 
-        if ui.input(|i| i.pointer.primary_clicked()) {
-            if let Some(pos) = mouse_pos {
-                if legend_rect.contains(pos) {
-                    let clicked = crate::legend::find_closest_ray_by_x(
-                        pos.x,
-                        legend_rect.min.x,
-                        legend_rect.max.x,
-                        &sim.rays,
-                    );
-                    if clicked.is_some() {
-                        *selected_ray = clicked;
-                    }
-                }
-            }
-        }
-    }
+    // Z axis (Blue)
+    let p_z = Pos2::new(
+        gizmo_center.x + right[2] * axis_len,
+        gizmo_center.y - up[2] * axis_len,
+    );
+    painter.line_segment(
+        [gizmo_center, p_z],
+        Stroke::new(2.0, Color32::from_rgb(60, 120, 240)),
+    );
+    painter.text(
+        p_z,
+        egui::Align2::CENTER_CENTER,
+        "Z",
+        egui::FontId::monospace(10.0),
+        Color32::from_rgb(60, 120, 240),
+    );
 
-    // 9. Edge-State Notice Banner near top of canvas
+    // B. Live Telemetry Tag in top-left
+    let status_str = if gpu_state.is_paused {
+        "PAUSED"
+    } else if gpu_state.sample_count >= gpu_state.target_spp as u64 {
+        "CONVERGED"
+    } else {
+        "TRACING"
+    };
+
+    let tag_text = format!(
+        "{} | SPP: {}/{} | {:.1} ms ({:.0} FPS)",
+        status_str,
+        gpu_state.sample_count,
+        gpu_state.target_spp,
+        gpu_state.last_frame_time_ms,
+        gpu_state.measured_fps
+    );
+
+    let tag_rect = Rect::from_min_size(
+        Pos2::new(rect.left() + 10.0, rect.top() + 10.0),
+        Vec2::new(280.0, 22.0),
+    );
+
+    painter.rect_filled(
+        tag_rect,
+        egui::CornerRadius::same(2),
+        Color32::from_rgba_unmultiplied(10, 12, 16, 200),
+    );
+    painter.rect_stroke(
+        tag_rect,
+        egui::CornerRadius::same(2),
+        Stroke::new(1.0, tokens.border_subtle),
+        egui::StrokeKind::Inside,
+    );
+    painter.text(
+        Pos2::new(tag_rect.left() + 8.0, tag_rect.center().y),
+        egui::Align2::LEFT_CENTER,
+        tag_text,
+        egui::FontId::monospace(10.5),
+        tokens.text_primary,
+    );
+
+    // C. Physical Edge Condition Banner (TIR warning)
     let edge_state = sim.detect_edge_state();
     if edge_state != crate::sim::EdgeState::Normal {
         let banner_text = match edge_state {

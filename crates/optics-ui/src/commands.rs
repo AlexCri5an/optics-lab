@@ -122,6 +122,10 @@ pub enum Command {
     LoadProject(Vec<u8>),
     /// Dismiss open modal, clear active selection, or exit fullscreen.
     DismissModalOrSelection,
+    /// Toggle progressive render loop pause.
+    ToggleRenderPause,
+    /// Reset GPU path tracing progressive accumulation.
+    ResetAccumulation,
     /// Exit the application.
     Quit,
 }
@@ -197,6 +201,8 @@ impl Command {
             Self::SaveProject => "save_project",
             Self::LoadProject(_) => "load_project",
             Self::DismissModalOrSelection => "dismiss_modal_or_selection",
+            Self::ToggleRenderPause => "toggle_render_pause",
+            Self::ResetAccumulation => "reset_accumulation",
             Self::Quit => "quit",
         }
     }
@@ -260,6 +266,8 @@ impl Command {
             Self::SaveProject => "Save project...",
             Self::LoadProject(_) => "Load project...",
             Self::DismissModalOrSelection => "Dismiss",
+            Self::ToggleRenderPause => "Pause / resume path tracing",
+            Self::ResetAccumulation => "Reset accumulation",
             Self::Quit => "Quit OpticsLab",
         }
     }
@@ -375,6 +383,8 @@ impl Command {
             Self::SaveProject => Effect::FileSaved("scene.json"),
             Self::LoadProject(_) => Effect::FileLoaded("project.json"),
             Self::DismissModalOrSelection => Effect::StateChanged("dismiss"),
+            Self::ToggleRenderPause => Effect::StateChanged("render_paused"),
+            Self::ResetAccumulation => Effect::RenderAccumulationReset,
             Self::Quit => Effect::ViewportCommandIssued,
         }
     }
@@ -659,6 +669,14 @@ pub fn dispatch(app: &mut OpticsLabApp, cmd: Command, platform: &mut dyn Platfor
                 platform.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
                 effects.push(Effect::ViewportCommandIssued);
             }
+        }
+        Command::ToggleRenderPause => {
+            app.gpu_state.is_paused = !app.gpu_state.is_paused;
+            effects.push(Effect::StateChanged("render_paused"));
+        }
+        Command::ResetAccumulation => {
+            app.gpu_state.reset_accumulation();
+            effects.push(Effect::RenderAccumulationReset);
         }
         Command::Quit => {
             platform.send_viewport_cmd(egui::ViewportCommand::Close);

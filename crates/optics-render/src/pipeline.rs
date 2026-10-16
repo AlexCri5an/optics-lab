@@ -8,7 +8,7 @@ use crate::bvh_upload::BvhBuffer;
 use crate::camera::ThinLensCamera;
 use crate::context::GpuContext;
 use crate::error::RenderError;
-use crate::shaders::PATH_TRACER_WGSL;
+use crate::shaders::{PATH_TRACER_WGSL, TONEMAPPING_WGSL};
 use crate::target::{RenderTarget, ToneMapTarget};
 
 /// Diagnostic rendering modes selectable in the UI.
@@ -49,14 +49,26 @@ pub struct PathTracingRenderer {
     pub compute_pipeline: wgpu::ComputePipeline,
     /// Compute pass bind group.
     pub compute_bind_group: wgpu::BindGroup,
+    /// Compute pass bind group layout.
+    pub compute_bind_group_layout: wgpu::BindGroupLayout,
     /// Camera uniform buffer.
     pub camera_buffer: wgpu::Buffer,
     /// Render parameters uniform buffer.
     pub params_buffer: wgpu::Buffer,
+    /// Progressive accumulation storage buffer.
+    pub accum_buffer: wgpu::Buffer,
     /// HDR Accumulation render target.
     pub accumulation_target: RenderTarget,
     /// Tone-mapped display target.
     pub display_target: ToneMapTarget,
+    /// Tonemapping render pipeline.
+    pub tonemap_pipeline: wgpu::RenderPipeline,
+    /// Tonemapping bind group.
+    pub tonemap_bind_group: wgpu::BindGroup,
+    /// Tonemapping bind group layout.
+    pub tonemap_bind_group_layout: wgpu::BindGroupLayout,
+    /// Configured display target texture format.
+    pub display_format: wgpu::TextureFormat,
     /// Number of accumulated samples.
     pub sample_count: u64,
     /// Monotonic frame counter.
@@ -109,6 +121,16 @@ impl PathTracingRenderer {
                 contents: bytemuck::bytes_of(&initial_params),
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
+
+        let accum_size = (width.max(1) as u64) * (height.max(1) as u64) * 16;
+        let accum_buffer = context.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("HDR Accumulation Storage Buffer"),
+            size: accum_size.max(64),
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
 
         let compute_shader = context
             .device
@@ -173,6 +195,16 @@ impl PathTracingRenderer {
                             },
                             count: None,
                         },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 5,
+                            visibility: wgpu::ShaderStages::COMPUTE,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: false },
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
                     ],
                 });
 
@@ -202,6 +234,10 @@ impl PathTracingRenderer {
                         binding: 4,
                         resource: wgpu::BindingResource::TextureView(&accumulation_target.view),
                     },
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: accum_buffer.as_entire_binding(),
+                    },
                 ],
             });
 
@@ -226,15 +262,98 @@ impl PathTracingRenderer {
                     cache: None,
                 });
 
+        // Tonemapping presentation pipeline
+        let tonemap_shader = context
+            .device
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("Tonemapping Shader Module"),
+                source: wgpu::ShaderSource::Wgsl(TONEMAPPING_WGSL.into()),
+            });
+
+        let tonemap_bind_group_layout =
+            context
+                .device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("Tonemapping Bind Group Layout"),
+                    entries: &[wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    }],
+                });
+
+        let tonemap_bind_group = context
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Tonemapping Bind Group"),
+                layout: &tonemap_bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&accumulation_target.view),
+                }],
+            });
+
+        let tonemap_pipeline_layout =
+            context
+                .device
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("Tonemapping Pipeline Layout"),
+                    bind_group_layouts: &[&tonemap_bind_group_layout],
+                    push_constant_ranges: &[],
+                });
+
+        let tonemap_pipeline =
+            context
+                .device
+                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some("Tonemapping Render Pipeline"),
+                    layout: Some(&tonemap_pipeline_layout),
+                    vertex: wgpu::VertexState {
+                        module: &tonemap_shader,
+                        entry_point: Some("vs_main"),
+                        buffers: &[],
+                        compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    },
+                    fragment: Some(wgpu::FragmentState {
+                        module: &tonemap_shader,
+                        entry_point: Some("fs_main"),
+                        targets: &[Some(wgpu::ColorTargetState {
+                            format: display_format,
+                            blend: Some(wgpu::BlendState::REPLACE),
+                            write_mask: wgpu::ColorWrites::ALL,
+                        })],
+                        compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    }),
+                    primitive: wgpu::PrimitiveState {
+                        topology: wgpu::PrimitiveTopology::TriangleList,
+                        ..Default::default()
+                    },
+                    depth_stencil: None,
+                    multisample: wgpu::MultisampleState::default(),
+                    multiview: None,
+                    cache: None,
+                });
+
         Ok(Self {
             context,
             bvh_buffer,
             compute_pipeline,
             compute_bind_group,
+            compute_bind_group_layout,
             camera_buffer,
             params_buffer,
+            accum_buffer,
             accumulation_target,
             display_target,
+            tonemap_pipeline,
+            tonemap_bind_group,
+            tonemap_bind_group_layout,
+            display_format,
             sample_count: 0,
             frame_counter: 0,
             render_mode: RenderMode::Standard,
@@ -253,7 +372,105 @@ impl PathTracingRenderer {
         self.sample_count
     }
 
-    /// Executes one frame of compute path tracing.
+    /// Updates the camera parameters and resets sample accumulation.
+    pub fn update_camera(&mut self, camera: &ThinLensCamera) {
+        let aspect =
+            self.accumulation_target.width as f64 / self.accumulation_target.height.max(1) as f64;
+        let uniform = camera.to_uniform(aspect);
+        self.context
+            .queue
+            .write_buffer(&self.camera_buffer, 0, bytemuck::bytes_of(&uniform));
+        self.reset_accumulation();
+    }
+
+    /// Updates the scene geometry and rebuilds the BVH buffer.
+    pub fn update_scene(&mut self, scene: &BvhScene) {
+        self.bvh_buffer = BvhBuffer::upload(&self.context, scene);
+        self.rebuild_compute_bind_group();
+        self.reset_accumulation();
+    }
+
+    /// Resizes the accumulation and display targets.
+    pub fn resize(&mut self, width: u32, height: u32) {
+        let width = width.max(1);
+        let height = height.max(1);
+        if self.accumulation_target.width == width && self.accumulation_target.height == height {
+            return;
+        }
+
+        self.accumulation_target = RenderTarget::new(&self.context, width, height);
+        self.display_target = ToneMapTarget::new(&self.context, width, height, self.display_format);
+
+        let accum_size = (width as u64) * (height as u64) * 16;
+        self.accum_buffer = self.context.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("HDR Accumulation Storage Buffer"),
+            size: accum_size.max(64),
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        self.rebuild_compute_bind_group();
+        self.rebuild_tonemap_bind_group();
+        self.reset_accumulation();
+    }
+
+    fn rebuild_compute_bind_group(&mut self) {
+        self.compute_bind_group =
+            self.context
+                .device
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("Compute Bind Group"),
+                    layout: &self.compute_bind_group_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: self.camera_buffer.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: self.params_buffer.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: self.bvh_buffer.node_buf.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 3,
+                            resource: self.bvh_buffer.triangle_buf.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 4,
+                            resource: wgpu::BindingResource::TextureView(
+                                &self.accumulation_target.view,
+                            ),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 5,
+                            resource: self.accum_buffer.as_entire_binding(),
+                        },
+                    ],
+                });
+    }
+
+    fn rebuild_tonemap_bind_group(&mut self) {
+        self.tonemap_bind_group =
+            self.context
+                .device
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("Tonemapping Bind Group"),
+                    layout: &self.tonemap_bind_group_layout,
+                    entries: &[wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(
+                            &self.accumulation_target.view,
+                        ),
+                    }],
+                });
+    }
+
+    /// Executes one frame of compute path tracing and tonemapping.
     pub fn render_frame(&mut self) {
         let params = RenderParams {
             frame_index: self.frame_counter as u32,
@@ -287,6 +504,27 @@ impl PathTracingRenderer {
             compute_pass.dispatch_workgroups(workgroups_x, workgroups_y, 1);
         }
 
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Tonemapping Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &self.display_target.view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            render_pass.set_pipeline(&self.tonemap_pipeline);
+            render_pass.set_bind_group(0, &self.tonemap_bind_group, &[]);
+            render_pass.draw(0..3, 0..1);
+        }
+
         self.context.queue.submit(Some(encoder.finish()));
 
         self.sample_count += 1;
@@ -317,12 +555,10 @@ mod tests {
 
     #[test]
     fn test_headless_render_frame() -> TestResult {
-        // Run async headless test using pollster or futures block_on
         let fut = async {
             let ctx = match GpuContext::create_headless().await {
                 Ok(c) => c,
                 Err(RenderError::AdapterRequestFailed) => {
-                    // No GPU adapter in CI environment, skip test gracefully
                     return Ok(());
                 }
                 Err(e) => return Err(Box::new(e) as Box<dyn std::error::Error>),

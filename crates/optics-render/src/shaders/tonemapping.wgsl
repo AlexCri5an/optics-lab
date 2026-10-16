@@ -1,4 +1,5 @@
 // ACES Filmic Tone Mapping & Piecewise IEC 61966-2-1 sRGB Transfer Function (WGSL)
+// Pixel-exact textureLoad without sampler dependencies for maximum WebGPU/native portability.
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
@@ -17,7 +18,6 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
 }
 
 @group(0) @binding(0) var hdr_texture: texture_2d<f32>;
-@group(0) @binding(1) var hdr_sampler: sampler;
 
 // ACES Filmic Tone Mapping approximation
 fn aces_filmic(x: vec3<f32>) -> vec3<f32> {
@@ -40,7 +40,8 @@ fn linear_to_srgb(c: f32) -> f32 {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let hdr_sample = textureSample(hdr_texture, hdr_sampler, in.uv).rgb;
+    let coords = vec2<i32>(in.position.xy);
+    let hdr_sample = textureLoad(hdr_texture, coords, 0).rgb;
     let mapped = aces_filmic(hdr_sample);
 
     let srgb = vec3<f32>(

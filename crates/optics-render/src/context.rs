@@ -16,6 +16,22 @@ pub struct GpuContext {
 }
 
 impl GpuContext {
+    /// Creates a GPU context from existing wgpu handles.
+    #[must_use]
+    pub fn from_parts(
+        instance: wgpu::Instance,
+        adapter: wgpu::Adapter,
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+    ) -> Self {
+        Self {
+            instance,
+            adapter,
+            device,
+            queue,
+        }
+    }
+
     /// Creates a headless GPU context suitable for offline rendering, tests, and CLI execution.
     ///
     /// # Errors

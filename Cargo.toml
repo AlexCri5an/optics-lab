@@ -57,13 +57,14 @@ thiserror  = "2"
 clap       = { version = "4", features = ["derive"] }
 
 # GPU / rendering
-wgpu       = "25"      # Locked to match eframe 0.32.3 (egui-wgpu 0.32.3 → wgpu 25.0.2)
+wgpu       = { version = "25", features = ["fragile-send-sync-non-atomic-wasm"] }      # Locked to match eframe 0.32.3 (egui-wgpu 0.32.3 → wgpu 25.0.2)
 bytemuck   = { version = "1", features = ["derive"] }
 half       = "2"
 
 # UI
 egui          = "0.32"
-eframe        = { version = "0.32.3", default-features = false, features = ["glow", "default_fonts"] }
+egui-wgpu     = { version = "0.32.3", default-features = false, features = ["fragile-send-sync-non-atomic-wasm"] }
+eframe        = { version = "0.32.3", default-features = false, features = ["wgpu", "default_fonts"] }
 egui-phosphor = { version = "0.10.0", default-features = false, features = ["regular"] }
 
 # Internal crates
