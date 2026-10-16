@@ -22,6 +22,7 @@ use crate::icons::{IconId, draw_icon, init_icon_fonts, toolbar_button};
 use crate::inspector::{RayInspectorState, render_ray_inspector_panel};
 use crate::lens_sim::{LensPreset, LensSimulation};
 use crate::lens_view::{render_lens_system_panel, render_prescription_table_view};
+use crate::scene_model::SceneModel;
 use crate::shortcuts::ALL_SHORTCUTS;
 use crate::sim::PrismSimulation;
 use crate::theme::{
@@ -580,6 +581,16 @@ impl OpticsLabApp {
                         self.app_mode = AppMode::LensSystem;
                         self.viewport_mode = ViewportMode::View2D;
                         self.right_panel_tab = RightPanelTab::Prescription;
+                        if let Some(ref sim) = self.lens_sim {
+                            self.scene_model = SceneModel::from_optical_prescription(&sim.prescription);
+                            let (bvh, _) = self.scene_model.build_bvh_scene();
+                            self.gpu_state.update_scene_bvh(&bvh);
+                            self.gpu_state.camera.target = [0.0, 0.0, 25.0];
+                            self.gpu_state.camera.distance = 120.0;
+                            self.gpu_state.camera.pitch = 0.25;
+                            self.gpu_state.camera.yaw = 0.6;
+                            self.gpu_state.reset_accumulation();
+                        }
                         self.copy_status = Some(format!(
                             "Loaded Zemax prescription: {name} ({num_surfaces} surfaces)"
                         ));
@@ -1989,6 +2000,8 @@ impl OpticsLabApp {
                         ui,
                         avail_rect,
                         &self.sim,
+                        self.lens_sim.as_ref(),
+                        self.app_mode,
                         &self.tokens,
                         &mut self.gpu_state,
                     );

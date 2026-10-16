@@ -7,6 +7,7 @@ use crate::icons::IconId;
 use crate::lens_sim::LensPreset;
 use crate::platform::Platform;
 use crate::project::ProjectFile;
+use crate::scene_model::SceneModel;
 use crate::shortcuts::{ShortcutId, format_tooltip};
 use crate::sim::PrismSimulation;
 use crate::theme::ThemePreference;
@@ -483,10 +484,28 @@ pub fn dispatch(app: &mut OpticsLabApp, cmd: Command, platform: &mut dyn Platfor
                 AppMode::PrismDispersion => {
                     app.viewport_mode = ViewportMode::View3D;
                     app.right_panel_tab = RightPanelTab::RayInspector;
+                    app.scene_model = SceneModel::default_prism_scene();
+                    let (bvh, _) = app.scene_model.build_bvh_scene();
+                    app.gpu_state.update_scene_bvh(&bvh);
+                    app.gpu_state.camera.target = [-10.0, 35.0, 0.0];
+                    app.gpu_state.camera.distance = 280.0;
+                    app.gpu_state.camera.pitch = 0.35;
+                    app.gpu_state.camera.yaw = 0.75;
+                    app.gpu_state.reset_accumulation();
                 }
                 AppMode::LensSystem => {
                     app.viewport_mode = ViewportMode::View2D;
                     app.right_panel_tab = RightPanelTab::Prescription;
+                    if let Some(ref sim) = app.lens_sim {
+                        app.scene_model = SceneModel::from_optical_prescription(&sim.prescription);
+                        let (bvh, _) = app.scene_model.build_bvh_scene();
+                        app.gpu_state.update_scene_bvh(&bvh);
+                        app.gpu_state.camera.target = [0.0, 0.0, 25.0];
+                        app.gpu_state.camera.distance = 120.0;
+                        app.gpu_state.camera.pitch = 0.25;
+                        app.gpu_state.camera.yaw = 0.6;
+                        app.gpu_state.reset_accumulation();
+                    }
                 }
             }
             effects.push(Effect::StateChanged("app_mode"));
@@ -502,6 +521,14 @@ pub fn dispatch(app: &mut OpticsLabApp, cmd: Command, platform: &mut dyn Platfor
         Command::LoadLensPreset(preset) => {
             if let Some(ref mut sim) = app.lens_sim {
                 sim.select_preset(preset);
+                app.scene_model = SceneModel::from_optical_prescription(&sim.prescription);
+                let (bvh, _) = app.scene_model.build_bvh_scene();
+                app.gpu_state.update_scene_bvh(&bvh);
+                app.gpu_state.camera.target = [0.0, 0.0, 25.0];
+                app.gpu_state.camera.distance = 120.0;
+                app.gpu_state.camera.pitch = 0.25;
+                app.gpu_state.camera.yaw = 0.6;
+                app.gpu_state.reset_accumulation();
             }
             app.app_mode = AppMode::LensSystem;
             app.viewport_mode = ViewportMode::View2D;

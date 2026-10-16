@@ -320,6 +320,46 @@ pub fn build_light_propagation(
     (segments, caustics)
 }
 
+/// Extracts 3D beam propagation segments from a sequential lens system simulation.
+#[must_use]
+pub fn build_lens_light_propagation(
+    lens_sim: &crate::lens_sim::LensSimulation,
+    display_state: &BeamDisplayState,
+) -> Vec<BeamSegment3D> {
+    let mut segments = Vec::new();
+    let beam_w = (display_state.beam_width_mm as f64 * 0.4).clamp(0.2, 3.0);
+
+    for ray in &lens_sim.cross_section_rays {
+        let wl = ray.wavelength_nm;
+        let col = evaluate_radiometric_color(wl, if ray.passed { 1.0 } else { 0.35 });
+
+        let mut cur_time = 0.0;
+        for window in ray.vertices.windows(2) {
+            let p_start = Vec3::new(0.0, window[0][1], window[0][0]);
+            let p_end = Vec3::new(0.0, window[1][1], window[1][0]);
+            let dist = (p_end - p_start).norm();
+            let duration = dist / SPEED_OF_LIGHT_MM_PER_PS;
+
+            segments.push(BeamSegment3D {
+                start: p_start,
+                end: p_end,
+                wavelength_nm: wl,
+                throughput: if ray.passed { 1.0 } else { 0.35 },
+                color_srgb: col,
+                width_mm: beam_w,
+                refractive_index: 1.5,
+                start_time_ps: cur_time,
+                duration_ps: duration,
+                is_reflected: false,
+            });
+
+            cur_time += duration;
+        }
+    }
+
+    segments
+}
+
 /// Renders 3D camera-facing light beam ribbons into egui painter.
 #[allow(clippy::too_many_lines)]
 pub fn render_beam_ribbons(

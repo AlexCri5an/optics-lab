@@ -535,6 +535,83 @@ impl SceneModel {
         model
     }
 
+    /// Creates a 3D scene model populated with tessellated lens elements from an optical prescription.
+    #[must_use]
+    pub fn from_optical_prescription(
+        prescription: &optics_core::prescription::OpticalPrescription,
+    ) -> Self {
+        let mut model = Self::new();
+        let surfaces = &prescription.surfaces;
+        let n = surfaces.len();
+        if n >= 2 {
+            let mut z_vertices = Vec::with_capacity(n);
+            let mut current_z = 0.0;
+            for s in surfaces {
+                z_vertices.push(current_z);
+                current_z += s.thickness_mm;
+            }
+
+            let mut elem_idx = 0;
+            for i in 0..n - 1 {
+                let front = &surfaces[i];
+                let rear = &surfaces[i + 1];
+                let is_glass = !front.material_name.trim().eq_ignore_ascii_case("AIR")
+                    && !front.material_name.trim().is_empty();
+
+                if is_glass {
+                    let z_front = z_vertices[i];
+                    let ct = front.thickness_mm;
+                    let z_center = z_front + ct * 0.5;
+                    let sd = front.semi_diameter_mm.max(rear.semi_diameter_mm).max(1.0);
+
+                    model.add_object(SceneObject::new(
+                        0,
+                        format!("Element {} ({})", elem_idx + 1, front.material_name.trim()),
+                        Transform::from_position(Vec3::new(0.0, 0.0, z_center)),
+                        ObjectGeometry::LensMesh {
+                            r1: front.radius_mm,
+                            r2: rear.radius_mm,
+                            semi_diameter: sd,
+                            center_thickness: ct,
+                            radial_segments: 16,
+                            azimuthal_segments: 32,
+                        },
+                        MaterialData {
+                            name: front.material_name.clone(),
+                            glass_name: front.material_name.clone(),
+                            dispersion: DispersionModelChoice::Sellmeier,
+                            roughness: 0.0,
+                            nd: 1.5,
+                            vd: 50.0,
+                        },
+                    ));
+                    elem_idx += 1;
+                }
+            }
+        }
+
+        // Add receiver / ground plane
+        model.add_object(SceneObject::new(
+            0,
+            "Ground Plane",
+            Transform::from_position(Vec3::new(0.0, -35.0, 25.0)),
+            ObjectGeometry::FloorPlane { size: 300.0 },
+            MaterialData {
+                name: "Glossy Dark Floor".into(),
+                glass_name: "Floor".into(),
+                dispersion: DispersionModelChoice::Constant(1.5),
+                roughness: 0.05,
+                nd: 1.5,
+                vd: 50.0,
+            },
+        ));
+
+        if let Some(first) = model.objects.first() {
+            model.selected_id = Some(first.id);
+        }
+        model
+    }
+
     /// Adds a new object to the scene and assigns it a unique ID.
     pub fn add_object(&mut self, mut object: SceneObject) -> u64 {
         let id = self.next_id;
@@ -760,5 +837,42 @@ mod tests {
         assert_eq!(scene.instances.len(), 2);
         assert!(elapsed_ms >= 0.0);
         assert_eq!(model.last_bvh_build_time_ms, elapsed_ms);
+    }
+
+    #[test]
+    fn test_optical_prescription_scene_tessellation() {
+        use optics_core::{OpticalPrescription, OpticalSurface};
+        let prescription = OpticalPrescription {
+            name: "Test Doublet".into(),
+            surfaces: vec![
+                OpticalSurface {
+                    surface_index: 0,
+                    radius_mm: 50.0,
+                    conic_constant: 0.0,
+                    thickness_mm: 5.0,
+                    semi_diameter_mm: 12.5,
+                    material_name: "N-BK7".into(),
+                    is_stop: false,
+                },
+                OpticalSurface {
+                    surface_index: 1,
+                    radius_mm: -50.0,
+                    conic_constant: 0.0,
+                    thickness_mm: 10.0,
+                    semi_diameter_mm: 12.5,
+                    material_name: "".into(),
+                    is_stop: false,
+                },
+            ],
+            entrance_pupil_diameter_mm: 25.0,
+            wavelengths_nm: vec![587.6],
+            primary_wavelength_index: 0,
+            field_angles_deg: vec![0.0],
+        };
+        let mut model = SceneModel::from_optical_prescription(&prescription);
+        assert_eq!(model.objects.len(), 2);
+        assert_eq!(model.objects[0].name, "Element 1 (N-BK7)");
+        let (bvh, _) = model.build_bvh_scene();
+        assert_eq!(bvh.instances.len(), 2);
     }
 }
