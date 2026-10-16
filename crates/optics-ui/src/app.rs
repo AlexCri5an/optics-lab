@@ -18,10 +18,11 @@ use optics_zemax::parse_zmx_bytes;
 
 use crate::analytics::render_analytics_dock;
 use crate::glass_browser::{GlassBrowserState, render_glass_catalog_panel};
-use crate::icons::{IconId, draw_icon, init_icon_fonts};
+use crate::icons::{IconId, draw_icon, init_icon_fonts, toolbar_button};
 use crate::inspector::{RayInspectorState, render_ray_inspector_panel};
 use crate::lens_sim::{LensPreset, LensSimulation};
 use crate::lens_view::{render_lens_system_panel, render_prescription_table_view};
+use crate::shortcuts::{ALL_SHORTCUTS, ShortcutId, format_tooltip};
 use crate::sim::PrismSimulation;
 use crate::theme::{
     AppPreferences, CanvasBackgroundPreference, OpticsTokens, ThemePreference, apply_tokens,
@@ -193,6 +194,8 @@ pub struct OpticsLabApp {
     pub prefs: AppPreferences,
     /// Whether the Preferences modal dialog is open.
     pub show_preferences: bool,
+    /// Whether full screen viewport mode is active.
+    pub is_fullscreen: bool,
 }
 
 impl Default for OpticsLabApp {
@@ -230,6 +233,7 @@ impl Default for OpticsLabApp {
             needs_fit: true,
             show_about: false,
             show_preferences: false,
+            is_fullscreen: false,
             inspector_state: RayInspectorState::default(),
             scene_tree_scene_open: true,
             scene_tree_prism_open: true,
@@ -299,6 +303,13 @@ impl OpticsLabApp {
         if ctx.input(|i| (i.modifiers.command || i.modifiers.ctrl) && i.key_pressed(Key::Minus)) {
             self.prefs.ui_scale = (self.prefs.ui_scale - 0.1).max(0.5);
         }
+        if ctx.input(|i| i.key_pressed(Key::B)) {
+            self.show_reflections = !self.show_reflections;
+        }
+        if ctx.input(|i| i.key_pressed(Key::F11)) {
+            self.is_fullscreen = !self.is_fullscreen;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(self.is_fullscreen));
+        }
         if ctx.input(|i| i.key_pressed(Key::Escape)) {
             if self.show_preferences {
                 self.show_preferences = false;
@@ -306,8 +317,11 @@ impl OpticsLabApp {
                 self.show_shortcuts_help = false;
             } else if self.show_about {
                 self.show_about = false;
-            } else {
+            } else if self.selected_ray_index.is_some() {
                 self.selected_ray_index = None;
+            } else if self.is_fullscreen {
+                self.is_fullscreen = false;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
             }
         }
         if ctx.input(|i| (i.modifiers.command || i.modifiers.ctrl) && i.key_pressed(Key::Num0)) {
@@ -363,10 +377,12 @@ impl OpticsLabApp {
         }
     }
 
-    /// Renders the top application bar matching the reference image.
+    /// Renders the top menu bar matching standard desktop chrome.
     fn render_top_bar(&mut self, ctx: &Context) {
+        let is_macos = cfg!(target_os = "macos");
+
         TopBottomPanel::top("top_app_bar")
-            .exact_height(32.0)
+            .exact_height(28.0)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
@@ -396,7 +412,7 @@ impl OpticsLabApp {
                             .color(self.tokens.text_muted),
                     );
 
-                    // Menus: File, Edit, View, Render, Diagnostics, Help
+                    // Menus: File, Edit, View, Tools, Help
                     MenuBar::new().ui(ui, |ui| {
                         ui.menu_button("File", |ui| {
                             ui.menu_button("Load preset", |ui| {
@@ -442,7 +458,9 @@ impl OpticsLabApp {
                         });
 
                         ui.menu_button("Edit", |ui| {
-                            if ui.button("Preferences... (Cmd+,)").clicked() {
+                            let pref_label =
+                                format_tooltip("Preferences...", ShortcutId::Preferences, is_macos);
+                            if ui.button(pref_label).clicked() {
                                 self.show_preferences = true;
                                 ui.close();
                             }
@@ -455,32 +473,92 @@ impl OpticsLabApp {
                         });
 
                         ui.menu_button("View", |ui| {
-                            if ui.button("Reset View (Cmd+0)").clicked() {
+                            let reset_label =
+                                format_tooltip("Reset View", ShortcutId::FitView, is_macos);
+                            if ui.button(reset_label).clicked() {
                                 self.needs_fit = true;
                                 ui.close();
                             }
                             ui.separator();
-                            ui.checkbox(&mut self.show_reflections, "Show reflections");
-                            ui.checkbox(&mut self.show_timing, "Show timing");
-                        });
-
-                        ui.menu_button("Render", |ui| {
-                            if ui.button("Start path tracer").clicked() {
+                            ui.checkbox(&mut self.show_reflections, "Show reflections (B)");
+                            ui.checkbox(&mut self.show_timing, "Show diagnostic timing");
+                            ui.checkbox(&mut self.prefs.soft_glow, "Soft glow on rays");
+                            ui.separator();
+                            ui.checkbox(&mut self.prefs.show_left_sidebar, "Left sidebar");
+                            ui.checkbox(&mut self.prefs.show_right_inspector, "Right inspector");
+                            ui.checkbox(&mut self.prefs.show_bottom_dock, "Bottom dock");
+                            ui.separator();
+                            if ui.button("Reset layout").clicked() {
+                                self.prefs.show_left_sidebar = true;
+                                self.prefs.show_right_inspector = true;
+                                self.prefs.show_bottom_dock = true;
+                                self.prefs.left_sidebar_width = 240.0;
+                                self.prefs.right_inspector_width = 320.0;
+                                self.prefs.bottom_dock_height = 185.0;
+                                ui.close();
+                            }
+                            ui.separator();
+                            let fs_text = if self.is_fullscreen {
+                                "Exit full screen (F11)"
+                            } else {
+                                "Enter full screen (F11)"
+                            };
+                            if ui.button(fs_text).clicked() {
+                                self.is_fullscreen = !self.is_fullscreen;
+                                ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(
+                                    self.is_fullscreen,
+                                ));
                                 ui.close();
                             }
                         });
 
-                        ui.menu_button("Diagnostics", |ui| {
-                            if ui.button("BVH slab test").clicked() {
+                        ui.menu_button("Tools", |ui| {
+                            let select_lbl =
+                                format_tooltip("Select", ShortcutId::SelectTool, is_macos);
+                            if ui.button(select_lbl).clicked() {
+                                self.active_tool = ActiveTool::Select;
+                                ui.close();
+                            }
+                            let move_lbl = format_tooltip("Move", ShortcutId::MoveTool, is_macos);
+                            if ui.button(move_lbl).clicked() {
+                                self.active_tool = ActiveTool::Move;
+                                ui.close();
+                            }
+                            let rot_lbl =
+                                format_tooltip("Rotate", ShortcutId::RotateTool, is_macos);
+                            if ui.button(rot_lbl).clicked() {
+                                self.active_tool = ActiveTool::Rotate;
+                                ui.close();
+                            }
+                            let probe_lbl =
+                                format_tooltip("Ray probe", ShortcutId::RayProbe, is_macos);
+                            if ui.button(probe_lbl).clicked() {
+                                self.active_tool = ActiveTool::RayInspector;
+                                ui.close();
+                            }
+                            ui.separator();
+                            if ui.button("Prism dispersion mode").clicked() {
+                                self.app_mode = AppMode::PrismDispersion;
+                                self.viewport_mode = ViewportMode::View3D;
+                                self.right_panel_tab = RightPanelTab::RayInspector;
+                                ui.close();
+                            }
+                            if ui.button("Lens system mode").clicked() {
+                                self.app_mode = AppMode::LensSystem;
+                                self.viewport_mode = ViewportMode::View2D;
+                                self.right_panel_tab = RightPanelTab::Prescription;
                                 ui.close();
                             }
                         });
 
                         ui.menu_button("Help", |ui| {
-                            if ui.button("Keyboard shortcuts (F1)").clicked() {
+                            let help_lbl =
+                                format_tooltip("Keyboard shortcuts", ShortcutId::Help, is_macos);
+                            if ui.button(help_lbl).clicked() {
                                 self.show_shortcuts_help = true;
                                 ui.close();
                             }
+                            ui.separator();
                             if ui.button("About OpticsLab").clicked() {
                                 self.show_about = true;
                                 ui.close();
@@ -491,110 +569,248 @@ impl OpticsLabApp {
             });
     }
 
-    /// Renders the left sidebar containing the vertical tool list and scene tree.
-    fn render_left_sidebar(&mut self, ctx: &Context) {
-        SidePanel::left("left_sidebar")
-            .exact_width(240.0)
-            .resizable(false)
-            .show(ctx, |ui| {
-                ScrollArea::vertical().show(ui, |ui| {
-                    ui.add_space(6.0);
+    /// Renders the classic horizontal icon toolbar directly beneath the menu bar.
+    fn render_toolbar(&mut self, ctx: &Context) {
+        let is_macos = cfg!(target_os = "macos");
 
-                    // 1. Tool list
+        TopBottomPanel::top("main_toolbar")
+            .exact_height(30.0)
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing = Vec2::new(3.0, 0.0);
+
+                    // 1. Tool shortcuts
                     let tools = [
-                        ActiveTool::Select,
-                        ActiveTool::Move,
-                        ActiveTool::Rotate,
-                        ActiveTool::Scale,
-                        ActiveTool::RayInspector,
-                        ActiveTool::Spectrum,
-                        ActiveTool::Bvh,
-                        ActiveTool::Analysis,
-                        ActiveTool::Camera,
-                        ActiveTool::Settings,
+                        (ActiveTool::Select, IconId::Select, ShortcutId::SelectTool),
+                        (ActiveTool::Move, IconId::Move, ShortcutId::MoveTool),
+                        (ActiveTool::Rotate, IconId::Rotate, ShortcutId::RotateTool),
+                        (
+                            ActiveTool::RayInspector,
+                            IconId::RayProbe,
+                            ShortcutId::RayProbe,
+                        ),
                     ];
 
-                    for tool in tools {
+                    for (tool, icon, shortcut_id) in tools {
                         let is_active = self.active_tool == tool;
-                        let bg_col = if is_active {
-                            self.tokens.selected
-                        } else {
-                            Color32::TRANSPARENT
-                        };
-                        let fg_col = if is_active {
-                            self.tokens.text_primary
-                        } else {
-                            self.tokens.text_secondary
-                        };
-
-                        let (rect, response) = ui.allocate_exact_size(
-                            Vec2::new(ui.available_width(), 26.0),
-                            Sense::click(),
-                        );
-                        let painter = ui.painter_at(rect);
-
-                        if is_active {
-                            painter.rect_filled(rect, CornerRadius::same(2), bg_col);
-                            painter.rect_stroke(
-                                rect,
-                                CornerRadius::same(2),
-                                Stroke::new(1.0, self.tokens.border),
-                                StrokeKind::Inside,
-                            );
-                        } else if response.hovered() {
-                            painter.rect_filled(rect, CornerRadius::same(2), self.tokens.hover_bg);
-                        }
-
-                        // Icon
-                        let icon_rect = Rect::from_min_size(
-                            rect.min + Vec2::new(8.0, 4.0),
-                            Vec2::new(18.0, 18.0),
-                        );
-                        draw_icon(&painter, icon_rect, tool.icon(), fg_col, 14.0);
-
-                        // Label
-                        painter.text(
-                            rect.min + Vec2::new(34.0, 13.0),
-                            Align2::LEFT_CENTER,
-                            tool.name(),
-                            egui::FontId::proportional(12.5),
-                            fg_col,
-                        );
-
-                        if response.clicked() {
+                        let tt = format_tooltip(tool.name(), shortcut_id, is_macos);
+                        if toolbar_button(ui, icon, &self.tokens, is_active, &tt).clicked() {
                             self.active_tool = tool;
-                            match tool {
-                                ActiveTool::Select
-                                | ActiveTool::Move
-                                | ActiveTool::Rotate
-                                | ActiveTool::Scale => {
-                                    self.viewport_mode = ViewportMode::View3D;
-                                }
-                                ActiveTool::RayInspector => {
-                                    self.right_panel_tab = RightPanelTab::RayInspector;
-                                }
-                                ActiveTool::Spectrum => {
-                                    self.viewport_mode = ViewportMode::Spectral;
-                                }
-                                ActiveTool::Bvh => {
-                                    self.viewport_mode = ViewportMode::Bvh;
-                                }
-                                ActiveTool::Analysis => {
-                                    self.viewport_mode = ViewportMode::Convergence;
-                                }
-                                ActiveTool::Camera => {
-                                    self.needs_fit = true;
-                                }
-                                ActiveTool::Settings => {
-                                    self.show_preferences = true;
-                                }
-                            }
                         }
                     }
 
-                    ui.add_space(8.0);
                     ui.separator();
-                    ui.add_space(6.0);
+
+                    // 2. View actions
+                    let fit_tt = format_tooltip("Reset view", ShortcutId::FitView, is_macos);
+                    if toolbar_button(ui, IconId::ResetView, &self.tokens, false, &fit_tt).clicked()
+                    {
+                        self.needs_fit = true;
+                    }
+
+                    let zin_tt = format_tooltip("Zoom in", ShortcutId::ZoomIn, is_macos);
+                    if toolbar_button(ui, IconId::ZoomIn, &self.tokens, false, &zin_tt).clicked() {
+                        self.prefs.ui_scale = (self.prefs.ui_scale + 0.1).min(3.0);
+                    }
+
+                    let zout_tt = format_tooltip("Zoom out", ShortcutId::ZoomOut, is_macos);
+                    if toolbar_button(ui, IconId::ZoomOut, &self.tokens, false, &zout_tt).clicked()
+                    {
+                        self.prefs.ui_scale = (self.prefs.ui_scale - 0.1).max(0.5);
+                    }
+
+                    ui.separator();
+
+                    // 3. Reflections toggle
+                    let ref_tt = format_tooltip(
+                        "Toggle reflections",
+                        ShortcutId::ToggleReflections,
+                        is_macos,
+                    );
+                    if toolbar_button(
+                        ui,
+                        IconId::ReflectionsToggle,
+                        &self.tokens,
+                        self.show_reflections,
+                        &ref_tt,
+                    )
+                    .clicked()
+                    {
+                        self.show_reflections = !self.show_reflections;
+                    }
+
+                    ui.separator();
+
+                    // 4. Panel toggles
+                    let left_tt = if self.prefs.show_left_sidebar {
+                        "Hide left sidebar"
+                    } else {
+                        "Show left sidebar"
+                    };
+                    if toolbar_button(
+                        ui,
+                        IconId::PanelsToggle,
+                        &self.tokens,
+                        self.prefs.show_left_sidebar,
+                        left_tt,
+                    )
+                    .clicked()
+                    {
+                        self.prefs.show_left_sidebar = !self.prefs.show_left_sidebar;
+                    }
+
+                    let btm_tt = if self.prefs.show_bottom_dock {
+                        "Hide bottom dock"
+                    } else {
+                        "Show bottom dock"
+                    };
+                    if toolbar_button(
+                        ui,
+                        IconId::Bvh,
+                        &self.tokens,
+                        self.prefs.show_bottom_dock,
+                        btm_tt,
+                    )
+                    .clicked()
+                    {
+                        self.prefs.show_bottom_dock = !self.prefs.show_bottom_dock;
+                    }
+
+                    // 5. Right-aligned actions: Theme, Preferences, Fullscreen
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        let fs_tt = format_tooltip(
+                            "Toggle full screen",
+                            ShortcutId::ToggleFullscreen,
+                            is_macos,
+                        );
+                        if toolbar_button(
+                            ui,
+                            IconId::Fullscreen,
+                            &self.tokens,
+                            self.is_fullscreen,
+                            &fs_tt,
+                        )
+                        .clicked()
+                        {
+                            self.is_fullscreen = !self.is_fullscreen;
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(
+                                self.is_fullscreen,
+                            ));
+                        }
+
+                        let pref_tt =
+                            format_tooltip("Preferences", ShortcutId::Preferences, is_macos);
+                        if toolbar_button(
+                            ui,
+                            IconId::Settings,
+                            &self.tokens,
+                            self.show_preferences,
+                            &pref_tt,
+                        )
+                        .clicked()
+                        {
+                            self.show_preferences = !self.show_preferences;
+                        }
+
+                        if toolbar_button(ui, IconId::Theme, &self.tokens, false, "Cycle UI theme")
+                            .clicked()
+                        {
+                            self.prefs.theme = match self.prefs.theme {
+                                ThemePreference::ClassicLight => ThemePreference::ClassicDark,
+                                ThemePreference::ClassicDark => ThemePreference::HighContrast,
+                                ThemePreference::HighContrast => ThemePreference::ClassicLight,
+                                ThemePreference::FollowSystem => ThemePreference::ClassicLight,
+                            };
+                        }
+                    });
+                });
+            });
+    }
+
+    /// Renders the left sidebar containing the mode selector, parameters, and scene hierarchy.
+    fn render_left_sidebar(&mut self, ctx: &Context) {
+        if !self.prefs.show_left_sidebar {
+            return;
+        }
+
+        let resp = SidePanel::left("left_sidebar")
+            .resizable(true)
+            .width_range(180.0..=380.0)
+            .default_width(self.prefs.left_sidebar_width)
+            .show(ctx, |ui| {
+                ScrollArea::vertical().show(ui, |ui| {
+                    ui.add_space(4.0);
+
+                    // Mode selector as classic rectangular tabs
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = Vec2::new(4.0, 0.0);
+                        let is_prism = self.app_mode == AppMode::PrismDispersion;
+                        let is_lens = self.app_mode == AppMode::LensSystem;
+
+                        if ui.selectable_label(is_prism, "Prism").clicked() {
+                            self.app_mode = AppMode::PrismDispersion;
+                            self.viewport_mode = ViewportMode::View3D;
+                            self.right_panel_tab = RightPanelTab::RayInspector;
+                        }
+                        if ui.selectable_label(is_lens, "Lens system").clicked() {
+                            self.app_mode = AppMode::LensSystem;
+                            self.viewport_mode = ViewportMode::View2D;
+                            self.right_panel_tab = RightPanelTab::Prescription;
+                        }
+                    });
+
+                    ui.add_space(4.0);
+                    ui.separator();
+                    ui.add_space(4.0);
+
+                    if self.app_mode == AppMode::LensSystem {
+                        ui.label(
+                            egui::RichText::new("Lens Presets")
+                                .strong()
+                                .color(self.tokens.text_primary),
+                        );
+
+                        for preset in [
+                            LensPreset::CookeTriplet,
+                            LensPreset::DoubleGauss,
+                            LensPreset::PlanoConvex,
+                        ] {
+                            let label = match preset {
+                                LensPreset::CookeTriplet => "Cooke Triplet F/4.5",
+                                LensPreset::DoubleGauss => "Double Gauss F/2.0",
+                                LensPreset::PlanoConvex => "Plano-Convex Singlet",
+                            };
+                            if ui.button(label).clicked() {
+                                if let Some(ref mut sim) = self.lens_sim {
+                                    sim.select_preset(preset);
+                                }
+                                self.right_panel_tab = RightPanelTab::Prescription;
+                                self.needs_fit = true;
+                            }
+                        }
+
+                        ui.add_space(6.0);
+                        ui.separator();
+                        ui.add_space(4.0);
+
+                        if let Some(ref sim) = self.lens_sim {
+                            ui.label(
+                                egui::RichText::new("System Summary")
+                                    .strong()
+                                    .color(self.tokens.text_primary),
+                            );
+                            ui.label(format!("Surfaces: {}", sim.prescription.surfaces.len()));
+                            if let Some(ref paraxial) = sim.paraxial {
+                                ui.label(format!("Paraxial EFL: {:.2} mm", paraxial.efl_mm));
+                                ui.label(format!("Back focal length: {:.2} mm", paraxial.bfl_mm));
+                                ui.label(format!("F/#: {:.2}", paraxial.f_number));
+                            }
+                        }
+
+                        ui.add_space(6.0);
+                        ui.separator();
+                        ui.add_space(4.0);
+                    }
 
                     // Quick Interactive Simulation Controls
                     ui.label(
@@ -785,14 +1001,18 @@ impl OpticsLabApp {
                     }
                 });
             });
+        self.prefs.left_sidebar_width = resp.response.rect.width();
     }
 
-    /// Renders the bottom status bar matching the reference image.
+    /// Renders the bottom status bar with real simulation data and coordinates.
     fn render_status_bar(&self, ctx: &Context) {
         TopBottomPanel::bottom("status_bar")
             .exact_height(22.0)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing = Vec2::new(10.0, 0.0);
+
+                    // Left: status message or copy confirmation
                     let status_text = self.copy_status.as_deref().unwrap_or("Ready");
                     ui.label(egui::RichText::new(status_text).size(11.0).color(
                         if self.copy_status.is_some() {
@@ -802,9 +1022,61 @@ impl OpticsLabApp {
                         },
                     ));
 
+                    ui.separator();
+
+                    // Active tool
+                    ui.label(
+                        egui::RichText::new(format!("Tool: {}", self.active_tool.name()))
+                            .size(11.0)
+                            .color(self.tokens.text_secondary),
+                    );
+
+                    ui.separator();
+
+                    // Mode
+                    let mode_str = match self.app_mode {
+                        AppMode::PrismDispersion => "Mode: Prism Dispersion",
+                        AppMode::LensSystem => "Mode: Lens System",
+                    };
+                    ui.label(
+                        egui::RichText::new(mode_str)
+                            .size(11.0)
+                            .color(self.tokens.text_secondary),
+                    );
+
+                    // Right items: units, ray count, zoom %
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         ui.label(
-                            egui::RichText::new("128 spp  |  1920×1080  |  GPU: Vulkan  |  60 FPS")
+                            egui::RichText::new("Units: mm / nm")
+                                .size(11.0)
+                                .color(self.tokens.text_muted),
+                        );
+
+                        ui.separator();
+
+                        let zoom_pct = (self.prefs.ui_scale * 100.0).round() as i32;
+                        ui.label(
+                            egui::RichText::new(format!("Zoom: {zoom_pct}%"))
+                                .size(11.0)
+                                .color(self.tokens.text_muted),
+                        );
+
+                        ui.separator();
+
+                        let rays_label = match self.app_mode {
+                            AppMode::PrismDispersion => {
+                                format!("CPU ({} rays)", self.sim.rays.len())
+                            }
+                            AppMode::LensSystem => {
+                                if let Some(ref sim) = self.lens_sim {
+                                    format!("CPU ({} rays)", sim.cross_section_rays.len())
+                                } else {
+                                    "CPU (0 rays)".to_string()
+                                }
+                            }
+                        };
+                        ui.label(
+                            egui::RichText::new(rays_label)
                                 .size(11.0)
                                 .color(self.tokens.text_muted),
                         );
@@ -815,8 +1087,14 @@ impl OpticsLabApp {
 
     /// Renders the bottom analytics dock containing the 4 scientific panels.
     fn render_bottom_analytics(&mut self, ctx: &Context) {
-        TopBottomPanel::bottom("bottom_analytics_dock")
-            .exact_height(205.0)
+        if !self.prefs.show_bottom_dock {
+            return;
+        }
+
+        let resp = TopBottomPanel::bottom("bottom_analytics_dock")
+            .resizable(true)
+            .height_range(100.0..=360.0)
+            .default_height(self.prefs.bottom_dock_height)
             .show(ctx, |ui| {
                 let mut glass = self.sim.glass_name.clone();
                 let mut open_catalog = false;
@@ -835,13 +1113,19 @@ impl OpticsLabApp {
                     self.glass_browser_state.selected_glass = self.sim.glass_name.clone();
                 }
             });
+        self.prefs.bottom_dock_height = resp.response.rect.height();
     }
 
     /// Renders the right inspector panel.
     fn render_right_panel(&mut self, ctx: &Context) {
-        SidePanel::right("right_inspector")
-            .exact_width(330.0)
-            .resizable(false)
+        if !self.prefs.show_right_inspector {
+            return;
+        }
+
+        let resp = SidePanel::right("right_inspector")
+            .resizable(true)
+            .width_range(240.0..=480.0)
+            .default_width(self.prefs.right_inspector_width)
             .show(ctx, |ui| {
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
@@ -915,6 +1199,7 @@ impl OpticsLabApp {
                     }
                 }
             });
+        self.prefs.right_inspector_width = resp.response.rect.width();
     }
 
     /// Renders the central viewport area.
@@ -1347,7 +1632,7 @@ impl OpticsLabApp {
         Window::new("About OpticsLab")
             .collapsible(false)
             .resizable(false)
-            .default_size(Vec2::new(360.0, 220.0))
+            .default_size(Vec2::new(360.0, 240.0))
             .show(ctx, |ui| {
                 ui.vertical_centered(|ui| {
                     ui.add_space(8.0);
@@ -1363,14 +1648,17 @@ impl OpticsLabApp {
                     ui.add_space(4.0);
                     ui.heading("OpticsLab");
                     ui.label(
-                        egui::RichText::new("Professional Optical Ray-Tracing & Simulation")
-                            .color(self.tokens.text_secondary),
+                        egui::RichText::new(
+                            "Open-source educational optics & ray-tracing workbench",
+                        )
+                        .color(self.tokens.text_secondary),
                     );
                     ui.add_space(8.0);
                     ui.label(
-                        egui::RichText::new(
-                            "Version 0.0.1\nMIT License\nInspired by RenderDoc, Blender & pbrt-v4",
-                        )
+                        egui::RichText::new(format!(
+                            "Version {}\nMIT License\nRepository: github.com/AlexCri5an/optics-lab",
+                            env!("CARGO_PKG_VERSION")
+                        ))
                         .small()
                         .color(self.tokens.text_muted),
                     );
@@ -1382,16 +1670,18 @@ impl OpticsLabApp {
             });
     }
 
-    /// Renders the keyboard shortcuts cheat sheet modal dialog.
+    /// Renders the keyboard shortcuts cheat sheet modal dialog from the canonical registry.
     fn render_shortcuts_modal(&mut self, ctx: &Context) {
         if !self.show_shortcuts_help {
             return;
         }
 
+        let is_macos = cfg!(target_os = "macos");
+
         Window::new("Keyboard Shortcuts")
             .collapsible(false)
             .resizable(false)
-            .default_size(Vec2::new(420.0, 340.0))
+            .default_size(Vec2::new(440.0, 380.0))
             .show(ctx, |ui| {
                 ui.add_space(4.0);
                 ui.label(
@@ -1401,32 +1691,28 @@ impl OpticsLabApp {
                 );
                 ui.separator();
 
-                egui::Grid::new("shortcuts_table")
-                    .num_columns(2)
-                    .spacing([24.0, 6.0])
-                    .striped(true)
-                    .show(ui, |ui| {
-                        let shortcuts = [
-                            ("S", "Select tool (ray & vertex picking)"),
-                            ("M", "Move tool"),
-                            ("Alt+R", "Rotate tool"),
-                            ("I", "Ray inspector probe"),
-                            ("Ctrl/Cmd + 0", "Reset viewport (fit scene)"),
-                            ("Middle Drag", "Pan viewport"),
-                            ("Scroll Wheel", "Zoom in / out"),
-                            ("Click + Drag (numbers)", "Scrub numeric parameter"),
-                            ("Escape", "Clear selection / close dialogs"),
-                            ("F1", "Toggle shortcuts reference"),
-                        ];
+                ScrollArea::vertical().max_height(280.0).show(ui, |ui| {
+                    egui::Grid::new("shortcuts_table")
+                        .num_columns(2)
+                        .spacing([24.0, 6.0])
+                        .striped(true)
+                        .show(ui, |ui| {
+                            for s in ALL_SHORTCUTS {
+                                ui.label(
+                                    egui::RichText::new(s.label(is_macos))
+                                        .strong()
+                                        .color(self.tokens.accent),
+                                );
+                                ui.label(
+                                    egui::RichText::new(s.description)
+                                        .color(self.tokens.text_secondary),
+                                );
+                                ui.end_row();
+                            }
+                        });
+                });
 
-                        for (key, desc) in shortcuts {
-                            ui.label(egui::RichText::new(key).strong().color(self.tokens.accent));
-                            ui.label(egui::RichText::new(desc).color(self.tokens.text_secondary));
-                            ui.end_row();
-                        }
-                    });
-
-                ui.add_space(16.0);
+                ui.add_space(14.0);
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     if ui.button("Close").clicked() {
                         self.show_shortcuts_help = false;
@@ -1589,22 +1875,25 @@ impl eframe::App for OpticsLabApp {
         // 1. Top Application Bar
         self.render_top_bar(ctx);
 
-        // 2. Status Bar at very bottom
+        // 2. Icon Toolbar directly below Menu Bar
+        self.render_toolbar(ctx);
+
+        // 3. Status Bar at very bottom
         self.render_status_bar(ctx);
 
-        // 3. Left Sidebar (Tools & Scene)
+        // 4. Left Sidebar (Tools & Scene)
         self.render_left_sidebar(ctx);
 
-        // 4. Right Inspector (Ray Inspector & Path)
+        // 5. Right Inspector (Ray Inspector & Path)
         self.render_right_panel(ctx);
 
-        // 5. Bottom Analytics Dock (Convergence, Spectral Power, BVH, Material)
+        // 6. Bottom Analytics Dock (Convergence, Spectral Power, BVH, Material)
         self.render_bottom_analytics(ctx);
 
-        // 6. Central Main Viewport (dominated by 3D prism & spectral fan)
+        // 7. Central Main Viewport (dominated by 3D prism & spectral fan)
         self.render_central_viewport(ctx);
 
-        // 7. Dialogs
+        // 8. Dialogs
         self.render_about_dialog(ctx);
         self.render_shortcuts_modal(ctx);
         self.render_preferences_dialog(ctx);

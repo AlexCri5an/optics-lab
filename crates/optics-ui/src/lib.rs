@@ -14,6 +14,7 @@ pub mod inspector;
 pub mod legend;
 pub mod lens_sim;
 pub mod lens_view;
+pub mod shortcuts;
 pub mod sim;
 pub mod theme;
 pub mod view_transform;
@@ -27,13 +28,14 @@ pub use formatting::{
 };
 pub use glass_browser::{GlassBrowserState, render_glass_catalog_panel};
 pub use hit_test::{find_hovered_ray_index, point_to_segment_distance};
-pub use icons::{IconId, draw_icon, icon_button, init_icon_fonts};
+pub use icons::{IconId, draw_icon, icon_button, init_icon_fonts, toolbar_button};
 pub use legend::{draw_wavelength_legend, find_closest_ray_by_x, wavelength_to_x, x_to_wavelength};
 pub use lens_sim::{
     LensElement2D, LensPreset, LensSimulation, LensSubview, TracedSequentialRay2D,
     build_lens_elements, trace_cross_section_rays,
 };
 pub use lens_view::{render_lens_system_panel, render_prescription_table_view};
+pub use shortcuts::{ALL_SHORTCUTS, ShortcutDef, ShortcutId, format_tooltip, get_shortcut};
 pub use sim::{
     EdgeState, PrismSimulation, ReflectedBranch2D, TracedRay2D, map_reflectance_to_alpha,
 };

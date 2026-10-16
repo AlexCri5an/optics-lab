@@ -4,7 +4,9 @@
 //! per state and remain crisp at all `pixels_per_point` scales.
 //! Completely replaces all legacy painter-drawn icons and Unicode pseudo-icons.
 
-use egui::{Align2, Color32, Context, FontDefinitions, FontId, Rect, Response, Sense, Ui, Vec2};
+use egui::{
+    Align2, Color32, Context, FontDefinitions, FontId, Rect, Response, Sense, Stroke, Ui, Vec2,
+};
 
 /// Typed identifier for all graphical icons used across the OpticsLab interface.
 ///
@@ -256,6 +258,47 @@ pub fn icon_button(ui: &mut Ui, icon: IconId, tint: Color32, size: f32) -> Respo
         draw_icon(ui.painter(), rect, icon, tint, size * 0.7);
     }
     resp.on_hover_text(icon.default_tooltip())
+}
+
+/// Renders a classic 28x28 px desktop toolbar icon button with full state styling.
+pub fn toolbar_button(
+    ui: &mut Ui,
+    icon: IconId,
+    tokens: &crate::theme::OpticsTokens,
+    is_selected: bool,
+    tooltip: &str,
+) -> Response {
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(28.0, 28.0), Sense::click());
+    if ui.is_rect_visible(rect) {
+        let painter = ui.painter();
+        let (bg, border, fg) = if resp.is_pointer_button_down_on() {
+            (tokens.active_bg, tokens.border_strong, tokens.text_primary)
+        } else if is_selected {
+            (tokens.selected, tokens.border_strong, tokens.text_primary)
+        } else if resp.hovered() {
+            (tokens.hover_bg, tokens.border, tokens.text_primary)
+        } else {
+            (
+                Color32::TRANSPARENT,
+                Color32::TRANSPARENT,
+                tokens.text_secondary,
+            )
+        };
+
+        if bg != Color32::TRANSPARENT {
+            painter.rect_filled(rect, egui::CornerRadius::same(2), bg);
+        }
+        if border != Color32::TRANSPARENT {
+            painter.rect_stroke(
+                rect,
+                egui::CornerRadius::same(2),
+                Stroke::new(1.0, border),
+                egui::StrokeKind::Inside,
+            );
+        }
+        draw_icon(painter, rect, icon, fg, 16.0);
+    }
+    resp.on_hover_text(tooltip)
 }
 
 #[cfg(test)]
