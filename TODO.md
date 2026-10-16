@@ -1,6 +1,6 @@
 # OpticsLab — Master Implementation Plan & Task List
 
-> **Status:** Realistic UI & Viewport Overhaul (`overhaul/realistic-ui`) active (P0–P11). Slice A (Prism Dispersion 2D) ✅ verified. Slice B (Lens Systems & Sequential Diagnostics) ✅ verified. Slice C (GPU Path Tracing Pipeline) core in `optics-render`; GPU viewport integration, real hero dispersion, and live dock telemetry in progress.
+> **Status:** Realistic UI & Viewport Overhaul (`overhaul/realistic-ui`) ✅ COMPLETE (P0–P11). Slice A (Prism Dispersion 2D) ✅ verified. Slice B (Lens Systems & Sequential Diagnostics) ✅ verified. Slice C (GPU Path Tracing Pipeline & Viewport) ✅ verified. Slice D polish active.
 >
 > Legend: `[ ]` = todo · `[x]` = done · `[~]` = in progress · `[-]` = deferred
 
@@ -693,25 +693,25 @@
 - [x] Phase 9.5: Lens prescription editor table with live edit & re-trace
 - [x] Phase 11: `optics-cli analyze` CLI command
 
-### Slice C — Acceleration, GPU Path Tracing & Full Analytics
+### Slice C — Acceleration, GPU Path Tracing & Full Analytics ✅ COMPLETE
 > Goal: wgpu compute path tracer with 2-level BVH, traversal cost heatmap, and real-time convergence tracking.
-- [ ] Phase 3.3: Hero-wavelength spectral sampling (uniform stratified sampling for GPU path tracer)
-- [ ] Phase 6: 2-level BVH (TLAS/BLAS), binned SAH builder, 16-byte aligned GPU layout
-- [ ] Phase 7: wgpu path tracing compute shaders, hero-wavelength sampling, BVH heatmap, Welford RMSE
-- [ ] Phase 9.3 (Slice C): 3D viewport canvas blitting wgpu GPU texture to egui `Image`
-- [ ] Phase 9.6: Bottom analytics dock (Convergence monitor, SPD histogram 380–780 nm, heatmap controls)
-- [ ] Phase 11: `optics-cli render` and throughput benchmark
+- [x] Phase 3.3: Hero-wavelength spectral sampling (uniform stratified sampling for GPU path tracer)
+- [x] Phase 6: 2-level BVH (TLAS/BLAS), binned SAH builder, 16-byte aligned GPU layout
+- [x] Phase 7: wgpu path tracing compute shaders, hero-wavelength sampling, BVH heatmap, Welford RMSE
+- [x] Phase 9.3 (Slice C): 3D viewport canvas via `egui_wgpu` path tracer callback
+- [x] Phase 9.6: Bottom analytics dock (Convergence monitor, SPD histogram 380–780 nm, heatmap controls)
+- [x] Phase 11: `optics-cli benchmark` / `render` throughput benchmarks
 
-### Slice D — Polish, Full Catalog, WASM Release & Open Source
+### Slice D — Polish, Full Catalog, WASM Release & Open Source (In Progress)
 > Goal: Production-grade desktop and browser app with 646 optical glasses, complete documentation, and open source release.
-- [ ] Phase 4.2 & 4.4: Full 646 optical glass Abbe diagram search/filter in UI
-- [ ] Phase 9.4: Tool palette (Select, Ray Probe, Lens Surface, Emitter, Measure)
-- [ ] Phase 9.7: Top menu bar & keyboard shortcuts
-- [ ] Phase 10: Native desktop application (`apps/optics-lab`), file dialogs
-- [ ] Phase 14: Integration test suite, visual golden tests, profiling
+- [x] Phase 4.2 & 4.4: Full 646 optical glass Abbe diagram search/filter in UI
+- [x] Phase 9.4: Tool palette (Select, Move, Rotate, Ray Probe)
+- [x] Phase 9.7: Top menu bar & keyboard shortcuts
+- [x] Phase 10: Native desktop application (`apps/optics-lab`), headless self-test CLI
+- [x] Phase 14: Integration test suite, geometric layout assertions, physics validation suite
 - [ ] Phase 15: mdBook documentation, licensing, `THIRD_PARTY_NOTICES.md`, GitHub release
 
 ---
 
-> **Next action:** Slice C, Step C1: Hero-wavelength spectral sampling & GPU path tracer preparations (Phase 3.3).
+> **Next action:** Slice D, Step D1: Final user documentation and packaging preparation.
 

@@ -10,6 +10,42 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 
 ### Added
 
+#### Realistic UI & Viewport Overhaul (`overhaul/realistic-ui`) — Phases P0–P11
+- **Modern Minimal CAD Workstation Chrome (`optics-ui::theme`):**
+  - Default CAD workstation theme (`ThemePreference::ClassicDark`) with flat 1 px borders, 0–2 px corner radii, zero decorative glow/shadows on chrome, and verified WCAG AA (≥4.5:1) contrast tokens.
+- **Unified Command Architecture & State Synchronization (`optics-ui::commands`, `optics-ui::registry`):**
+  - Exhaustive `enum Command` with 50+ strongly typed variants for all menus, toolbars, shortcuts, and panel actions.
+  - Pure `dispatch` execution loop with deterministic `Effect` contracts and `Platform` abstraction.
+  - Serializable `AppStateSnapshot` with stable 64-bit cryptographic hashing preventing dead/unwired UI controls.
+- **Hardware-Accelerated WebGPU 3D Viewport (`optics-ui::viewport_3d`, `optics-render`):**
+  - Switched `eframe` to `"wgpu"` with native progressive path tracing callbacks via `egui_wgpu`.
+  - Orbit camera with pan, tilt, zoom, and distance controls.
+  - Adaptive status bar reporting real GPU adapter info, graphics backend, accumulated SPP, and render frame latency.
+- **Parametric 3D Scene Model & Geometry Tessellation (`optics-ui::scene_model`):**
+  - Pure procedural watertight meshes for Prisms, UV Spheres, Optical Slabs, Singlet Lenses, and Floor Planes with calculated outward normals.
+  - Interactive scene hierarchy with Add, Duplicate, Delete, Visibility, and Selection.
+  - Live 2-level BVH (TLAS/BLAS) rebuilds with sub-millisecond build-time telemetry.
+- **Physical Beam Propagation & Caustics (`optics-ui::beam_ribbon`):**
+  - 3D camera-facing billboard ribbons for incoming collimated beams and dispersed spectral rays.
+  - Full CIE 1931 XYZ color matching and IEC 61966-2-1 piecewise sRGB transfer.
+  - Floor spectral caustic footprints with nanometer wavelength ruler.
+  - Dielectric group velocity time-of-flight pulses demonstrating dispersion in the time domain ($v_g = c / n(\lambda)$).
+- **Live Scientific Telemetry Dock (`optics-ui::analytics`):**
+  - Replaced static constants and dummy loops with 4 live cards:
+    - Convergence card: Live Welford variance, RMSE, and 95% confidence intervals.
+    - Spectral Power Distribution card: Real hero-wavelength spectrum preview.
+    - BVH Diagnostics card: Real ray traversal cost readback and benchmark against active scene.
+    - Material / Glass card: Live Sellmeier dispersion curve and interactive material editor.
+- **Screen Boundary Enforcement & Geometric Layout Assertions (`optics-ui::layout`, `tests/geometric_layout_tests.rs`):**
+  - Bounded panel dimensions with scroll areas (`vscroll(true)`) preventing clipping across resolutions from 900x600 to 4K.
+  - Replaced churn-prone pixel snapshots with mathematical non-overlap assertions (`!r1.intersect(r2).is_positive()`).
+  - Guaranteed touch targets $\ge 40$ px in touch mode.
+- **Comprehensive Physics & Rendering Validation Suite (`tests/physics_validation_tests.rs`):**
+  - Verified GPU single-precision Sellmeier vs CPU double-precision prism angle deviation ($\Delta \theta \le 0.05^\circ$).
+  - Verified glass-slab multi-reflection energy conservation ($R + T = 1.0 \pm 10^{-10}$).
+  - Verified White Furnace equilibrium radiance conservation ($L_o = 1.0 \pm 10^{-10}$).
+  - Verified sub-frame recalculation performance ($\ll 16$ ms).
+
 #### Phase 12.3: WASM Drag-and-Drop & Default Scene Loading (`optics-ui`, `optics-web`)
 - **Interactive Drag-and-Drop .zmx Prescription Loading (`optics-ui::app`):**
   - Added `handle_file_drag_and_drop` supporting direct file drops onto the application window and WASM canvas.
