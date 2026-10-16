@@ -726,7 +726,10 @@ mod tests {
         let target = 256_u64;
         let pct = ((spp as f32 / target as f32) * 100.0).clamp(0.0, 100.0);
         assert!((pct - 100.0).abs() < 1e-6);
-        assert!(spp >= target, "At or above target SPP status must be complete");
+        assert!(
+            spp >= target,
+            "At or above target SPP status must be complete"
+        );
     }
 
     #[test]

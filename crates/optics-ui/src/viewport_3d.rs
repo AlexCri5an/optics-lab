@@ -416,8 +416,7 @@ pub fn render_viewport_3d(
         let screen_center = rect.center();
         let wire_stroke = Stroke::new(1.0, tokens.border_subtle);
 
-        if app_mode == AppMode::LensSystem && lens_sim.is_some() {
-            let l_sim = lens_sim.unwrap();
+        if let (AppMode::LensSystem, Some(l_sim)) = (app_mode, lens_sim) {
             for elem in &l_sim.elements {
                 for window in elem.boundary_points.windows(2) {
                     let p_a = [0.0_f32, window[0][1] as f32, window[0][0] as f32];

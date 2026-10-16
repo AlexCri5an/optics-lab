@@ -582,7 +582,8 @@ impl OpticsLabApp {
                         self.viewport_mode = ViewportMode::View2D;
                         self.right_panel_tab = RightPanelTab::Prescription;
                         if let Some(ref sim) = self.lens_sim {
-                            self.scene_model = SceneModel::from_optical_prescription(&sim.prescription);
+                            self.scene_model =
+                                SceneModel::from_optical_prescription(&sim.prescription);
                             let (bvh, _) = self.scene_model.build_bvh_scene();
                             self.gpu_state.update_scene_bvh(&bvh);
                             self.gpu_state.camera.target = [0.0, 0.0, 25.0];

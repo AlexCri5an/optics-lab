@@ -126,8 +126,8 @@ impl PathTracingRenderer {
             });
 
         // Default Schott N-BK7 Sellmeier coefficients
-        let default_b = [1.03961212_f32, 0.231792344, 1.01046945];
-        let default_c = [0.00600069867_f32, 0.0200179144, 103.560653];
+        let default_b = [1.039_612_2_f32, 0.231_792_35_f32, 1.010_469_4_f32];
+        let default_c = [0.006_000_698_5_f32, 0.020_017_914_f32, 103.560_65_f32];
 
         let initial_params = RenderParams {
             frame_index: 0,

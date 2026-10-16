@@ -386,21 +386,15 @@ impl Command {
                     (false, "Available only in Prism Dispersion mode.")
                 }
             }
-            Self::SaveProject | Self::LoadProject(_) => {
-                (
-                    false,
-                    "Project file I/O is disabled pending native file dialog implementation.",
-                )
-            }
-            Self::ExportImage => {
-                (
-                    false,
-                    "Image export is disabled pending native file dialog implementation.",
-                )
-            }
-            Self::SelectTool(ActiveTool::Scale) => {
-                (false, "Scale tool is not yet implemented.")
-            }
+            Self::SaveProject | Self::LoadProject(_) => (
+                false,
+                "Project file I/O is disabled pending native file dialog implementation.",
+            ),
+            Self::ExportImage => (
+                false,
+                "Image export is disabled pending native file dialog implementation.",
+            ),
+            Self::SelectTool(ActiveTool::Scale) => (false, "Scale tool is not yet implemented."),
             _ => (true, ""),
         }
     }
