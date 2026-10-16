@@ -154,3 +154,69 @@ fn test_command_modal_dialogs() {
     assert!(!app.show_shortcuts_help);
     assert_eq!(effects, vec![Effect::ModalClosed("shortcuts")]);
 }
+
+#[test]
+fn test_command_scene_model_crud() {
+    let mut app = OpticsLabApp::default();
+    let mut platform = MockPlatform::new();
+
+    let initial_count = app.scene_model.objects.len();
+
+    // 1. Add Sphere
+    let effects = dispatch(
+        &mut app,
+        Command::AddSceneObject("Sphere".into()),
+        &mut platform,
+    );
+    assert_eq!(app.scene_model.objects.len(), initial_count + 1);
+    assert_eq!(app.right_panel_tab, RightPanelTab::Properties);
+    assert!(effects.contains(&Effect::SceneModified));
+    let added_id = app.scene_model.selected_id.unwrap_or(0);
+    assert_ne!(added_id, 0);
+
+    // 2. Duplicate Sphere
+    let effects = dispatch(
+        &mut app,
+        Command::DuplicateSceneObject(added_id),
+        &mut platform,
+    );
+    assert_eq!(app.scene_model.objects.len(), initial_count + 2);
+    assert!(effects.contains(&Effect::SceneModified));
+    let dup_id = app.scene_model.selected_id.unwrap_or(0);
+    assert_ne!(dup_id, 0);
+    assert_ne!(added_id, dup_id);
+
+    // 3. Toggle Visibility
+    assert_eq!(
+        app.scene_model.get_object(dup_id).map(|o| o.visible),
+        Some(true)
+    );
+    dispatch(
+        &mut app,
+        Command::ToggleObjectVisibility(dup_id),
+        &mut platform,
+    );
+    assert_eq!(
+        app.scene_model.get_object(dup_id).map(|o| o.visible),
+        Some(false)
+    );
+
+    // 4. Delete Objects
+    dispatch(&mut app, Command::DeleteSceneObject(dup_id), &mut platform);
+    dispatch(
+        &mut app,
+        Command::DeleteSceneObject(added_id),
+        &mut platform,
+    );
+    assert_eq!(app.scene_model.objects.len(), initial_count);
+
+    // 5. Select object by ID
+    let first_id = app.scene_model.objects[0].id;
+    dispatch(
+        &mut app,
+        Command::SelectSceneObjectId(Some(first_id)),
+        &mut platform,
+    );
+    assert_eq!(app.scene_model.selected_id, Some(first_id));
+    assert_eq!(app.right_panel_tab, RightPanelTab::Properties);
+}

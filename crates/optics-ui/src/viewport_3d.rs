@@ -234,11 +234,21 @@ impl GpuViewportState {
         }
     }
 
-    /// Initializes hardware acceleration using the given `eframe` wgpu render state.
+    /// Re-uploads an updated BVH acceleration structure and resets sample accumulation.
+    pub fn update_scene_bvh(&mut self, scene: &BvhScene) {
+        if let Some(r) = &self.renderer {
+            if let Ok(mut lock) = r.lock() {
+                lock.update_scene(scene);
+            }
+        }
+        self.sample_count = 0;
+    }
+
+    /// Initializes hardware acceleration using the given `eframe` wgpu render state and scene.
     pub fn init_from_wgpu_render_state(
         &mut self,
         wgpu_state: &egui_wgpu::RenderState,
-        sim: &PrismSimulation,
+        scene: &BvhScene,
     ) {
         let adapter_info = wgpu_state.adapter.get_info();
         self.adapter_name = adapter_info.name.clone();
@@ -253,14 +263,13 @@ impl GpuViewportState {
             wgpu_state.queue.clone(),
         );
 
-        let scene = build_prism_scene_bvh(sim);
         let camera = self.camera.to_thin_lens_camera();
         let initial_w = 800;
         let initial_h = 600;
 
         match PathTracingRenderer::new(
             gpu_ctx,
-            &scene,
+            scene,
             &camera,
             initial_w,
             initial_h,

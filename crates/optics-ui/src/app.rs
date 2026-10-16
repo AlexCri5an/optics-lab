@@ -35,6 +35,8 @@ use crate::widgets::dispersion_curve_plot;
 /// Active tab in the right inspector panel.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum RightPanelTab {
+    /// Object transform, geometry, and material property editor.
+    Properties,
     /// Ray inspector probe and physical bounce tables.
     #[default]
     RayInspector,
@@ -147,6 +149,8 @@ pub struct AppStateSnapshot {
     pub selected_ray_index: Option<usize>,
     /// Selected scene object.
     pub selected_scene_object: Option<String>,
+    /// Selected scene object ID in SceneModel.
+    pub selected_scene_id: Option<u64>,
     /// Reflections visibility.
     pub show_reflections: bool,
     /// Diagnostic timing visibility.
@@ -239,6 +243,8 @@ pub struct OpticsLabApp {
     pub is_fullscreen: bool,
     /// Hardware-accelerated GPU viewport and path tracing state.
     pub gpu_state: crate::viewport_3d::GpuViewportState,
+    /// Non-sequential parametric 3D scene model and objects.
+    pub scene_model: crate::scene_model::SceneModel,
     /// Per-frame UI registry tracking all interactive controls.
     pub ui_registry: crate::registry::UiRegistry,
 }
@@ -293,6 +299,7 @@ impl Default for OpticsLabApp {
             fonts_initialized: false,
             prefs,
             gpu_state: crate::viewport_3d::GpuViewportState::default(),
+            scene_model: crate::scene_model::SceneModel::default(),
             ui_registry: crate::registry::UiRegistry::default(),
         }
     }
@@ -319,8 +326,8 @@ impl OpticsLabApp {
         app.fonts_initialized = true;
 
         if let Some(wgpu_state) = &cc.wgpu_render_state {
-            app.gpu_state
-                .init_from_wgpu_render_state(wgpu_state, &app.sim);
+            let (bvh, _) = app.scene_model.build_bvh_scene();
+            app.gpu_state.init_from_wgpu_render_state(wgpu_state, &bvh);
         }
 
         app
@@ -336,6 +343,7 @@ impl OpticsLabApp {
             right_panel_tab: self.right_panel_tab,
             selected_ray_index: self.selected_ray_index,
             selected_scene_object: self.selected_scene_object.clone(),
+            selected_scene_id: self.scene_model.selected_id,
             show_reflections: self.show_reflections,
             show_timing: self.show_timing,
             show_preferences: self.show_preferences,
@@ -1058,88 +1066,163 @@ impl OpticsLabApp {
                                 12.0,
                             );
                             ui.label(
-                                egui::RichText::new("Scene")
+                                egui::RichText::new("Scene Objects")
                                     .size(11.5)
                                     .color(self.tokens.text_secondary),
                             );
+
+                            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                ui.menu_button("+ Add", |ui| {
+                                    if ui.button("+ Prism").clicked() {
+                                        let obj = crate::scene_model::SceneObject::new(
+                                            0,
+                                            format!("Prism {}", self.scene_model.objects.len() + 1),
+                                            crate::scene_model::Transform::default(),
+                                            crate::scene_model::ObjectGeometry::Prism {
+                                                apex_deg: 60.0,
+                                                base_width: 40.0,
+                                                depth: 50.0,
+                                            },
+                                            crate::scene_model::MaterialData::default(),
+                                        );
+                                        let new_id = self.scene_model.add_object(obj);
+                                        self.scene_model.selected_id = Some(new_id);
+                                        self.right_panel_tab = RightPanelTab::Properties;
+                                        let (bvh, _) = self.scene_model.build_bvh_scene();
+                                        self.gpu_state.update_scene_bvh(&bvh);
+                                        ui.close();
+                                    }
+                                    if ui.button("+ Sphere").clicked() {
+                                        let obj = crate::scene_model::SceneObject::new(
+                                            0,
+                                            format!(
+                                                "Sphere {}",
+                                                self.scene_model.objects.len() + 1
+                                            ),
+                                            crate::scene_model::Transform::from_position(
+                                                optics_core::Vec3::new(0.0, 25.0, 0.0),
+                                            ),
+                                            crate::scene_model::ObjectGeometry::Sphere {
+                                                radius: 20.0,
+                                                stacks: 8,
+                                                sectors: 16,
+                                            },
+                                            crate::scene_model::MaterialData::default(),
+                                        );
+                                        let new_id = self.scene_model.add_object(obj);
+                                        self.scene_model.selected_id = Some(new_id);
+                                        self.right_panel_tab = RightPanelTab::Properties;
+                                        let (bvh, _) = self.scene_model.build_bvh_scene();
+                                        self.gpu_state.update_scene_bvh(&bvh);
+                                        ui.close();
+                                    }
+                                    if ui.button("+ Slab").clicked() {
+                                        let obj = crate::scene_model::SceneObject::new(
+                                            0,
+                                            format!("Slab {}", self.scene_model.objects.len() + 1),
+                                            crate::scene_model::Transform::from_position(
+                                                optics_core::Vec3::new(0.0, 20.0, 0.0),
+                                            ),
+                                            crate::scene_model::ObjectGeometry::Slab {
+                                                width: 40.0,
+                                                height: 40.0,
+                                                thickness: 12.0,
+                                            },
+                                            crate::scene_model::MaterialData::default(),
+                                        );
+                                        let new_id = self.scene_model.add_object(obj);
+                                        self.scene_model.selected_id = Some(new_id);
+                                        self.right_panel_tab = RightPanelTab::Properties;
+                                        let (bvh, _) = self.scene_model.build_bvh_scene();
+                                        self.gpu_state.update_scene_bvh(&bvh);
+                                        ui.close();
+                                    }
+                                    if ui.button("+ Singlet Lens").clicked() {
+                                        let obj = crate::scene_model::SceneObject::new(
+                                            0,
+                                            format!(
+                                                "Singlet Lens {}",
+                                                self.scene_model.objects.len() + 1
+                                            ),
+                                            crate::scene_model::Transform::from_position(
+                                                optics_core::Vec3::new(0.0, 20.0, 0.0),
+                                            ),
+                                            crate::scene_model::ObjectGeometry::LensMesh {
+                                                r1: 50.0,
+                                                r2: -50.0,
+                                                semi_diameter: 20.0,
+                                                center_thickness: 8.0,
+                                                radial_segments: 6,
+                                                azimuthal_segments: 16,
+                                            },
+                                            crate::scene_model::MaterialData::default(),
+                                        );
+                                        let new_id = self.scene_model.add_object(obj);
+                                        self.scene_model.selected_id = Some(new_id);
+                                        self.right_panel_tab = RightPanelTab::Properties;
+                                        let (bvh, _) = self.scene_model.build_bvh_scene();
+                                        self.gpu_state.update_scene_bvh(&bvh);
+                                        ui.close();
+                                    }
+                                });
+                            });
                         });
 
                         ui.add_space(4.0);
 
-                        // Tree item: Scene
-                        let scene_glyph = if self.scene_tree_scene_open {
-                            IconId::CaretDown.glyph()
-                        } else {
-                            IconId::CaretRight.glyph()
-                        };
-                        if ui
-                            .selectable_label(
-                                self.selected_scene_object.as_deref() == Some("Scene"),
-                                format!("{scene_glyph} Scene"),
-                            )
-                            .clicked()
-                        {
-                            self.scene_tree_scene_open = !self.scene_tree_scene_open;
-                            self.selected_scene_object = Some("Scene".into());
+                        let mut bvh_rebuild = false;
+                        let mut to_delete = None;
+                        let mut to_duplicate = None;
+
+                        for obj in &mut self.scene_model.objects {
+                            ui.horizontal(|ui| {
+                                let eye_text = if obj.visible { "👁" } else { "⊘" };
+                                if ui
+                                    .small_button(eye_text)
+                                    .on_hover_text("Toggle object visibility")
+                                    .clicked()
+                                {
+                                    obj.visible = !obj.visible;
+                                    bvh_rebuild = true;
+                                }
+
+                                let is_selected = self.scene_model.selected_id == Some(obj.id);
+                                if ui.selectable_label(is_selected, &obj.name).clicked() {
+                                    self.scene_model.selected_id = Some(obj.id);
+                                    self.right_panel_tab = RightPanelTab::Properties;
+                                }
+
+                                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                    if ui
+                                        .small_button("×")
+                                        .on_hover_text("Delete object")
+                                        .clicked()
+                                    {
+                                        to_delete = Some(obj.id);
+                                    }
+                                    if ui
+                                        .small_button("⧉")
+                                        .on_hover_text("Duplicate object")
+                                        .clicked()
+                                    {
+                                        to_duplicate = Some(obj.id);
+                                    }
+                                });
+                            });
                         }
 
-                        if self.scene_tree_scene_open {
-                            ui.indent("scene_tree_body", |ui| {
-                                // Camera
-                                if ui
-                                    .selectable_label(
-                                        self.selected_scene_object.as_deref() == Some("Camera"),
-                                        format!("{} Camera", IconId::Camera.glyph()),
-                                    )
-                                    .clicked()
-                                {
-                                    self.selected_scene_object = Some("Camera".into());
-                                }
+                        if let Some(del_id) = to_delete {
+                            self.scene_model.delete_object(del_id);
+                            bvh_rebuild = true;
+                        }
+                        if let Some(dup_id) = to_duplicate {
+                            self.scene_model.duplicate_object(dup_id);
+                            bvh_rebuild = true;
+                        }
 
-                                // Prism (expandable)
-                                let prism_glyph = if self.scene_tree_prism_open {
-                                    IconId::CaretDown.glyph()
-                                } else {
-                                    IconId::CaretRight.glyph()
-                                };
-                                if ui
-                                    .selectable_label(
-                                        self.selected_scene_object.as_deref() == Some("Prism"),
-                                        format!("{prism_glyph} Prism"),
-                                    )
-                                    .clicked()
-                                {
-                                    self.scene_tree_prism_open = !self.scene_tree_prism_open;
-                                    self.selected_scene_object = Some("Prism".into());
-                                }
-
-                                if self.scene_tree_prism_open {
-                                    ui.indent("prism_children", |ui| {
-                                        let glass_label =
-                                            format!("Glass ({})", self.sim.glass_name);
-                                        let is_glass_sel =
-                                            self.selected_scene_object.as_deref() == Some("Glass");
-                                        if ui.selectable_label(is_glass_sel, &glass_label).clicked()
-                                        {
-                                            self.selected_scene_object = Some("Glass".into());
-                                            self.right_panel_tab = RightPanelTab::GlassCatalog;
-                                            self.glass_browser_state.selected_glass =
-                                                self.sim.glass_name.clone();
-                                        }
-                                    });
-                                }
-
-                                // Light
-                                if ui
-                                    .selectable_label(
-                                        self.selected_scene_object.as_deref() == Some("Light"),
-                                        format!("{} Collimated Beam", IconId::LightSource.glyph()),
-                                    )
-                                    .clicked()
-                                {
-                                    self.selected_scene_object = Some("Light".into());
-                                }
-                            });
+                        if bvh_rebuild {
+                            let (bvh, _) = self.scene_model.build_bvh_scene();
+                            self.gpu_state.update_scene_bvh(&bvh);
                         }
                     }
                 });
@@ -1296,6 +1379,7 @@ impl OpticsLabApp {
                     ui.spacing_mut().item_spacing = Vec2::new(4.0, 0.0);
 
                     let tabs = [
+                        (RightPanelTab::Properties, "Properties"),
                         (RightPanelTab::RayInspector, "Inspector"),
                         (RightPanelTab::Prescription, "Prescription"),
                         (RightPanelTab::GlassCatalog, "Catalog"),
@@ -1315,6 +1399,9 @@ impl OpticsLabApp {
                 ui.separator();
 
                 match self.right_panel_tab {
+                    RightPanelTab::Properties => {
+                        self.render_properties_panel(ui);
+                    }
                     RightPanelTab::RayInspector => {
                         render_ray_inspector_panel(
                             ui,
@@ -1370,6 +1457,418 @@ impl OpticsLabApp {
                 }
             });
         self.prefs.right_inspector_width = resp.response.rect.width();
+    }
+
+    /// Renders the property editor for the currently selected scene object.
+    fn render_properties_panel(&mut self, ui: &mut egui::Ui) {
+        let selected_id = self.scene_model.selected_id;
+        let Some(id) = selected_id else {
+            ui.add_space(16.0);
+            ui.label(
+                egui::RichText::new("No scene object selected.").color(self.tokens.text_disabled),
+            );
+            ui.label("Select an object in the Scene Hierarchy tree to edit its transform, geometry, and material.");
+            return;
+        };
+
+        let last_bvh_time = self.scene_model.last_bvh_build_time_ms;
+        let Some(obj) = self.scene_model.get_object_mut(id) else {
+            ui.label("Selected object no longer exists.");
+            return;
+        };
+
+        let mut scene_changed = false;
+
+        ScrollArea::vertical().show(ui, |ui| {
+            ui.add_space(4.0);
+
+            // Object Name and Visibility
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("Name:").strong());
+                ui.text_edit_singleline(&mut obj.name);
+                if ui.checkbox(&mut obj.visible, "Visible").changed() {
+                    scene_changed = true;
+                }
+            });
+
+            ui.add_space(6.0);
+            ui.separator();
+
+            // Transform Section
+            ui.label(
+                egui::RichText::new("Transform")
+                    .strong()
+                    .color(self.tokens.text_primary),
+            );
+
+            ui.horizontal(|ui| {
+                ui.label("Position (mm):");
+                if ui
+                    .add(
+                        egui::DragValue::new(&mut obj.transform.position.x)
+                            .speed(0.5)
+                            .prefix("X: "),
+                    )
+                    .changed()
+                    || ui
+                        .add(
+                            egui::DragValue::new(&mut obj.transform.position.y)
+                                .speed(0.5)
+                                .prefix("Y: "),
+                        )
+                        .changed()
+                    || ui
+                        .add(
+                            egui::DragValue::new(&mut obj.transform.position.z)
+                                .speed(0.5)
+                                .prefix("Z: "),
+                        )
+                        .changed()
+                {
+                    scene_changed = true;
+                }
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Rotation (°):");
+                if ui
+                    .add(
+                        egui::DragValue::new(&mut obj.transform.rotation_deg.x)
+                            .speed(1.0)
+                            .prefix("P: "),
+                    )
+                    .changed()
+                    || ui
+                        .add(
+                            egui::DragValue::new(&mut obj.transform.rotation_deg.y)
+                                .speed(1.0)
+                                .prefix("Y: "),
+                        )
+                        .changed()
+                    || ui
+                        .add(
+                            egui::DragValue::new(&mut obj.transform.rotation_deg.z)
+                                .speed(1.0)
+                                .prefix("R: "),
+                        )
+                        .changed()
+                {
+                    scene_changed = true;
+                }
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Scale:");
+                if ui
+                    .add(
+                        egui::DragValue::new(&mut obj.transform.scale.x)
+                            .speed(0.05)
+                            .range(0.01..=100.0)
+                            .prefix("X: "),
+                    )
+                    .changed()
+                    || ui
+                        .add(
+                            egui::DragValue::new(&mut obj.transform.scale.y)
+                                .speed(0.05)
+                                .range(0.01..=100.0)
+                                .prefix("Y: "),
+                        )
+                        .changed()
+                    || ui
+                        .add(
+                            egui::DragValue::new(&mut obj.transform.scale.z)
+                                .speed(0.05)
+                                .range(0.01..=100.0)
+                                .prefix("Z: "),
+                        )
+                        .changed()
+                {
+                    scene_changed = true;
+                }
+            });
+
+            ui.add_space(6.0);
+            ui.separator();
+
+            // Geometry Parameters Section
+            ui.label(
+                egui::RichText::new("Geometry")
+                    .strong()
+                    .color(self.tokens.text_primary),
+            );
+            match &mut obj.geometry {
+                crate::scene_model::ObjectGeometry::Prism {
+                    apex_deg,
+                    base_width,
+                    depth,
+                } => {
+                    ui.horizontal(|ui| {
+                        ui.label("Apex Angle:");
+                        if ui
+                            .add(egui::Slider::new(apex_deg, 20.0..=90.0).suffix("°"))
+                            .changed()
+                        {
+                            scene_changed = true;
+                        }
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Base Width:");
+                        if ui
+                            .add(egui::Slider::new(base_width, 10.0..=200.0).suffix(" mm"))
+                            .changed()
+                        {
+                            scene_changed = true;
+                        }
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Extrusion Depth:");
+                        if ui
+                            .add(egui::Slider::new(depth, 10.0..=200.0).suffix(" mm"))
+                            .changed()
+                        {
+                            scene_changed = true;
+                        }
+                    });
+                }
+                crate::scene_model::ObjectGeometry::Sphere {
+                    radius,
+                    stacks,
+                    sectors,
+                } => {
+                    ui.horizontal(|ui| {
+                        ui.label("Radius:");
+                        if ui
+                            .add(egui::Slider::new(radius, 2.0..=100.0).suffix(" mm"))
+                            .changed()
+                        {
+                            scene_changed = true;
+                        }
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Subdivisions:");
+                        if ui
+                            .add(egui::Slider::new(stacks, 4..=32).prefix("Stacks: "))
+                            .changed()
+                            || ui
+                                .add(egui::Slider::new(sectors, 6..=48).prefix("Sectors: "))
+                                .changed()
+                        {
+                            scene_changed = true;
+                        }
+                    });
+                }
+                crate::scene_model::ObjectGeometry::Slab {
+                    width,
+                    height,
+                    thickness,
+                } => {
+                    ui.horizontal(|ui| {
+                        ui.label("Width / Height:");
+                        if ui
+                            .add(egui::Slider::new(width, 5.0..=200.0).suffix(" mm"))
+                            .changed()
+                            || ui
+                                .add(egui::Slider::new(height, 5.0..=200.0).suffix(" mm"))
+                                .changed()
+                        {
+                            scene_changed = true;
+                        }
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Thickness:");
+                        if ui
+                            .add(egui::Slider::new(thickness, 1.0..=100.0).suffix(" mm"))
+                            .changed()
+                        {
+                            scene_changed = true;
+                        }
+                    });
+                }
+                crate::scene_model::ObjectGeometry::LensMesh {
+                    r1,
+                    r2,
+                    semi_diameter,
+                    center_thickness,
+                    radial_segments,
+                    azimuthal_segments,
+                } => {
+                    ui.horizontal(|ui| {
+                        ui.label("R1 (Front):");
+                        if ui
+                            .add(egui::Slider::new(r1, -200.0..=200.0).suffix(" mm"))
+                            .changed()
+                        {
+                            scene_changed = true;
+                        }
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("R2 (Rear):");
+                        if ui
+                            .add(egui::Slider::new(r2, -200.0..=200.0).suffix(" mm"))
+                            .changed()
+                        {
+                            scene_changed = true;
+                        }
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Semi-Diameter / Thickness:");
+                        if ui
+                            .add(egui::Slider::new(semi_diameter, 5.0..=50.0).suffix(" mm"))
+                            .changed()
+                            || ui
+                                .add(egui::Slider::new(center_thickness, 2.0..=30.0).suffix(" mm"))
+                                .changed()
+                        {
+                            scene_changed = true;
+                        }
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Tessellation:");
+                        if ui
+                            .add(egui::Slider::new(radial_segments, 3..=24).prefix("Rad: "))
+                            .changed()
+                            || ui
+                                .add(egui::Slider::new(azimuthal_segments, 6..=48).prefix("Azim: "))
+                                .changed()
+                        {
+                            scene_changed = true;
+                        }
+                    });
+                }
+                crate::scene_model::ObjectGeometry::FloorPlane { size } => {
+                    ui.horizontal(|ui| {
+                        ui.label("Plane Half-Extent:");
+                        if ui
+                            .add(egui::Slider::new(size, 100.0..=2000.0).suffix(" mm"))
+                            .changed()
+                        {
+                            scene_changed = true;
+                        }
+                    });
+                }
+            }
+
+            ui.add_space(6.0);
+            ui.separator();
+
+            // Material Section
+            ui.label(
+                egui::RichText::new("Optical Material")
+                    .strong()
+                    .color(self.tokens.text_primary),
+            );
+
+            let current_glass = obj.material.glass_name.clone();
+            ui.horizontal(|ui| {
+                ui.label("Catalog Glass:");
+                egui::ComboBox::from_id_salt("material_glass_select")
+                    .selected_text(&current_glass)
+                    .show_ui(ui, |ui| {
+                        for g in ["N-BK7", "F2", "SF11", "Fused Silica", "CaF2", "Floor"] {
+                            if ui.selectable_label(current_glass == g, g).clicked() {
+                                obj.material.glass_name = g.into();
+                                obj.material.name = g.into();
+                                scene_changed = true;
+                            }
+                        }
+                    });
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Dispersion Model:");
+                let model_str = match obj.material.dispersion {
+                    crate::scene_model::DispersionModelChoice::Sellmeier => "Sellmeier (Physical)",
+                    crate::scene_model::DispersionModelChoice::Cauchy => "Cauchy (2-term)",
+                    crate::scene_model::DispersionModelChoice::Constant(_) => {
+                        "Constant (Non-dispersive)"
+                    }
+                };
+                egui::ComboBox::from_id_salt("material_dispersion_select")
+                    .selected_text(model_str)
+                    .show_ui(ui, |ui| {
+                        if ui
+                            .selectable_label(
+                                matches!(
+                                    obj.material.dispersion,
+                                    crate::scene_model::DispersionModelChoice::Sellmeier
+                                ),
+                                "Sellmeier (Physical)",
+                            )
+                            .clicked()
+                        {
+                            obj.material.dispersion =
+                                crate::scene_model::DispersionModelChoice::Sellmeier;
+                            scene_changed = true;
+                        }
+                        if ui
+                            .selectable_label(
+                                matches!(
+                                    obj.material.dispersion,
+                                    crate::scene_model::DispersionModelChoice::Cauchy
+                                ),
+                                "Cauchy (2-term)",
+                            )
+                            .clicked()
+                        {
+                            obj.material.dispersion =
+                                crate::scene_model::DispersionModelChoice::Cauchy;
+                            scene_changed = true;
+                        }
+                        if ui
+                            .selectable_label(
+                                matches!(
+                                    obj.material.dispersion,
+                                    crate::scene_model::DispersionModelChoice::Constant(_)
+                                ),
+                                "Constant (Non-dispersive)",
+                            )
+                            .clicked()
+                        {
+                            obj.material.dispersion =
+                                crate::scene_model::DispersionModelChoice::Constant(
+                                    obj.material.nd,
+                                );
+                            scene_changed = true;
+                        }
+                    });
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Surface Roughness α:");
+                if ui
+                    .add(egui::Slider::new(&mut obj.material.roughness, 0.0..=1.0).show_value(true))
+                    .on_hover_text("GGX microfacet roughness for frosted/ground glass")
+                    .changed()
+                {
+                    scene_changed = true;
+                }
+            });
+
+            ui.horizontal(|ui| {
+                ui.label(format!(
+                    "Nd = {:.4} • Vd = {:.2}",
+                    obj.material.nd, obj.material.vd
+                ));
+            });
+
+            ui.add_space(8.0);
+            ui.separator();
+
+            // Incremental BVH Timing Telemetry Readout
+            ui.horizontal(|ui| {
+                ui.label(
+                    egui::RichText::new(format!("BVH Rebuild: {:.2} ms", last_bvh_time))
+                        .size(11.0)
+                        .color(self.tokens.text_secondary),
+                );
+            });
+        });
+
+        if scene_changed {
+            let (bvh, _) = self.scene_model.build_bvh_scene();
+            self.gpu_state.update_scene_bvh(&bvh);
+        }
     }
 
     /// Renders the central viewport area.

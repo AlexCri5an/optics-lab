@@ -19,6 +19,7 @@ pub mod lens_view;
 pub mod platform;
 pub mod project;
 pub mod registry;
+pub mod scene_model;
 pub mod shortcuts;
 pub mod sim;
 pub mod theme;
@@ -45,6 +46,9 @@ pub use lens_view::{render_lens_system_panel, render_prescription_table_view};
 pub use platform::{EguiPlatform, MockPlatform, Platform};
 pub use project::{PROJECT_FORMAT_VERSION, ProjectFile};
 pub use registry::{RegisteredWidget, UiRegistry};
+pub use scene_model::{
+    DispersionModelChoice, MaterialData, ObjectGeometry, SceneModel, SceneObject, Transform,
+};
 pub use shortcuts::{ALL_SHORTCUTS, ShortcutDef, ShortcutId, format_tooltip, get_shortcut};
 pub use sim::{
     EdgeState, PrismSimulation, ReflectedBranch2D, TracedRay2D, map_reflectance_to_alpha,

@@ -126,6 +126,16 @@ pub enum Command {
     ToggleRenderPause,
     /// Reset GPU path tracing progressive accumulation.
     ResetAccumulation,
+    /// Add a new 3D scene object by kind ("Prism", "Sphere", "Slab", "Lens").
+    AddSceneObject(String),
+    /// Duplicate a scene object by ID.
+    DuplicateSceneObject(u64),
+    /// Delete a scene object by ID.
+    DeleteSceneObject(u64),
+    /// Toggle visibility of a scene object by ID.
+    ToggleObjectVisibility(u64),
+    /// Select a scene object by ID.
+    SelectSceneObjectId(Option<u64>),
     /// Exit the application.
     Quit,
 }
@@ -159,6 +169,7 @@ impl Command {
                 ViewportMode::Convergence => "viewport_convergence",
             },
             Self::SetRightPanelTab(r) => match r {
+                RightPanelTab::Properties => "tab_properties",
                 RightPanelTab::RayInspector => "tab_inspector",
                 RightPanelTab::Prescription => "tab_prescription",
                 RightPanelTab::GlassCatalog => "tab_catalog",
@@ -203,6 +214,11 @@ impl Command {
             Self::DismissModalOrSelection => "dismiss_modal_or_selection",
             Self::ToggleRenderPause => "toggle_render_pause",
             Self::ResetAccumulation => "reset_accumulation",
+            Self::AddSceneObject(_) => "scene_add_object",
+            Self::DuplicateSceneObject(_) => "scene_duplicate_object",
+            Self::DeleteSceneObject(_) => "scene_delete_object",
+            Self::ToggleObjectVisibility(_) => "scene_toggle_visibility",
+            Self::SelectSceneObjectId(_) => "scene_select_object_id",
             Self::Quit => "quit",
         }
     }
@@ -224,6 +240,7 @@ impl Command {
                 ViewportMode::Convergence => "Convergence tracker",
             },
             Self::SetRightPanelTab(r) => match r {
+                RightPanelTab::Properties => "Properties",
                 RightPanelTab::RayInspector => "Inspector",
                 RightPanelTab::Prescription => "Prescription",
                 RightPanelTab::GlassCatalog => "Catalog",
@@ -268,6 +285,11 @@ impl Command {
             Self::DismissModalOrSelection => "Dismiss",
             Self::ToggleRenderPause => "Pause / resume path tracing",
             Self::ResetAccumulation => "Reset accumulation",
+            Self::AddSceneObject(_) => "Add scene object",
+            Self::DuplicateSceneObject(_) => "Duplicate scene object",
+            Self::DeleteSceneObject(_) => "Delete scene object",
+            Self::ToggleObjectVisibility(_) => "Toggle object visibility",
+            Self::SelectSceneObjectId(_) => "Select scene object",
             Self::Quit => "Quit OpticsLab",
         }
     }
@@ -385,6 +407,11 @@ impl Command {
             Self::DismissModalOrSelection => Effect::StateChanged("dismiss"),
             Self::ToggleRenderPause => Effect::StateChanged("render_paused"),
             Self::ResetAccumulation => Effect::RenderAccumulationReset,
+            Self::AddSceneObject(_)
+            | Self::DuplicateSceneObject(_)
+            | Self::DeleteSceneObject(_) => Effect::SceneModified,
+            Self::ToggleObjectVisibility(_) => Effect::SceneModified,
+            Self::SelectSceneObjectId(_) => Effect::SelectionChanged,
             Self::Quit => Effect::ViewportCommandIssued,
         }
     }
@@ -677,6 +704,96 @@ pub fn dispatch(app: &mut OpticsLabApp, cmd: Command, platform: &mut dyn Platfor
         Command::ResetAccumulation => {
             app.gpu_state.reset_accumulation();
             effects.push(Effect::RenderAccumulationReset);
+        }
+        Command::AddSceneObject(kind) => {
+            let (geom, name) = match kind.as_str() {
+                "Sphere" => (
+                    crate::scene_model::ObjectGeometry::Sphere {
+                        radius: 20.0,
+                        stacks: 8,
+                        sectors: 16,
+                    },
+                    format!("Sphere {}", app.scene_model.objects.len() + 1),
+                ),
+                "Slab" => (
+                    crate::scene_model::ObjectGeometry::Slab {
+                        width: 40.0,
+                        height: 40.0,
+                        thickness: 12.0,
+                    },
+                    format!("Slab {}", app.scene_model.objects.len() + 1),
+                ),
+                "Lens" => (
+                    crate::scene_model::ObjectGeometry::LensMesh {
+                        r1: 50.0,
+                        r2: -50.0,
+                        semi_diameter: 20.0,
+                        center_thickness: 8.0,
+                        radial_segments: 6,
+                        azimuthal_segments: 16,
+                    },
+                    format!("Lens {}", app.scene_model.objects.len() + 1),
+                ),
+                _ => (
+                    crate::scene_model::ObjectGeometry::Prism {
+                        apex_deg: 60.0,
+                        base_width: 40.0,
+                        depth: 50.0,
+                    },
+                    format!("Prism {}", app.scene_model.objects.len() + 1),
+                ),
+            };
+            let obj = crate::scene_model::SceneObject::new(
+                0,
+                name,
+                crate::scene_model::Transform::default(),
+                geom,
+                crate::scene_model::MaterialData::default(),
+            );
+            let id = app.scene_model.add_object(obj);
+            app.scene_model.selected_id = Some(id);
+            app.right_panel_tab = RightPanelTab::Properties;
+            let (bvh, _) = app.scene_model.build_bvh_scene();
+            app.gpu_state.update_scene_bvh(&bvh);
+            effects.push(Effect::SceneModified);
+            effects.push(Effect::SelectionChanged);
+            effects.push(Effect::RenderAccumulationReset);
+        }
+        Command::DuplicateSceneObject(id) => {
+            if let Some(new_id) = app.scene_model.duplicate_object(id) {
+                app.scene_model.selected_id = Some(new_id);
+                app.right_panel_tab = RightPanelTab::Properties;
+                let (bvh, _) = app.scene_model.build_bvh_scene();
+                app.gpu_state.update_scene_bvh(&bvh);
+                effects.push(Effect::SceneModified);
+                effects.push(Effect::SelectionChanged);
+                effects.push(Effect::RenderAccumulationReset);
+            }
+        }
+        Command::DeleteSceneObject(id) => {
+            if app.scene_model.delete_object(id) {
+                let (bvh, _) = app.scene_model.build_bvh_scene();
+                app.gpu_state.update_scene_bvh(&bvh);
+                effects.push(Effect::SceneModified);
+                effects.push(Effect::SelectionChanged);
+                effects.push(Effect::RenderAccumulationReset);
+            }
+        }
+        Command::ToggleObjectVisibility(id) => {
+            if let Some(obj) = app.scene_model.get_object_mut(id) {
+                obj.visible = !obj.visible;
+                let (bvh, _) = app.scene_model.build_bvh_scene();
+                app.gpu_state.update_scene_bvh(&bvh);
+                effects.push(Effect::SceneModified);
+                effects.push(Effect::RenderAccumulationReset);
+            }
+        }
+        Command::SelectSceneObjectId(id) => {
+            app.scene_model.selected_id = id;
+            if id.is_some() {
+                app.right_panel_tab = RightPanelTab::Properties;
+            }
+            effects.push(Effect::SelectionChanged);
         }
         Command::Quit => {
             platform.send_viewport_cmd(egui::ViewportCommand::Close);
