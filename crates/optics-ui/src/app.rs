@@ -570,7 +570,7 @@ impl OpticsLabApp {
     }
 
     /// Renders the classic horizontal icon toolbar directly beneath the menu bar.
-    fn render_toolbar(&mut self, ctx: &Context) {
+    fn render_toolbar(&mut self, ctx: &Context, plan: &crate::layout::LayoutPlan) {
         let is_macos = cfg!(target_os = "macos");
 
         TopBottomPanel::top("main_toolbar")
@@ -608,18 +608,23 @@ impl OpticsLabApp {
                         self.needs_fit = true;
                     }
 
-                    let zin_tt = format_tooltip("Zoom in", ShortcutId::ZoomIn, is_macos);
-                    if toolbar_button(ui, IconId::ZoomIn, &self.tokens, false, &zin_tt).clicked() {
-                        self.prefs.ui_scale = (self.prefs.ui_scale + 0.1).min(3.0);
-                    }
+                    if plan.breakpoint != crate::layout::Breakpoint::Compact {
+                        let zin_tt = format_tooltip("Zoom in", ShortcutId::ZoomIn, is_macos);
+                        if toolbar_button(ui, IconId::ZoomIn, &self.tokens, false, &zin_tt)
+                            .clicked()
+                        {
+                            self.prefs.ui_scale = (self.prefs.ui_scale + 0.1).min(3.0);
+                        }
 
-                    let zout_tt = format_tooltip("Zoom out", ShortcutId::ZoomOut, is_macos);
-                    if toolbar_button(ui, IconId::ZoomOut, &self.tokens, false, &zout_tt).clicked()
-                    {
-                        self.prefs.ui_scale = (self.prefs.ui_scale - 0.1).max(0.5);
-                    }
+                        let zout_tt = format_tooltip("Zoom out", ShortcutId::ZoomOut, is_macos);
+                        if toolbar_button(ui, IconId::ZoomOut, &self.tokens, false, &zout_tt)
+                            .clicked()
+                        {
+                            self.prefs.ui_scale = (self.prefs.ui_scale - 0.1).max(0.5);
+                        }
 
-                    ui.separator();
+                        ui.separator();
+                    }
 
                     // 3. Reflections toggle
                     let ref_tt = format_tooltip(
@@ -728,15 +733,15 @@ impl OpticsLabApp {
     }
 
     /// Renders the left sidebar containing the mode selector, parameters, and scene hierarchy.
-    fn render_left_sidebar(&mut self, ctx: &Context) {
-        if !self.prefs.show_left_sidebar {
+    fn render_left_sidebar(&mut self, ctx: &Context, plan: &crate::layout::LayoutPlan) {
+        if !plan.show_left_sidebar {
             return;
         }
 
         let resp = SidePanel::left("left_sidebar")
             .resizable(true)
             .width_range(180.0..=380.0)
-            .default_width(self.prefs.left_sidebar_width)
+            .default_width(plan.left_sidebar_width)
             .show(ctx, |ui| {
                 ScrollArea::vertical().show(ui, |ui| {
                     ui.add_space(4.0);
@@ -1086,15 +1091,15 @@ impl OpticsLabApp {
     }
 
     /// Renders the bottom analytics dock containing the 4 scientific panels.
-    fn render_bottom_analytics(&mut self, ctx: &Context) {
-        if !self.prefs.show_bottom_dock {
+    fn render_bottom_analytics(&mut self, ctx: &Context, plan: &crate::layout::LayoutPlan) {
+        if !plan.show_bottom_dock {
             return;
         }
 
         let resp = TopBottomPanel::bottom("bottom_analytics_dock")
             .resizable(true)
             .height_range(100.0..=360.0)
-            .default_height(self.prefs.bottom_dock_height)
+            .default_height(plan.bottom_dock_height)
             .show(ctx, |ui| {
                 let mut glass = self.sim.glass_name.clone();
                 let mut open_catalog = false;
@@ -1117,15 +1122,15 @@ impl OpticsLabApp {
     }
 
     /// Renders the right inspector panel.
-    fn render_right_panel(&mut self, ctx: &Context) {
-        if !self.prefs.show_right_inspector {
+    fn render_right_panel(&mut self, ctx: &Context, plan: &crate::layout::LayoutPlan) {
+        if !plan.show_right_inspector {
             return;
         }
 
         let resp = SidePanel::right("right_inspector")
             .resizable(true)
             .width_range(240.0..=480.0)
-            .default_width(self.prefs.right_inspector_width)
+            .default_width(plan.right_inspector_width)
             .show(ctx, |ui| {
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
@@ -1872,23 +1877,33 @@ impl eframe::App for OpticsLabApp {
         self.handle_shortcuts(ctx);
         self.handle_file_drag_and_drop(ctx);
 
+        let available_size = ctx.screen_rect().size();
+        let touch_mode = ctx.input(|i| {
+            !i.raw.events.is_empty()
+                && i.raw
+                    .events
+                    .iter()
+                    .any(|e| matches!(e, egui::Event::Touch { .. }))
+        });
+        let layout_plan = crate::layout::compute_layout(available_size, &self.prefs, touch_mode);
+
         // 1. Top Application Bar
         self.render_top_bar(ctx);
 
         // 2. Icon Toolbar directly below Menu Bar
-        self.render_toolbar(ctx);
+        self.render_toolbar(ctx, &layout_plan);
 
         // 3. Status Bar at very bottom
         self.render_status_bar(ctx);
 
         // 4. Left Sidebar (Tools & Scene)
-        self.render_left_sidebar(ctx);
+        self.render_left_sidebar(ctx, &layout_plan);
 
         // 5. Right Inspector (Ray Inspector & Path)
-        self.render_right_panel(ctx);
+        self.render_right_panel(ctx, &layout_plan);
 
         // 6. Bottom Analytics Dock (Convergence, Spectral Power, BVH, Material)
-        self.render_bottom_analytics(ctx);
+        self.render_bottom_analytics(ctx, &layout_plan);
 
         // 7. Central Main Viewport (dominated by 3D prism & spectral fan)
         self.render_central_viewport(ctx);

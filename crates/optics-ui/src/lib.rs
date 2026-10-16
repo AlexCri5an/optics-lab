@@ -11,6 +11,7 @@ pub mod glass_browser;
 pub mod hit_test;
 pub mod icons;
 pub mod inspector;
+pub mod layout;
 pub mod legend;
 pub mod lens_sim;
 pub mod lens_view;
@@ -29,6 +30,7 @@ pub use formatting::{
 pub use glass_browser::{GlassBrowserState, render_glass_catalog_panel};
 pub use hit_test::{find_hovered_ray_index, point_to_segment_distance};
 pub use icons::{IconId, draw_icon, icon_button, init_icon_fonts, toolbar_button};
+pub use layout::{Breakpoint, LayoutPlan, MIN_CANVAS_HEIGHT, MIN_CANVAS_WIDTH, compute_layout};
 pub use legend::{draw_wavelength_legend, find_closest_ray_by_x, wavelength_to_x, x_to_wavelength};
 pub use lens_sim::{
     LensElement2D, LensPreset, LensSimulation, LensSubview, TracedSequentialRay2D,

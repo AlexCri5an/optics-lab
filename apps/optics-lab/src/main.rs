@@ -10,7 +10,7 @@ fn main() -> Result<(), eframe::Error> {
     let mut viewport = eframe::egui::ViewportBuilder::default()
         .with_title("OpticsLab")
         .with_inner_size(Vec2::new(1200.0, 800.0))
-        .with_min_inner_size(Vec2::new(900.0, 600.0));
+        .with_min_inner_size(Vec2::new(640.0, 480.0));
 
     if let Some(icon) = icon_data {
         viewport = viewport.with_icon(icon);
