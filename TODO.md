@@ -1,6 +1,6 @@
 # OpticsLab — Master Implementation Plan & Task List
 
-> **Status:** Slice A (Prism Dispersion Demo) ✅ complete. Slice B (Lens Systems & Sequential Diagnostics) ✅ complete. Slice C (Acceleration, GPU Path Tracing) in progress (Phase 6 BVH & Phase 7 wgpu shaders complete; UI integration pending). Slice D (UI Overhaul, Themes, Full Catalog & Polish) active.
+> **Status:** Realistic UI & Viewport Overhaul (`overhaul/realistic-ui`) active (P0–P11). Slice A (Prism Dispersion 2D) ✅ verified. Slice B (Lens Systems & Sequential Diagnostics) ✅ verified. Slice C (GPU Path Tracing Pipeline) core in `optics-render`; GPU viewport integration, real hero dispersion, and live dock telemetry in progress.
 >
 > Legend: `[ ]` = todo · `[x]` = done · `[~]` = in progress · `[-]` = deferred
 
@@ -323,8 +323,8 @@
   - [x] Accumulate sample into `f32x4` HDR buffer
 
 ### 7.5 Spectral Dispersion Compute Pass
-- [x] Hero-wavelength sampling across 380–780 nm with dispersion
-- [x] XYZ → sRGB conversion kernel
+- [ ] Hero-wavelength sampling across 380–780 nm with dispersion (audited: currently monochromatic in path_tracer.wgsl; to implement in P4)
+- [ ] XYZ → sRGB conversion kernel (to implement in P4)
 
 ### 7.6 BVH Traversal Cost Heatmap Shader
 - [x] `src/shaders/bvh_heatmap.wgsl`:
@@ -410,15 +410,15 @@
 
 ### 9.4 Left Tool Palette
 - [x] Select tool (S)
-- [x] Move tool (M)
-- [x] Rotate tool (Alt+R)
-- [x] Scale tool
+- [ ] Move tool (M) (audited: placeholder tool enum, no 3D gizmo; to wire or remove in P3)
+- [ ] Rotate tool (Alt+R) (audited: placeholder tool enum, no 3D gizmo; to wire or remove in P3)
+- [ ] Scale tool (audited: placeholder tool enum; to wire or remove in P3)
 - [x] Ray Inspector Probe tool (I) — click-to-inspect single ray
-- [x] Spectrum tool
-- [x] BVH acceleration structure tool
-- [x] Analysis tool
-- [x] Camera tool
-- [x] Settings tool
+- [ ] Spectrum tool (audited: placeholder tool enum; to wire or remove in P3)
+- [ ] BVH acceleration structure tool (audited: placeholder tool enum; to wire or remove in P3)
+- [ ] Analysis tool (audited: placeholder tool enum; to wire or remove in P3)
+- [ ] Camera tool (audited: placeholder tool enum; to wire or remove in P3)
+- [ ] Settings tool (audited: placeholder tool enum; to wire or remove in P3)
 - [x] Tool palette vector outline icons (resolution-independent, zero dependency bloat)
 
 ### 9.5 Right Inspector Panel Tabs
@@ -441,15 +441,15 @@
   - [x] Click glass → show full Sellmeier coefficients & n(λ) dispersion curve
 
 ### 9.6 Bottom Analytics Dock Tabs
-- [x] **Panel: Convergence Monitor**
-  - [x] Semi-log RMSE and Variance decay curves against sample count (0..256)
-  - [x] Error level lines (0.01..1.0), sample labels, and legend
-- [x] **Panel: Spectral Power Distribution**
-  - [x] Physical wavelength histogram (380–700 nm) colored per-bin
-  - [x] Continuous rainbow spectral gradient bar
-- [x] **Panel: BVH Diagnostics**
-  - [x] Miniature wireframe bounding box hierarchy with traversal cost heatmap
-  - [x] High-to-low traversal colorbar, TLAS/BLAS indicators, median/P95/Max traversal statistics
+- [ ] **Panel: Convergence Monitor** (audited: bottom card is placeholder "Render not started"; to wire to live Welford in P5)
+  - [ ] Semi-log RMSE and Variance decay curves against sample count (0..256)
+  - [ ] Error level lines (0.01..1.0), sample labels, and legend
+- [ ] **Panel: Spectral Power Distribution** (audited: bottom card is placeholder "Select a ray"; to wire to live GPU SPD probe in P5)
+  - [ ] Physical wavelength histogram (380–700 nm) colored per-bin
+  - [ ] Continuous rainbow spectral gradient bar
+- [ ] **Panel: BVH Diagnostics** (audited: bottom card is placeholder "No active BVH traversal"; to wire to live cost buffer in P5)
+  - [ ] Miniature wireframe bounding box hierarchy with traversal cost heatmap
+  - [ ] High-to-low traversal colorbar, TLAS/BLAS indicators, median/P95/Max traversal statistics
 - [x] **Panel: Material / Glass**
   - [x] Glass selector dropdown (BK7, SF11, F2, Fused Silica)
   - [x] Parameter grid: n(587.6 nm), Abbe Vd, Cauchy, Sellmeier
