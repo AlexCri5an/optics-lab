@@ -692,7 +692,7 @@ fn render_material_glass_panel(
         tokens.text_muted,
     );
 
-    // Edit Material button dynamically positioned below dispersion curve
+    // Edit material button dynamically positioned below dispersion curve
     let btn_top = (curve_rect.bottom() + 14.0).max(rect.bottom() - 22.0);
     let btn_rect = Rect::from_min_size(
         Pos2::new(rect.min.x + 12.0, btn_top),
@@ -707,7 +707,7 @@ fn render_material_glass_panel(
             )),
         |ui| {
             if ui
-                .button(egui::RichText::new("Edit Material").size(10.0))
+                .button(egui::RichText::new("Edit material").size(10.0))
                 .clicked()
             {
                 on_edit_material();

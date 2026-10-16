@@ -42,7 +42,7 @@ pub fn render_glass_catalog_panel(
 
         // Header: Search box
         ui.horizontal(|ui| {
-            ui.label("Search:");
+            ui.label("Search");
             ui.text_edit_singleline(&mut state.search_query);
         });
 
@@ -62,7 +62,7 @@ pub fn render_glass_catalog_panel(
                 });
 
                 if let DispersionModel::Sellmeier1 { b, c } = &glass.dispersion {
-                    ui.collapsing("Sellmeier Coefficients", |ui| {
+                    ui.collapsing("Sellmeier coefficients", |ui| {
                         ui.monospace(format!("B1: {:.6e}  C1: {:.6e}", b[0], c[0]));
                         ui.monospace(format!("B2: {:.6e}  C2: {:.6e}", b[1], c[1]));
                         ui.monospace(format!("B3: {:.6e}  C3: {:.6e}", b[2], c[2]));
@@ -73,7 +73,7 @@ pub fn render_glass_catalog_panel(
             ui.add_space(8.0);
 
             // Live n(lambda) dispersion curve plot
-            ui.collapsing("Dispersion Curve n(λ)", |ui| {
+            ui.collapsing("Dispersion curve n(λ)", |ui| {
                 dispersion_curve_plot(ui, glass, tokens, 120.0);
             });
         }
@@ -81,14 +81,14 @@ pub fn render_glass_catalog_panel(
         ui.add_space(8.0);
 
         // Abbe Diagram
-        ui.collapsing("Abbe Diagram (Vd vs nd)", |ui| {
+        ui.collapsing("Abbe diagram (Vd vs nd)", |ui| {
             abbe_diagram(ui, catalog, Some(&state.selected_glass), tokens, 160.0);
         });
 
         ui.add_space(8.0);
 
         // Glass Table List
-        ui.label("Catalog Glasses:");
+        ui.label("Catalog glasses");
         let query_lower = state.search_query.trim().to_lowercase();
 
         let mut filtered_glasses: Vec<&GlassMaterial> = catalog

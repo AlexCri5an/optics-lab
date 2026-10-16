@@ -30,7 +30,7 @@ pub fn render_lens_system_panel(
         ui.spacing_mut().item_spacing = Vec2::new(8.0, 4.0);
 
         // Preset Selector
-        ui.label("Preset:");
+        ui.label("Preset");
         let current_preset_name = sim.preset.map_or("Custom", |p| p.name());
         egui::ComboBox::from_id_salt("lens_preset_combo")
             .selected_text(current_preset_name)
@@ -68,10 +68,10 @@ pub fn render_lens_system_panel(
 
         // Subview Tab Buttons
         let tabs = [
-            (LensSubview::CrossSection, "Layout & Rays"),
-            (LensSubview::SpotDiagram, "Spot Diagram"),
-            (LensSubview::RayFan, "Aberration Fans"),
-            (LensSubview::PrescriptionTable, "Prescription Table"),
+            (LensSubview::CrossSection, "Layout & rays"),
+            (LensSubview::SpotDiagram, "Spot diagram"),
+            (LensSubview::RayFan, "Aberration fans"),
+            (LensSubview::PrescriptionTable, "Prescription table"),
         ];
 
         for (subview, label) in tabs {
@@ -84,7 +84,7 @@ pub fn render_lens_system_panel(
         ui.separator();
 
         // Field Angle Quick Buttons
-        ui.label("Field:");
+        ui.label("Field");
         let field_angles = [0.0, 10.0, 14.0];
         for angle in field_angles {
             let is_sel = (sim.field_angle_deg - angle).abs() < 1e-3;
@@ -102,7 +102,7 @@ pub fn render_lens_system_panel(
         ui.separator();
 
         // Wavelength Quick Buttons
-        ui.label("Line:");
+        ui.label("Line");
         let wavelengths = [
             (587.56, "d: 587.6 nm (Yellow)"),
             (486.13, "F: 486.1 nm (Blue)"),
@@ -162,23 +162,23 @@ fn render_lens_sidebar(ui: &mut Ui, sim: &LensSimulation, tokens: &OpticsTokens)
                 .num_columns(2)
                 .spacing([12.0, 4.0])
                 .show(ui, |ui| {
-                    ui.label("EFL (f):");
+                    ui.label("EFL (f)");
                     ui.label(format!("{:.3} mm", parax.efl_mm));
                     ui.end_row();
 
-                    ui.label("BFL:");
+                    ui.label("BFL");
                     ui.label(format!("{:.3} mm", parax.bfl_mm));
                     ui.end_row();
 
-                    ui.label("F-number:");
+                    ui.label("F-number");
                     ui.label(format!("F/{:.2}", parax.f_number));
                     ui.end_row();
 
-                    ui.label("Entrance Pupil:");
+                    ui.label("Entrance pupil");
                     ui.label(format!("{:.2} mm", parax.entrance_pupil_pos_mm));
                     ui.end_row();
 
-                    ui.label("Exit Pupil:");
+                    ui.label("Exit pupil");
                     ui.label(format!("{:.2} mm", parax.exit_pupil_pos_mm));
                     ui.end_row();
                 });
@@ -197,7 +197,7 @@ fn render_lens_sidebar(ui: &mut Ui, sim: &LensSimulation, tokens: &OpticsTokens)
     if let Some(metrics) = &sim.spot_metrics {
         ui.group(|ui| {
             ui.label(
-                egui::RichText::new("Spot Diagram Metrics")
+                egui::RichText::new("Spot diagram metrics")
                     .strong()
                     .color(tokens.text_primary),
             );
@@ -207,31 +207,31 @@ fn render_lens_sidebar(ui: &mut Ui, sim: &LensSimulation, tokens: &OpticsTokens)
                 .num_columns(2)
                 .spacing([12.0, 4.0])
                 .show(ui, |ui| {
-                    ui.label("Centroid X:");
+                    ui.label("Centroid X");
                     ui.label(format!("{:.2} µm", metrics.centroid_x_mm * 1000.0));
                     ui.end_row();
 
-                    ui.label("Centroid Y:");
+                    ui.label("Centroid Y");
                     ui.label(format!("{:.2} µm", metrics.centroid_y_mm * 1000.0));
                     ui.end_row();
 
-                    ui.label("RMS Radius:");
+                    ui.label("RMS radius");
                     ui.label(format!("{:.2} µm", metrics.rms_radius_um));
                     ui.end_row();
 
-                    ui.label("GEO Radius:");
+                    ui.label("GEO radius");
                     ui.label(format!("{:.2} µm", metrics.geo_radius_um));
                     ui.end_row();
 
-                    ui.label("Airy Disk:");
+                    ui.label("Airy disk");
                     ui.label(format!("{:.2} µm", metrics.airy_radius_um));
                     ui.end_row();
 
-                    ui.label("Vignetting:");
+                    ui.label("Vignetting");
                     ui.label(format_percent(metrics.vignetting_factor));
                     ui.end_row();
 
-                    ui.label("Passed Rays:");
+                    ui.label("Passed rays");
                     ui.label(format!(
                         "{}/{}",
                         metrics.passed_rays_count, metrics.total_rays_traced
@@ -241,9 +241,9 @@ fn render_lens_sidebar(ui: &mut Ui, sim: &LensSimulation, tokens: &OpticsTokens)
 
             ui.add_space(4.0);
             if metrics.is_diffraction_limited {
-                ui.colored_label(tokens.accent, "Status: Diffraction Limited");
+                ui.colored_label(tokens.accent, "Diffraction limited");
             } else {
-                ui.colored_label(tokens.amber, "Status: Aberration Dominated");
+                ui.colored_label(tokens.amber, "Aberration dominated");
             }
         });
     }
@@ -251,7 +251,7 @@ fn render_lens_sidebar(ui: &mut Ui, sim: &LensSimulation, tokens: &OpticsTokens)
     if let Some(err) = &sim.last_error {
         ui.add_space(8.0);
         ui.group(|ui| {
-            ui.colored_label(Color32::from_rgb(230, 80, 80), "Calculation Notice:");
+            ui.colored_label(Color32::from_rgb(230, 80, 80), "Calculation notice");
             ui.label(egui::RichText::new(err).small().color(tokens.text_dim));
         });
     }

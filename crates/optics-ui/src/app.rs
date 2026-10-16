@@ -1007,7 +1007,7 @@ impl OpticsLabApp {
                     if self.app_mode == AppMode::PrismDispersion {
                         // Quick Interactive Simulation Controls
                         ui.label(
-                            egui::RichText::new("Prism Controls")
+                            egui::RichText::new("Prism controls")
                                 .strong()
                                 .color(self.tokens.text_primary),
                         );
@@ -1015,7 +1015,7 @@ impl OpticsLabApp {
                         let mut retrace_needed = false;
 
                         ui.horizontal(|ui| {
-                            ui.label("Incidence:");
+                            ui.label("Incidence");
                             if ui
                                 .add(
                                     egui::Slider::new(&mut self.sim.incidence_deg, 0.0..=80.0)
@@ -1029,7 +1029,7 @@ impl OpticsLabApp {
                         });
 
                         ui.horizontal(|ui| {
-                            ui.label("Apex:");
+                            ui.label("Apex");
                             if ui
                                 .add(
                                     egui::Slider::new(&mut self.sim.apex_deg, 30.0..=80.0)
@@ -1043,7 +1043,7 @@ impl OpticsLabApp {
                         });
 
                         ui.horizontal(|ui| {
-                            ui.label("Rays:");
+                            ui.label("Rays");
                             if ui
                                 .add(
                                     egui::Slider::new(&mut self.sim.sample_count, 8..=64)
@@ -1539,7 +1539,7 @@ impl OpticsLabApp {
             );
 
             ui.horizontal(|ui| {
-                ui.label("Position (mm):");
+                ui.label("Position (mm)");
                 if ui
                     .add(
                         egui::DragValue::new(&mut obj.transform.position.x)
@@ -1567,7 +1567,7 @@ impl OpticsLabApp {
             });
 
             ui.horizontal(|ui| {
-                ui.label("Rotation (°):");
+                ui.label("Rotation (°)");
                 if ui
                     .add(
                         egui::DragValue::new(&mut obj.transform.rotation_deg.x)
@@ -1595,7 +1595,7 @@ impl OpticsLabApp {
             });
 
             ui.horizontal(|ui| {
-                ui.label("Scale:");
+                ui.label("Scale");
                 if ui
                     .add(
                         egui::DragValue::new(&mut obj.transform.scale.x)
@@ -1641,7 +1641,7 @@ impl OpticsLabApp {
                     depth,
                 } => {
                     ui.horizontal(|ui| {
-                        ui.label("Apex Angle:");
+                        ui.label("Apex angle");
                         if ui
                             .add(egui::Slider::new(apex_deg, 20.0..=90.0).suffix("°"))
                             .changed()
@@ -1650,7 +1650,7 @@ impl OpticsLabApp {
                         }
                     });
                     ui.horizontal(|ui| {
-                        ui.label("Base Width:");
+                        ui.label("Base width");
                         if ui
                             .add(egui::Slider::new(base_width, 10.0..=200.0).suffix(" mm"))
                             .changed()
@@ -1659,7 +1659,7 @@ impl OpticsLabApp {
                         }
                     });
                     ui.horizontal(|ui| {
-                        ui.label("Extrusion Depth:");
+                        ui.label("Extrusion depth");
                         if ui
                             .add(egui::Slider::new(depth, 10.0..=200.0).suffix(" mm"))
                             .changed()
@@ -1674,7 +1674,7 @@ impl OpticsLabApp {
                     sectors,
                 } => {
                     ui.horizontal(|ui| {
-                        ui.label("Radius:");
+                        ui.label("Radius");
                         if ui
                             .add(egui::Slider::new(radius, 2.0..=100.0).suffix(" mm"))
                             .changed()
@@ -1683,7 +1683,7 @@ impl OpticsLabApp {
                         }
                     });
                     ui.horizontal(|ui| {
-                        ui.label("Subdivisions:");
+                        ui.label("Subdivisions");
                         if ui
                             .add(egui::Slider::new(stacks, 4..=32).prefix("Stacks: "))
                             .changed()
@@ -1701,7 +1701,7 @@ impl OpticsLabApp {
                     thickness,
                 } => {
                     ui.horizontal(|ui| {
-                        ui.label("Width / Height:");
+                        ui.label("Width / height");
                         if ui
                             .add(egui::Slider::new(width, 5.0..=200.0).suffix(" mm"))
                             .changed()
@@ -1713,7 +1713,7 @@ impl OpticsLabApp {
                         }
                     });
                     ui.horizontal(|ui| {
-                        ui.label("Thickness:");
+                        ui.label("Thickness");
                         if ui
                             .add(egui::Slider::new(thickness, 1.0..=100.0).suffix(" mm"))
                             .changed()
@@ -1731,7 +1731,7 @@ impl OpticsLabApp {
                     azimuthal_segments,
                 } => {
                     ui.horizontal(|ui| {
-                        ui.label("R1 (Front):");
+                        ui.label("R1 (front)");
                         if ui
                             .add(egui::Slider::new(r1, -200.0..=200.0).suffix(" mm"))
                             .changed()
@@ -1740,7 +1740,7 @@ impl OpticsLabApp {
                         }
                     });
                     ui.horizontal(|ui| {
-                        ui.label("R2 (Rear):");
+                        ui.label("R2 (rear)");
                         if ui
                             .add(egui::Slider::new(r2, -200.0..=200.0).suffix(" mm"))
                             .changed()
@@ -1749,7 +1749,7 @@ impl OpticsLabApp {
                         }
                     });
                     ui.horizontal(|ui| {
-                        ui.label("Semi-Diameter / Thickness:");
+                        ui.label("Semi-diameter / thickness");
                         if ui
                             .add(egui::Slider::new(semi_diameter, 5.0..=50.0).suffix(" mm"))
                             .changed()
@@ -1761,7 +1761,7 @@ impl OpticsLabApp {
                         }
                     });
                     ui.horizontal(|ui| {
-                        ui.label("Tessellation:");
+                        ui.label("Tessellation");
                         if ui
                             .add(egui::Slider::new(radial_segments, 3..=24).prefix("Rad: "))
                             .changed()
@@ -1775,7 +1775,7 @@ impl OpticsLabApp {
                 }
                 crate::scene_model::ObjectGeometry::FloorPlane { size } => {
                     ui.horizontal(|ui| {
-                        ui.label("Plane Half-Extent:");
+                        ui.label("Plane half-extent");
                         if ui
                             .add(egui::Slider::new(size, 100.0..=2000.0).suffix(" mm"))
                             .changed()
@@ -1791,14 +1791,14 @@ impl OpticsLabApp {
 
             // Material Section
             ui.label(
-                egui::RichText::new("Optical Material")
+                egui::RichText::new("Optical material")
                     .strong()
                     .color(self.tokens.text_primary),
             );
 
             let current_glass = obj.material.glass_name.clone();
             ui.horizontal(|ui| {
-                ui.label("Catalog Glass:");
+                ui.label("Catalog glass");
                 egui::ComboBox::from_id_salt("material_glass_select")
                     .selected_text(&current_glass)
                     .show_ui(ui, |ui| {
@@ -1813,7 +1813,7 @@ impl OpticsLabApp {
             });
 
             ui.horizontal(|ui| {
-                ui.label("Dispersion Model:");
+                ui.label("Dispersion model");
                 let model_str = match obj.material.dispersion {
                     crate::scene_model::DispersionModelChoice::Sellmeier => "Sellmeier (Physical)",
                     crate::scene_model::DispersionModelChoice::Cauchy => "Cauchy (2-term)",
@@ -1872,7 +1872,7 @@ impl OpticsLabApp {
             });
 
             ui.horizontal(|ui| {
-                ui.label("Surface Roughness α:");
+                ui.label("Surface roughness α");
                 if ui
                     .add(egui::Slider::new(&mut obj.material.roughness, 0.0..=1.0).show_value(true))
                     .on_hover_text("GGX microfacet roughness for frosted/ground glass")
@@ -1895,7 +1895,7 @@ impl OpticsLabApp {
             // Incremental BVH Timing Telemetry Readout
             ui.horizontal(|ui| {
                 ui.label(
-                    egui::RichText::new(format!("BVH Rebuild: {:.2} ms", last_bvh_time))
+                    egui::RichText::new(format!("BVH rebuild: {:.2} ms", last_bvh_time))
                         .size(11.0)
                         .color(self.tokens.text_secondary),
                 );
@@ -2809,6 +2809,16 @@ impl OpticsLabApp {
 impl eframe::App for OpticsLabApp {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         self.update_ui(ctx);
+    }
+
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        let c = self.tokens.panel_bg;
+        [
+            c.r() as f32 / 255.0,
+            c.g() as f32 / 255.0,
+            c.b() as f32 / 255.0,
+            c.a() as f32 / 255.0,
+        ]
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
