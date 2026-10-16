@@ -136,6 +136,16 @@ pub enum Command {
     ToggleObjectVisibility(u64),
     /// Select a scene object by ID.
     SelectSceneObjectId(Option<u64>),
+    /// Toggle 3D light beam ribbons display.
+    ToggleBeamRibbons,
+    /// Toggle receiver floor spectral caustic display.
+    ToggleFloorCaustic,
+    /// Toggle animated time-of-flight pulses.
+    ToggleTofPulses,
+    /// Set physical beam ribbon width in millimeters.
+    SetBeamWidth(f64),
+    /// Set time-of-flight animation speed multiplier.
+    SetTofSpeed(f64),
     /// Exit the application.
     Quit,
 }
@@ -219,6 +229,11 @@ impl Command {
             Self::DeleteSceneObject(_) => "scene_delete_object",
             Self::ToggleObjectVisibility(_) => "scene_toggle_visibility",
             Self::SelectSceneObjectId(_) => "scene_select_object_id",
+            Self::ToggleBeamRibbons => "toggle_beam_ribbons",
+            Self::ToggleFloorCaustic => "toggle_floor_caustic",
+            Self::ToggleTofPulses => "toggle_tof_pulses",
+            Self::SetBeamWidth(_) => "set_beam_width",
+            Self::SetTofSpeed(_) => "set_tof_speed",
             Self::Quit => "quit",
         }
     }
@@ -290,6 +305,11 @@ impl Command {
             Self::DeleteSceneObject(_) => "Delete scene object",
             Self::ToggleObjectVisibility(_) => "Toggle object visibility",
             Self::SelectSceneObjectId(_) => "Select scene object",
+            Self::ToggleBeamRibbons => "Show beam ribbons",
+            Self::ToggleFloorCaustic => "Show spectral caustic",
+            Self::ToggleTofPulses => "Animate time-of-flight pulses",
+            Self::SetBeamWidth(_) => "Set beam width",
+            Self::SetTofSpeed(_) => "Set pulse speed",
             Self::Quit => "Quit OpticsLab",
         }
     }
@@ -309,6 +329,9 @@ impl Command {
             Self::CycleTheme | Self::SetTheme(_) => Some(IconId::Theme),
             Self::OpenPreferences => Some(IconId::Settings),
             Self::ExportImage => Some(IconId::ExportImage),
+            Self::ToggleBeamRibbons => Some(IconId::LightSource),
+            Self::ToggleFloorCaustic => Some(IconId::Spectrum),
+            Self::ToggleTofPulses => Some(IconId::Play),
             _ => None,
         }
     }
@@ -412,6 +435,11 @@ impl Command {
             | Self::DeleteSceneObject(_) => Effect::SceneModified,
             Self::ToggleObjectVisibility(_) => Effect::SceneModified,
             Self::SelectSceneObjectId(_) => Effect::SelectionChanged,
+            Self::ToggleBeamRibbons => Effect::StateChanged("beam_ribbons"),
+            Self::ToggleFloorCaustic => Effect::StateChanged("floor_caustic"),
+            Self::ToggleTofPulses => Effect::StateChanged("tof_pulses"),
+            Self::SetBeamWidth(_) => Effect::StateChanged("beam_width"),
+            Self::SetTofSpeed(_) => Effect::StateChanged("tof_speed"),
             Self::Quit => Effect::ViewportCommandIssued,
         }
     }
@@ -794,6 +822,27 @@ pub fn dispatch(app: &mut OpticsLabApp, cmd: Command, platform: &mut dyn Platfor
                 app.right_panel_tab = RightPanelTab::Properties;
             }
             effects.push(Effect::SelectionChanged);
+        }
+        Command::ToggleBeamRibbons => {
+            app.gpu_state.beam_display.show_ribbons = !app.gpu_state.beam_display.show_ribbons;
+            effects.push(Effect::StateChanged("beam_ribbons"));
+        }
+        Command::ToggleFloorCaustic => {
+            app.gpu_state.beam_display.show_caustic = !app.gpu_state.beam_display.show_caustic;
+            effects.push(Effect::StateChanged("floor_caustic"));
+        }
+        Command::ToggleTofPulses => {
+            app.gpu_state.beam_display.show_tof_pulses =
+                !app.gpu_state.beam_display.show_tof_pulses;
+            effects.push(Effect::StateChanged("tof_pulses"));
+        }
+        Command::SetBeamWidth(w) => {
+            app.gpu_state.beam_display.beam_width_mm = w.clamp(0.5, 20.0) as f32;
+            effects.push(Effect::StateChanged("beam_width"));
+        }
+        Command::SetTofSpeed(s) => {
+            app.gpu_state.beam_display.tof_speed = s.clamp(0.1, 10.0) as f32;
+            effects.push(Effect::StateChanged("tof_speed"));
         }
         Command::Quit => {
             platform.send_viewport_cmd(egui::ViewportCommand::Close);

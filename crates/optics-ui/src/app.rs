@@ -749,6 +749,22 @@ impl OpticsLabApp {
                             ui.separator();
                             self.render_command_button(
                                 ui,
+                                crate::commands::Command::ToggleBeamRibbons,
+                                "top_bar.view.toggle_beam_ribbons",
+                            );
+                            self.render_command_button(
+                                ui,
+                                crate::commands::Command::ToggleFloorCaustic,
+                                "top_bar.view.toggle_floor_caustic",
+                            );
+                            self.render_command_button(
+                                ui,
+                                crate::commands::Command::ToggleTofPulses,
+                                "top_bar.view.toggle_tof_pulses",
+                            );
+                            ui.separator();
+                            self.render_command_button(
+                                ui,
                                 crate::commands::Command::ToggleFullscreen,
                                 "top_bar.view.toggle_fullscreen",
                             );
@@ -1916,6 +1932,26 @@ impl OpticsLabApp {
                             false,
                             "central_viewport.export_image",
                         );
+                        if self.viewport_mode == ViewportMode::View3D {
+                            self.render_toolbar_command_button(
+                                ui,
+                                crate::commands::Command::ToggleTofPulses,
+                                self.gpu_state.beam_display.show_tof_pulses,
+                                "central_viewport.toggle_tof",
+                            );
+                            self.render_toolbar_command_button(
+                                ui,
+                                crate::commands::Command::ToggleFloorCaustic,
+                                self.gpu_state.beam_display.show_caustic,
+                                "central_viewport.toggle_caustic",
+                            );
+                            self.render_toolbar_command_button(
+                                ui,
+                                crate::commands::Command::ToggleBeamRibbons,
+                                self.gpu_state.beam_display.show_ribbons,
+                                "central_viewport.toggle_ribbons",
+                            );
+                        }
                     });
                 }
             });

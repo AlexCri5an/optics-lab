@@ -6,6 +6,7 @@
 
 pub mod analytics;
 pub mod app;
+pub mod beam_ribbon;
 pub mod commands;
 pub mod formatting;
 pub mod glass_browser;
@@ -28,6 +29,11 @@ pub mod viewport_3d;
 pub mod widgets;
 
 pub use app::{ActiveTool, AppMode, AppStateSnapshot, OpticsLabApp, RightPanelTab, ViewportMode};
+pub use beam_ribbon::{
+    BeamDisplayState, BeamSegment3D, CausticFootprint3D, build_light_propagation,
+    compute_camera_facing_quad, evaluate_radiometric_color, render_beam_ribbons,
+    render_spectral_caustic,
+};
 pub use commands::{Command, Effect, dispatch};
 pub use formatting::{
     format_angle_deg, format_bounce_event, format_percent, format_refractive_index,

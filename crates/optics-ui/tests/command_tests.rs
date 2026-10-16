@@ -220,3 +220,27 @@ fn test_command_scene_model_crud() {
     assert_eq!(app.scene_model.selected_id, Some(first_id));
     assert_eq!(app.right_panel_tab, RightPanelTab::Properties);
 }
+
+#[test]
+fn test_command_dispatch_beam_display_and_caustic() {
+    let mut app = OpticsLabApp::default();
+    let mut platform = MockPlatform::new();
+
+    assert!(app.gpu_state.beam_display.show_ribbons);
+    dispatch(&mut app, Command::ToggleBeamRibbons, &mut platform);
+    assert!(!app.gpu_state.beam_display.show_ribbons);
+
+    assert!(app.gpu_state.beam_display.show_caustic);
+    dispatch(&mut app, Command::ToggleFloorCaustic, &mut platform);
+    assert!(!app.gpu_state.beam_display.show_caustic);
+
+    assert!(!app.gpu_state.beam_display.show_tof_pulses);
+    dispatch(&mut app, Command::ToggleTofPulses, &mut platform);
+    assert!(app.gpu_state.beam_display.show_tof_pulses);
+
+    dispatch(&mut app, Command::SetBeamWidth(4.5), &mut platform);
+    assert!((app.gpu_state.beam_display.beam_width_mm - 4.5).abs() < 1e-4);
+
+    dispatch(&mut app, Command::SetTofSpeed(2.5), &mut platform);
+    assert!((app.gpu_state.beam_display.tof_speed - 2.5).abs() < 1e-4);
+}

@@ -10,6 +10,9 @@ use optics_core::Vec3;
 use optics_render::{GpuContext, PathTracingRenderer, RenderMode, ThinLensCamera};
 use std::sync::{Arc, Mutex};
 
+use crate::beam_ribbon::{
+    BeamDisplayState, build_light_propagation, render_beam_ribbons, render_spectral_caustic,
+};
 use crate::sim::PrismSimulation;
 use crate::theme::OpticsTokens;
 
@@ -198,6 +201,8 @@ pub struct GpuViewportState {
     pub renderer: Option<Arc<Mutex<PathTracingRenderer>>>,
     /// Registered egui texture identifier for viewport blit.
     pub egui_texture_id: Option<egui::TextureId>,
+    /// Beam ribbon, spectral caustic, and time-of-flight configuration.
+    pub beam_display: BeamDisplayState,
 }
 
 impl Default for GpuViewportState {
@@ -219,6 +224,7 @@ impl Default for GpuViewportState {
             camera: OrbitCamera::default(),
             renderer: None,
             egui_texture_id: None,
+            beam_display: BeamDisplayState::default(),
         }
     }
 }
@@ -427,25 +433,83 @@ pub fn render_viewport_3d(
             },
         ));
     } else {
-        // Fallback for headless environments or unsupported WebGPU
+        // Fallback for headless environments or unsupported WebGPU:
+        // Render background canvas and 3D geometric wireframe
         painter.rect_filled(rect, egui::CornerRadius::ZERO, tokens.canvas);
+
+        // Project prism 3D wireframe edges
+        let half_apex_rad = (sim.apex_deg * 0.5).to_radians();
+        let base_width = 80.0_f32;
+        let height = (base_width * 0.5) / (half_apex_rad.tan() as f32).max(0.1);
+        let depth_half = 40.0_f32;
+
+        let v_af = [0.0, height, depth_half];
+        let v_lf = [-base_width * 0.5, 0.0, depth_half];
+        let v_rf = [base_width * 0.5, 0.0, depth_half];
+        let v_ab = [0.0, height, -depth_half];
+        let v_lb = [-base_width * 0.5, 0.0, -depth_half];
+        let v_rb = [base_width * 0.5, 0.0, -depth_half];
+
+        let edges = [
+            (v_lf, v_rf),
+            (v_rf, v_af),
+            (v_af, v_lf),
+            (v_lb, v_rb),
+            (v_rb, v_ab),
+            (v_ab, v_lb),
+            (v_lf, v_lb),
+            (v_rf, v_rb),
+            (v_af, v_ab),
+        ];
+
+        let screen_center = rect.center();
+        let wire_stroke = Stroke::new(1.0, tokens.border_subtle);
+        for (p_a, p_b) in edges {
+            if let (Some(s_a), Some(s_b)) = (
+                gpu_state.camera.project(p_a, screen_center, rect),
+                gpu_state.camera.project(p_b, screen_center, rect),
+            ) {
+                painter.line_segment([s_a, s_b], wire_stroke);
+            }
+        }
 
         let msg = if let Some(err) = &gpu_state.validation_error {
             err.as_str()
         } else {
-            "3D Viewport: WebGPU hardware acceleration is not active.\nUse Chrome 113+ / Edge with WebGPU enabled or native desktop build."
+            "3D Viewport: WebGPU hardware acceleration inactive (vector display active)"
         };
 
         painter.text(
-            rect.center(),
-            egui::Align2::CENTER_CENTER,
+            Pos2::new(rect.center().x, rect.bottom() - 25.0),
+            egui::Align2::CENTER_BOTTOM,
             msg,
-            egui::FontId::proportional(13.0),
-            tokens.text_secondary,
+            egui::FontId::proportional(11.0),
+            tokens.text_dim,
         );
     }
 
-    // 3. Viewport vector overlays
+    // 3. Beam Ribbons and Spectral Caustics
+    let (segments, caustics) = build_light_propagation(sim, &gpu_state.beam_display);
+
+    if gpu_state.beam_display.show_caustic {
+        render_spectral_caustic(&painter, &gpu_state.camera, rect, &caustics, tokens);
+    }
+
+    let current_time_s = ui.input(|i| i.time);
+    render_beam_ribbons(
+        &painter,
+        &gpu_state.camera,
+        rect,
+        &segments,
+        &gpu_state.beam_display,
+        current_time_s,
+    );
+
+    if gpu_state.beam_display.show_tof_pulses {
+        ui.ctx().request_repaint();
+    }
+
+    // 4. Viewport vector overlays
     render_viewport_overlays(&painter, rect, tokens, gpu_state, sim);
 }
 
