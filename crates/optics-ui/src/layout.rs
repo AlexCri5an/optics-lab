@@ -261,10 +261,12 @@ mod tests {
             // Desktop matrix
             Vec2::new(640.0, 480.0),
             Vec2::new(800.0, 600.0),
+            Vec2::new(900.0, 600.0), // Official minimum window size
             Vec2::new(1024.0, 768.0),
             Vec2::new(1280.0, 720.0),
             Vec2::new(1366.0, 768.0),
             Vec2::new(1440.0, 900.0),
+            Vec2::new(1800.0, 1200.0),
             Vec2::new(1920.0, 1080.0),
             Vec2::new(2560.0, 1440.0),
             Vec2::new(3440.0, 1440.0),
@@ -272,6 +274,7 @@ mod tests {
             // Mobile / Web matrix
             Vec2::new(360.0, 640.0),
             Vec2::new(390.0, 844.0),
+            Vec2::new(450.0, 300.0), // 900x600 at 2x DPI scaling
             Vec2::new(768.0, 1024.0),
             Vec2::new(1024.0, 768.0),
         ];
@@ -313,20 +316,62 @@ mod tests {
     }
 
     #[test]
-    fn test_property_randomized_fuzzing() {
+    fn test_minimum_window_size_900x600_and_hidpi() {
         let prefs = AppPreferences::default();
 
-        // Pseudo-random sweep across 500 combinations of width/height/prefs
-        for i in 1..=500 {
+        // 1x DPI: 900x600
+        let plan_1x = compute_layout(Vec2::new(900.0, 600.0), &prefs, false);
+        assert_eq!(plan_1x.breakpoint, Breakpoint::Regular);
+        assert!(plan_1x.canvas_rect_size.x >= MIN_CANVAS_WIDTH);
+        assert!(plan_1x.canvas_rect_size.y >= MIN_CANVAS_HEIGHT);
+        assert!(plan_1x.show_left_sidebar);
+        assert!(plan_1x.show_right_inspector);
+        assert!(plan_1x.show_bottom_dock);
+
+        // 2x DPI: 900x600 physical gives 450x300 logical points
+        let plan_2x = compute_layout(Vec2::new(450.0, 300.0), &prefs, false);
+        assert_eq!(plan_2x.breakpoint, Breakpoint::Compact);
+        assert!(plan_2x.canvas_rect_size.x > 0.0);
+        assert!(plan_2x.canvas_rect_size.y > 0.0);
+        // Panels gracefully collapse on extreme constrained view
+        assert!(!plan_2x.show_right_inspector);
+        assert!(!plan_2x.show_bottom_dock);
+        let total_w =
+            plan_2x.left_sidebar_width + plan_2x.right_inspector_width + plan_2x.canvas_rect_size.x;
+        assert!((total_w - 450.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn test_property_randomized_fuzzing() {
+        // Sweeps 1,000 randomized combinations of width, height, user preferences, and touch mode
+        for i in 1..=1000 {
             let w = 200.0 + (i as f32 * 7.91) % 3800.0;
             let h = 150.0 + (i as f32 * 5.17) % 2100.0;
             let touch = (i % 2) == 0;
+
+            let prefs = AppPreferences {
+                show_left_sidebar: (i % 3) != 0,
+                show_right_inspector: (i % 5) != 0,
+                show_bottom_dock: (i % 7) != 0,
+                left_sidebar_width: 180.0 + (i as f32 * 3.3) % 200.0,
+                right_inspector_width: 240.0 + (i as f32 * 4.7) % 240.0,
+                bottom_dock_height: 100.0 + (i as f32 * 2.9) % 260.0,
+                ..Default::default()
+            };
 
             let plan = compute_layout(Vec2::new(w, h), &prefs, touch);
 
             assert!(plan.canvas_rect_size.x >= 0.0);
             assert!(plan.canvas_rect_size.y >= 0.0);
             assert!(plan.left_sidebar_width + plan.right_inspector_width <= w);
+
+            // Total width invariant (f32 machine epsilon around 2000 is ~0.0002)
+            let total_w =
+                plan.left_sidebar_width + plan.right_inspector_width + plan.canvas_rect_size.x;
+            assert!(
+                (total_w - w).abs() < 1e-3,
+                "Mismatch at w={w}, got {total_w}"
+            );
 
             // If window width >= MIN_CANVAS_WIDTH, canvas width must be >= MIN_CANVAS_WIDTH
             if w >= MIN_CANVAS_WIDTH {

@@ -827,99 +827,104 @@ impl OpticsLabApp {
         TopBottomPanel::top("main_toolbar")
             .exact_height(30.0)
             .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing = Vec2::new(3.0, 0.0);
+                ScrollArea::horizontal()
+                    .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing = Vec2::new(3.0, 0.0);
 
-                    // 1. Tool shortcuts
-                    let tools = [
-                        (ActiveTool::Select, "toolbar.select"),
-                        (ActiveTool::Move, "toolbar.move"),
-                        (ActiveTool::Rotate, "toolbar.rotate"),
-                        (ActiveTool::RayInspector, "toolbar.ray_probe"),
-                    ];
+                            // 1. Tool shortcuts
+                            let tools = [
+                                (ActiveTool::Select, "toolbar.select"),
+                                (ActiveTool::Move, "toolbar.move"),
+                                (ActiveTool::Rotate, "toolbar.rotate"),
+                                (ActiveTool::RayInspector, "toolbar.ray_probe"),
+                            ];
 
-                    for (tool, loc) in tools {
-                        let is_active = self.active_tool == tool;
-                        self.render_toolbar_command_button(
-                            ui,
-                            crate::commands::Command::SelectTool(tool),
-                            is_active,
-                            loc,
-                        );
-                    }
+                            for (tool, loc) in tools {
+                                let is_active = self.active_tool == tool;
+                                self.render_toolbar_command_button(
+                                    ui,
+                                    crate::commands::Command::SelectTool(tool),
+                                    is_active,
+                                    loc,
+                                );
+                            }
 
-                    ui.separator();
+                            ui.separator();
 
-                    // 2. View actions
-                    self.render_toolbar_command_button(
-                        ui,
-                        crate::commands::Command::ResetView,
-                        false,
-                        "toolbar.reset_view",
-                    );
+                            // 2. View actions
+                            self.render_toolbar_command_button(
+                                ui,
+                                crate::commands::Command::ResetView,
+                                false,
+                                "toolbar.reset_view",
+                            );
 
-                    if plan.breakpoint != crate::layout::Breakpoint::Compact {
-                        self.render_toolbar_command_button(
-                            ui,
-                            crate::commands::Command::ZoomIn,
-                            false,
-                            "toolbar.zoom_in",
-                        );
-                        self.render_toolbar_command_button(
-                            ui,
-                            crate::commands::Command::ZoomOut,
-                            false,
-                            "toolbar.zoom_out",
-                        );
-                        ui.separator();
-                    }
+                            if plan.breakpoint != crate::layout::Breakpoint::Compact {
+                                self.render_toolbar_command_button(
+                                    ui,
+                                    crate::commands::Command::ZoomIn,
+                                    false,
+                                    "toolbar.zoom_in",
+                                );
+                                self.render_toolbar_command_button(
+                                    ui,
+                                    crate::commands::Command::ZoomOut,
+                                    false,
+                                    "toolbar.zoom_out",
+                                );
+                                ui.separator();
+                            }
 
-                    // 3. Reflections toggle
-                    self.render_toolbar_command_button(
-                        ui,
-                        crate::commands::Command::ToggleReflections,
-                        self.show_reflections,
-                        "toolbar.toggle_reflections",
-                    );
+                            // 3. Reflections toggle
+                            self.render_toolbar_command_button(
+                                ui,
+                                crate::commands::Command::ToggleReflections,
+                                self.show_reflections,
+                                "toolbar.toggle_reflections",
+                            );
 
-                    ui.separator();
+                            ui.separator();
 
-                    // 4. Panel toggles
-                    self.render_toolbar_command_button(
-                        ui,
-                        crate::commands::Command::ToggleLeftSidebar,
-                        self.prefs.show_left_sidebar,
-                        "toolbar.toggle_left_sidebar",
-                    );
-                    self.render_toolbar_command_button(
-                        ui,
-                        crate::commands::Command::ToggleBottomDock,
-                        self.prefs.show_bottom_dock,
-                        "toolbar.toggle_bottom_dock",
-                    );
+                            // 4. Panel toggles
+                            self.render_toolbar_command_button(
+                                ui,
+                                crate::commands::Command::ToggleLeftSidebar,
+                                self.prefs.show_left_sidebar,
+                                "toolbar.toggle_left_sidebar",
+                            );
+                            self.render_toolbar_command_button(
+                                ui,
+                                crate::commands::Command::ToggleBottomDock,
+                                self.prefs.show_bottom_dock,
+                                "toolbar.toggle_bottom_dock",
+                            );
 
-                    // 5. Right-aligned actions: Theme, Preferences, Fullscreen
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        self.render_toolbar_command_button(
-                            ui,
-                            crate::commands::Command::ToggleFullscreen,
-                            self.is_fullscreen,
-                            "toolbar.fullscreen",
-                        );
-                        self.render_toolbar_command_button(
-                            ui,
-                            crate::commands::Command::OpenPreferences,
-                            self.show_preferences,
-                            "toolbar.preferences",
-                        );
-                        self.render_toolbar_command_button(
-                            ui,
-                            crate::commands::Command::CycleTheme,
-                            false,
-                            "toolbar.cycle_theme",
-                        );
+                            ui.separator();
+
+                            // 5. Global Actions: Theme, Preferences, Fullscreen
+                            self.render_toolbar_command_button(
+                                ui,
+                                crate::commands::Command::CycleTheme,
+                                false,
+                                "toolbar.cycle_theme",
+                            );
+                            self.render_toolbar_command_button(
+                                ui,
+                                crate::commands::Command::OpenPreferences,
+                                self.show_preferences,
+                                "toolbar.preferences",
+                            );
+                            self.render_toolbar_command_button(
+                                ui,
+                                crate::commands::Command::ToggleFullscreen,
+                                self.is_fullscreen,
+                                "toolbar.fullscreen",
+                            );
+                        });
                     });
-                });
             });
     }
 
@@ -1303,47 +1308,54 @@ impl OpticsLabApp {
                         .color(self.tokens.text_secondary),
                     );
 
-                    // Right items: units, GPU Adapter & Backend, FPS & Frame Time
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        let fps_str = format!(
-                            "{:.1} ms ({:.0} FPS)",
-                            self.gpu_state.last_frame_time_ms, self.gpu_state.measured_fps
-                        );
-                        ui.label(
-                            egui::RichText::new(fps_str)
-                                .size(11.0)
-                                .color(self.tokens.text_muted),
-                        );
+                    // Right items: units, GPU Adapter & Backend, FPS & Frame Time (adaptive bounds)
+                    let avail = ui.available_width();
+                    if avail > 100.0 {
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            let fps_str = format!(
+                                "{:.1} ms ({:.0} FPS)",
+                                self.gpu_state.last_frame_time_ms, self.gpu_state.measured_fps
+                            );
+                            ui.label(
+                                egui::RichText::new(fps_str)
+                                    .size(11.0)
+                                    .color(self.tokens.text_muted),
+                            );
 
-                        ui.separator();
+                            if avail > 260.0 {
+                                ui.separator();
+                                let gpu_info_str = format!(
+                                    "GPU: {} ({})",
+                                    self.gpu_state.adapter_name, self.gpu_state.backend_name
+                                );
+                                ui.label(
+                                    egui::RichText::new(gpu_info_str)
+                                        .size(11.0)
+                                        .color(self.tokens.text_muted),
+                                );
+                            }
 
-                        let gpu_info_str = format!(
-                            "GPU: {} ({})",
-                            self.gpu_state.adapter_name, self.gpu_state.backend_name
-                        );
-                        ui.label(
-                            egui::RichText::new(gpu_info_str)
-                                .size(11.0)
-                                .color(self.tokens.text_muted),
-                        );
+                            if avail > 380.0 {
+                                ui.separator();
+                                let scale_pct =
+                                    (self.gpu_state.resolution_scale * 100.0).round() as i32;
+                                ui.label(
+                                    egui::RichText::new(format!("Scale: {scale_pct}%"))
+                                        .size(11.0)
+                                        .color(self.tokens.text_muted),
+                                );
+                            }
 
-                        ui.separator();
-
-                        let scale_pct = (self.gpu_state.resolution_scale * 100.0).round() as i32;
-                        ui.label(
-                            egui::RichText::new(format!("Scale: {scale_pct}%"))
-                                .size(11.0)
-                                .color(self.tokens.text_muted),
-                        );
-
-                        ui.separator();
-
-                        ui.label(
-                            egui::RichText::new("Units: mm / nm")
-                                .size(11.0)
-                                .color(self.tokens.text_muted),
-                        );
-                    });
+                            if avail > 480.0 {
+                                ui.separator();
+                                ui.label(
+                                    egui::RichText::new("Units: mm / nm")
+                                        .size(11.0)
+                                        .color(self.tokens.text_muted),
+                                );
+                            }
+                        });
+                    }
                 });
             });
     }
@@ -1356,7 +1368,7 @@ impl OpticsLabApp {
 
         let resp = TopBottomPanel::bottom("bottom_analytics_dock")
             .resizable(true)
-            .height_range(100.0..=360.0)
+            .height_range(150.0..=360.0)
             .default_height(plan.bottom_dock_height)
             .show(ctx, |ui| {
                 let mut glass = self.sim.glass_name.clone();
@@ -1439,35 +1451,37 @@ impl OpticsLabApp {
                         );
                     }
                     RightPanelTab::Prescription => {
-                        if self.lens_sim.is_some() {
-                            ui.horizontal(|ui| {
-                                ui.label(egui::RichText::new("Preset:").strong());
-                                for preset in [
-                                    LensPreset::CookeTriplet,
-                                    LensPreset::DoubleGauss,
-                                    LensPreset::PlanoConvex,
-                                ] {
-                                    self.render_command_button(
-                                        ui,
-                                        crate::commands::Command::LoadLensPreset(preset),
-                                        "right_panel.prescription_preset",
-                                    );
+                        ScrollArea::vertical().show(ui, |ui| {
+                            if self.lens_sim.is_some() {
+                                ui.horizontal(|ui| {
+                                    ui.label(egui::RichText::new("Preset:").strong());
+                                    for preset in [
+                                        LensPreset::CookeTriplet,
+                                        LensPreset::DoubleGauss,
+                                        LensPreset::PlanoConvex,
+                                    ] {
+                                        self.render_command_button(
+                                            ui,
+                                            crate::commands::Command::LoadLensPreset(preset),
+                                            "right_panel.prescription_preset",
+                                        );
+                                    }
+                                });
+                                ui.add_space(4.0);
+                                self.render_command_button(
+                                    ui,
+                                    crate::commands::Command::SetViewportMode(ViewportMode::View2D),
+                                    "right_panel.open_2d_view",
+                                );
+                                ui.separator();
+                                let tokens = &self.tokens;
+                                if let Some(lens_sim) = &mut self.lens_sim {
+                                    render_prescription_table_view(ui, lens_sim, tokens);
                                 }
-                            });
-                            ui.add_space(4.0);
-                            self.render_command_button(
-                                ui,
-                                crate::commands::Command::SetViewportMode(ViewportMode::View2D),
-                                "right_panel.open_2d_view",
-                            );
-                            ui.separator();
-                            let tokens = &self.tokens;
-                            if let Some(lens_sim) = &mut self.lens_sim {
-                                render_prescription_table_view(ui, lens_sim, tokens);
+                            } else {
+                                ui.label("No active lens simulation.");
                             }
-                        } else {
-                            ui.label("No active lens simulation.");
-                        }
+                        });
                     }
                     RightPanelTab::GlassCatalog => {
                         if let Some(catalog) = &self.glass_db {
@@ -1923,7 +1937,8 @@ impl OpticsLabApp {
                     );
                 }
 
-                if ui.available_width() >= 90.0 {
+                let remaining_w = ui.available_width();
+                if remaining_w >= 180.0 {
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         self.render_toolbar_command_button(
                             ui,
@@ -1943,7 +1958,7 @@ impl OpticsLabApp {
                             false,
                             "central_viewport.export_image",
                         );
-                        if self.viewport_mode == ViewportMode::View3D {
+                        if self.viewport_mode == ViewportMode::View3D && remaining_w >= 260.0 {
                             self.render_toolbar_command_button(
                                 ui,
                                 crate::commands::Command::ToggleTofPulses,
@@ -2500,7 +2515,9 @@ impl OpticsLabApp {
         Window::new("About OpticsLab")
             .collapsible(false)
             .resizable(false)
+            .vscroll(true)
             .default_size(Vec2::new(360.0, 240.0))
+            .max_size(ctx.screen_rect().size() - Vec2::new(32.0, 32.0))
             .show(ctx, |ui| {
                 ui.vertical_centered(|ui| {
                     ui.add_space(8.0);
@@ -2548,8 +2565,10 @@ impl OpticsLabApp {
 
         Window::new("Keyboard Shortcuts")
             .collapsible(false)
-            .resizable(false)
+            .resizable(true)
+            .vscroll(true)
             .default_size(Vec2::new(440.0, 380.0))
+            .max_size(ctx.screen_rect().size() - Vec2::new(32.0, 32.0))
             .show(ctx, |ui| {
                 ui.add_space(4.0);
                 ui.label(
@@ -2597,8 +2616,10 @@ impl OpticsLabApp {
 
         Window::new("Preferences")
             .collapsible(false)
-            .resizable(false)
+            .resizable(true)
+            .vscroll(true)
             .default_size(Vec2::new(420.0, 340.0))
+            .max_size(ctx.screen_rect().size() - Vec2::new(32.0, 32.0))
             .show(ctx, |ui| {
                 ui.add_space(4.0);
                 ui.label(

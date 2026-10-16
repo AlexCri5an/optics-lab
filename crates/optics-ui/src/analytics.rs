@@ -40,10 +40,11 @@ pub fn render_analytics_dock(
     on_edit_material: impl FnOnce(),
 ) {
     let avail_width = ui.available_width();
-    let panel_height = 195.0;
+    let avail_height = ui.available_height();
+    let panel_height = (avail_height - 6.0).clamp(160.0, 360.0);
     let card_width = ((avail_width - 24.0) / 4.0).max(180.0);
 
-    egui::ScrollArea::horizontal()
+    egui::ScrollArea::both()
         .auto_shrink([false, false])
         .show(ui, |ui| {
             ui.horizontal(|ui| {
@@ -169,10 +170,11 @@ fn render_convergence_panel(
     }
 
     // Mini Convergence Decay Curve Plot
-    let curve_top = inner_rect.top() + 80.0;
+    let curve_top = inner_rect.top() + 76.0;
+    let curve_bottom = (inner_rect.bottom() - 16.0).max(curve_top + 20.0);
     let curve_rect = Rect::from_min_max(
         Pos2::new(inner_rect.left() + 8.0, curve_top),
-        Pos2::new(inner_rect.right() - 8.0, inner_rect.bottom() - 16.0),
+        Pos2::new(inner_rect.right() - 8.0, curve_bottom),
     );
     painter.rect_filled(
         curve_rect,
@@ -369,9 +371,11 @@ fn render_spectral_power_panel(
     }
 
     // Continuous Spectrum Bar at Bottom
+    let bar_bottom = inner_rect.bottom() - 14.0;
+    let bar_top = (bar_bottom - 18.0).max(inner_rect.top() + 96.0);
     let bar_rect = Rect::from_min_max(
-        Pos2::new(inner_rect.left() + 8.0, inner_rect.bottom() - 32.0),
-        Pos2::new(inner_rect.right() - 8.0, inner_rect.bottom() - 14.0),
+        Pos2::new(inner_rect.left() + 8.0, bar_top),
+        Pos2::new(inner_rect.right() - 8.0, bar_bottom.max(bar_top + 10.0)),
     );
     let steps = 36;
     let step_w = bar_rect.width() / steps as f32;
@@ -494,8 +498,9 @@ fn render_bvh_diagnostics_panel(
     }
 
     // Traversal Efficiency Status Tag
+    let tag_top = (inner_rect.bottom() - 32.0).max(inner_rect.top() + 96.0);
     let tag_rect = Rect::from_min_size(
-        Pos2::new(inner_rect.left() + 8.0, inner_rect.bottom() - 32.0),
+        Pos2::new(inner_rect.left() + 8.0, tag_top),
         Vec2::new(inner_rect.width() - 16.0, 20.0),
     );
     painter.rect_filled(
