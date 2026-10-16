@@ -28,6 +28,7 @@ pub mod view_transform;
 pub mod viewport_3d;
 pub mod widgets;
 
+pub use analytics::{AnalyticsContext, render_analytics_dock};
 pub use app::{ActiveTool, AppMode, AppStateSnapshot, OpticsLabApp, RightPanelTab, ViewportMode};
 pub use beam_ribbon::{
     BeamDisplayState, BeamSegment3D, CausticFootprint3D, build_light_propagation,

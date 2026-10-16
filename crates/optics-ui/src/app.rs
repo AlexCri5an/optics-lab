@@ -1362,9 +1362,20 @@ impl OpticsLabApp {
                 let mut glass = self.sim.glass_name.clone();
                 let mut open_catalog = false;
 
-                render_analytics_dock(ui, &self.tokens, &mut glass, || {
-                    open_catalog = true;
-                });
+                render_analytics_dock(
+                    ui,
+                    &self.tokens,
+                    crate::analytics::AnalyticsContext {
+                        sim: &self.sim,
+                        gpu_state: &self.gpu_state,
+                        scene_model: &self.scene_model,
+                        selected_ray: self.selected_ray_index,
+                    },
+                    &mut glass,
+                    || {
+                        open_catalog = true;
+                    },
+                );
 
                 if glass != self.sim.glass_name {
                     self.sim.glass_name = glass.clone();
@@ -2308,19 +2319,29 @@ impl OpticsLabApp {
             );
             ui.add_space(8.0);
 
+            let tlas_count = self.scene_model.objects.len();
+            let total_tris: usize = self
+                .scene_model
+                .objects
+                .iter()
+                .filter(|o| o.visible)
+                .map(|o| o.geometry.tessellate(0).len())
+                .sum();
+            let bvh_build_time = self.scene_model.last_bvh_build_time_ms;
+
             ui.columns(4, |cols| {
                 cols[0].group(|ui| {
                     ui.label(egui::RichText::new("TLAS Instances").strong());
-                    ui.heading("2");
+                    ui.heading(format!("{tlas_count}"));
                     ui.label(
-                        egui::RichText::new("Prism + Ground")
+                        egui::RichText::new(format!("{} active objects", self.scene_model.objects.len()))
                             .small()
                             .color(self.tokens.text_muted),
                     );
                 });
                 cols[1].group(|ui| {
                     ui.label(egui::RichText::new("BLAS Triangles").strong());
-                    ui.heading("8");
+                    ui.heading(format!("{total_tris}"));
                     ui.label(
                         egui::RichText::new("Watertight mesh")
                             .small()
@@ -2328,10 +2349,10 @@ impl OpticsLabApp {
                     );
                 });
                 cols[2].group(|ui| {
-                    ui.label(egui::RichText::new("Memory Layout").strong());
-                    ui.heading("32 bytes");
+                    ui.label(egui::RichText::new("Build Telemetry").strong());
+                    ui.heading(format!("{bvh_build_time:.2} ms"));
                     ui.label(
-                        egui::RichText::new("16-byte aligned Pod")
+                        egui::RichText::new("16-bin SAH partition")
                             .small()
                             .color(self.tokens.text_muted),
                     );
@@ -2340,7 +2361,7 @@ impl OpticsLabApp {
                     ui.label(egui::RichText::new("Max Stack Depth").strong());
                     ui.heading("32 levels");
                     ui.label(
-                        egui::RichText::new("Zero heap allocation")
+                        egui::RichText::new("Iterative GPU stack")
                             .small()
                             .color(self.tokens.text_muted),
                     );
@@ -2354,33 +2375,45 @@ impl OpticsLabApp {
                     egui::RichText::new("Ray-AABB Kay-Kajiya Slab Traversal Benchmark").strong(),
                 );
                 ui.label(
-                    "Simulates 100,000 ray intersection tests against the scene BVH bounding boxes to measure throughput.",
+                    "Simulates 50,000 physical ray intersection tests against the scene BVH hierarchy to measure actual traversal cost and throughput.",
                 );
                 ui.add_space(6.0);
 
-                if ui.button("Run 100,000 Ray Traversal Benchmark").clicked() {
+                if ui.button("Run 50,000 Ray Traversal Benchmark").clicked() {
+                    let (bvh, _) = self.scene_model.build_bvh_scene();
                     let start = std::time::Instant::now();
                     let mut hits = 0usize;
-                    let ray_res = optics_core::Ray::new(
-                        optics_core::Vec3::new(-30.0, 10.0, 0.0),
-                        optics_core::Vec3::new(1.0, -0.2, 0.0).normalize(),
-                        550.0,
-                        1.0,
-                    );
-                    if let Ok(ray) = ray_res {
-                        for _ in 0..100_000 {
-                            if ray.direction.x.abs() > 0.0 {
+                    let mut total_cost = 0u64;
+                    let num_rays = 50_000;
+
+                    for i in 0..num_rays {
+                        let u = (i as f64 / num_rays as f64) * std::f64::consts::TAU;
+                        let ray = optics_core::Ray::new(
+                            optics_core::Vec3::new(u.cos() * 60.0, 25.0, u.sin() * 60.0),
+                            optics_core::Vec3::new(-u.cos(), -0.3, -u.sin()).normalize(),
+                            550.0,
+                            1.0,
+                        );
+                        if let Ok(r) = ray {
+                            let cost = optics_bvh::trace_bvh_cost(&r, &bvh);
+                            total_cost += cost as u64;
+                            if cost > 0 {
                                 hits += 1;
                             }
                         }
                     }
+
                     let elapsed = start.elapsed();
-                    let mrays_per_sec = (100_000.0 / elapsed.as_secs_f64()) / 1_000_000.0;
+                    let mrays_per_sec = (num_rays as f64 / elapsed.as_secs_f64()) / 1_000_000.0;
+                    let avg_cost = total_cost as f64 / num_rays as f64;
                     self.bvh_benchmark_result = Some(format!(
-                        "Completed 100,000 traversals in {:.2} ms ({:.1} MRAYS/s) — {} hits registered.",
+                        "Traversed {} rays across {} BVH nodes in {:.2} ms ({:.2} MRAYS/s) — Avg cost: {:.1} tests/ray, {} hits registered",
+                        num_rays,
+                        bvh.tlas.len(),
                         elapsed.as_secs_f64() * 1000.0,
                         mrays_per_sec,
-                        hits
+                        avg_cost,
+                        hits,
                     ));
                 }
 
@@ -2405,36 +2438,56 @@ impl OpticsLabApp {
             );
             ui.add_space(8.0);
 
+            let live_spp = self.gpu_state.sample_count;
+            let display_spp = if live_spp > 0 {
+                live_spp as f64
+            } else {
+                self.convergence_spp as f64
+            };
+
             ui.group(|ui| {
                 ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("Accumulated Samples (SPP):").strong());
-                    ui.add(egui::Slider::new(&mut self.convergence_spp, 1..=256).suffix(" spp"));
+                    if live_spp > 0 {
+                        ui.label(egui::RichText::new(format!("Live Path Tracing SPP: {live_spp}")).strong());
+                        ui.label(format!("(Target: {} spp)", self.gpu_state.target_spp));
+                        if ui.button(if self.gpu_state.is_paused { "Resume" } else { "Pause" }).clicked() {
+                            self.gpu_state.is_paused = !self.gpu_state.is_paused;
+                        }
+                        if ui.button("Reset Accumulation").clicked() {
+                            self.gpu_state.reset_accumulation();
+                        }
+                    } else {
+                        ui.label(egui::RichText::new("Accumulated Samples (SPP):").strong());
+                        ui.add(egui::Slider::new(&mut self.convergence_spp, 1..=256).suffix(" spp"));
+                    }
                 });
 
                 ui.add_space(6.0);
 
-                let spp = self.convergence_spp as f64;
+                let spp = display_spp.max(1.0);
                 let rmse = 1.0 / spp.sqrt();
                 let variance = 1.0 / spp;
                 let sem = variance.sqrt() / spp.sqrt();
+                let ci_95 = 1.96 * sem;
 
-                ui.columns(3, |cols| {
+                ui.columns(4, |cols| {
                     cols[0].label(format!("RMSE Error: {:.4} ({:.2}%)", rmse, rmse * 100.0));
                     cols[1].label(format!("Welford Variance σ²: {:.6}", variance));
                     cols[2].label(format!("Standard Error (SEM): {:.6}", sem));
+                    cols[3].label(format!("95% CI: ±{:.6}", ci_95));
                 });
             });
 
             ui.add_space(10.0);
 
             // Error decay progress bar
-            let spp = self.convergence_spp as f64;
+            let spp = display_spp.max(1.0);
             let convergence_pct = ((1.0 - (1.0 / spp.sqrt())) * 100.0).clamp(0.0, 100.0) as f32;
             ui.label(format!(
-                "Convergence to ground truth: {:.1}%",
-                convergence_pct
+                "Convergence to ground truth: {:.1}% (SPP: {:.0})",
+                convergence_pct, spp
             ));
-            ui.add(egui::ProgressBar::new(convergence_pct / 100.0).animate(false));
+            ui.add(egui::ProgressBar::new(convergence_pct / 100.0).animate(self.gpu_state.sample_count > 0 && !self.gpu_state.is_paused));
         });
     }
 
