@@ -385,6 +385,21 @@ impl Command {
                     (false, "Available only in Prism Dispersion mode.")
                 }
             }
+            Self::SaveProject | Self::LoadProject(_) => {
+                (
+                    false,
+                    "Project file I/O is disabled pending native file dialog implementation.",
+                )
+            }
+            Self::ExportImage => {
+                (
+                    false,
+                    "Image export is disabled pending native file dialog implementation.",
+                )
+            }
+            Self::SelectTool(ActiveTool::Scale) => {
+                (false, "Scale tool is not yet implemented.")
+            }
             _ => (true, ""),
         }
     }
@@ -454,6 +469,12 @@ pub fn dispatch(app: &mut OpticsLabApp, cmd: Command, platform: &mut dyn Platfor
     match cmd {
         Command::SelectTool(tool) => {
             app.active_tool = tool;
+            if matches!(tool, ActiveTool::Move | ActiveTool::Rotate) {
+                app.right_panel_tab = RightPanelTab::Properties;
+                if app.scene_model.selected_id.is_none() && !app.scene_model.objects.is_empty() {
+                    app.scene_model.selected_id = Some(app.scene_model.objects[0].id);
+                }
+            }
             effects.push(Effect::StateChanged("active_tool"));
         }
         Command::SetMode(mode) => {

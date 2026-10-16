@@ -298,38 +298,6 @@ impl GpuViewportState {
     }
 }
 
-/// Callback for executing path tracing passes inside `egui_wgpu`.
-struct PathTracerCallback {
-    renderer: Arc<Mutex<PathTracingRenderer>>,
-    width: u32,
-    height: u32,
-}
-
-impl egui_wgpu::CallbackTrait for PathTracerCallback {
-    fn prepare(
-        &self,
-        _device: &wgpu::Device,
-        _queue: &wgpu::Queue,
-        _screen_descriptor: &egui_wgpu::ScreenDescriptor,
-        _egui_encoder: &mut wgpu::CommandEncoder,
-        _callback_resources: &mut egui_wgpu::CallbackResources,
-    ) -> Vec<wgpu::CommandBuffer> {
-        if let Ok(mut r) = self.renderer.lock() {
-            r.resize(self.width, self.height);
-            r.render_frame();
-        }
-        Vec::new()
-    }
-
-    fn paint(
-        &self,
-        _info: egui::PaintCallbackInfo,
-        _render_pass: &mut wgpu::RenderPass<'static>,
-        _callback_resources: &egui_wgpu::CallbackResources,
-    ) {
-    }
-}
-
 /// Renders the real 3D hardware-accelerated viewport with camera orbit/pan/zoom and overlays.
 #[allow(clippy::too_many_lines)]
 pub fn render_viewport_3d(
@@ -402,14 +370,13 @@ pub fn render_viewport_3d(
                 r.render_mode = gpu_state.render_mode;
                 r.resize(target_pixel_w, target_pixel_h);
                 r.render_frame();
-                gpu_state.sample_count = r.get_sample_count();
+                gpu_state.sample_count = r.get_sample_count().min(gpu_state.target_spp as u64);
             }
             let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
             gpu_state.last_frame_time_ms = elapsed_ms;
-            if elapsed_ms > 0.0 {
-                let current_fps = 1000.0 / elapsed_ms;
-                gpu_state.measured_fps = gpu_state.measured_fps * 0.9 + current_fps * 0.1;
-            }
+            let dt = ui.input(|i| i.stable_dt).max(0.001) as f64;
+            let current_fps = 1.0 / dt;
+            gpu_state.measured_fps = gpu_state.measured_fps * 0.9 + current_fps * 0.1;
             ui.ctx().request_repaint();
         }
 
@@ -422,16 +389,6 @@ pub fn render_viewport_3d(
                 Color32::WHITE,
             );
         }
-
-        // Add egui_wgpu callback to integrate into the render loop
-        painter.add(egui_wgpu::Callback::new_paint_callback(
-            rect,
-            PathTracerCallback {
-                renderer: renderer_arc,
-                width: target_pixel_w,
-                height: target_pixel_h,
-            },
-        ));
     } else {
         // Fallback for headless environments or unsupported WebGPU:
         // Render background canvas and 3D geometric wireframe
@@ -588,7 +545,7 @@ fn render_viewport_overlays(
     let status_str = if gpu_state.is_paused {
         "PAUSED"
     } else if gpu_state.sample_count >= gpu_state.target_spp as u64 {
-        "CONVERGED"
+        "COMPLETE"
     } else {
         "TRACING"
     };

@@ -101,16 +101,14 @@ fn render_convergence_panel(
         tokens.text_primary,
     );
 
-    let spp = gpu_state.sample_count.max(1);
+    let spp = gpu_state.sample_count;
     let target = (gpu_state.target_spp as u64).max(1);
-    let rmse = 1.0 / (spp as f64).sqrt();
-    let variance = 1.0 / (spp as f64);
-    let pct = ((gpu_state.sample_count as f32 / target as f32) * 100.0).clamp(0.0, 100.0);
+    let pct = ((spp as f32 / target as f32) * 100.0).clamp(0.0, 100.0);
 
     let status_str = if gpu_state.is_paused {
         "PAUSED"
-    } else if gpu_state.sample_count >= target {
-        "CONVERGED"
+    } else if spp >= target {
+        "COMPLETE"
     } else {
         "TRACING"
     };
@@ -120,7 +118,7 @@ fn render_convergence_panel(
         egui::Align2::RIGHT_CENTER,
         status_str,
         egui::FontId::monospace(9.5),
-        if gpu_state.sample_count >= target {
+        if spp >= target {
             Color32::from_rgb(60, 200, 100)
         } else {
             tokens.accent
@@ -144,15 +142,25 @@ fn render_convergence_panel(
     );
 
     // Telemetry text rows
+    let status_label = if gpu_state.is_paused {
+        "Paused"
+    } else if spp >= target {
+        "Complete"
+    } else {
+        "Accumulating"
+    };
+
+    let samples_str = format!("{spp} / {target} SPP");
+    let progress_str = format!("{pct:.1}%");
+
     let rows = [
-        ("Accumulated", format!("{spp} / {target} spp")),
-        ("Progress", format!("{pct:.1}%")),
-        ("Est. RMSE", format!("{:.4} ({:.1}%)", rmse, rmse * 100.0)),
-        ("Variance σ²", format!("{variance:.6}")),
+        ("Status", status_label),
+        ("Samples", samples_str.as_str()),
+        ("Progress", progress_str.as_str()),
     ];
 
     for (i, (k, v)) in rows.iter().enumerate() {
-        let y = inner_rect.top() + 12.0 + (i as f32) * 16.0;
+        let y = inner_rect.top() + 14.0 + (i as f32) * 18.0;
         painter.text(
             Pos2::new(inner_rect.left() + 8.0, y),
             egui::Align2::LEFT_CENTER,
@@ -163,69 +171,53 @@ fn render_convergence_panel(
         painter.text(
             Pos2::new(inner_rect.right() - 8.0, y),
             egui::Align2::RIGHT_CENTER,
-            v,
+            *v,
             egui::FontId::monospace(10.5),
             tokens.text_primary,
         );
     }
 
-    // Mini Convergence Decay Curve Plot
-    let curve_top = inner_rect.top() + 76.0;
-    let curve_bottom = (inner_rect.bottom() - 16.0).max(curve_top + 20.0);
-    let curve_rect = Rect::from_min_max(
-        Pos2::new(inner_rect.left() + 8.0, curve_top),
-        Pos2::new(inner_rect.right() - 8.0, curve_bottom),
+    // Real progress bar
+    let bar_top = inner_rect.top() + 74.0;
+    let bar_rect = Rect::from_min_max(
+        Pos2::new(inner_rect.left() + 8.0, bar_top),
+        Pos2::new(inner_rect.right() - 8.0, bar_top + 14.0),
     );
     painter.rect_filled(
-        curve_rect,
-        egui::CornerRadius::ZERO,
-        Color32::from_rgba_unmultiplied(12, 14, 18, 160),
+        bar_rect,
+        egui::CornerRadius::same(2),
+        Color32::from_rgba_unmultiplied(12, 14, 18, 200),
     );
     painter.rect_stroke(
-        curve_rect,
-        egui::CornerRadius::ZERO,
+        bar_rect,
+        egui::CornerRadius::same(2),
         Stroke::new(1.0, tokens.border_subtle),
         egui::StrokeKind::Inside,
     );
 
-    let steps = 32;
-    let mut prev_pt: Option<Pos2> = None;
-    for i in 0..=steps {
-        let u = i as f32 / steps as f32;
-        let s = 1.0 + u * (target as f32 - 1.0);
-        let err = 1.0 / (s.sqrt());
-        let x = curve_rect.left() + u * curve_rect.width();
-        let y = curve_rect.bottom() - err * curve_rect.height();
-        let pt = Pos2::new(x, y);
-
-        if let Some(p) = prev_pt {
-            painter.line_segment([p, pt], Stroke::new(1.5, tokens.accent));
-        }
-        prev_pt = Some(pt);
+    let fill_w = bar_rect.width() * (pct / 100.0);
+    if fill_w > 0.0 {
+        let fill_rect = Rect::from_min_size(bar_rect.min, Vec2::new(fill_w, bar_rect.height()));
+        let fill_col = if spp >= target {
+            Color32::from_rgb(60, 200, 100)
+        } else {
+            tokens.accent
+        };
+        painter.rect_filled(fill_rect, egui::CornerRadius::same(2), fill_col);
     }
 
-    // Current SPP Marker on curve
-    let cur_u = (gpu_state.sample_count as f32 / target as f32).clamp(0.0, 1.0);
-    let cur_err = 1.0 / (spp as f32).sqrt();
-    let marker_pt = Pos2::new(
-        curve_rect.left() + cur_u * curve_rect.width(),
-        curve_rect.bottom() - cur_err * curve_rect.height(),
-    );
-    painter.circle_filled(marker_pt, 3.5, Color32::WHITE);
-    painter.circle_stroke(marker_pt, 4.5, Stroke::new(1.0, tokens.accent));
-
     painter.text(
-        Pos2::new(curve_rect.left(), curve_rect.bottom() + 2.0),
+        Pos2::new(bar_rect.left(), bar_rect.bottom() + 4.0),
         egui::Align2::LEFT_TOP,
-        "1 spp",
-        egui::FontId::monospace(8.0),
+        "0 SPP",
+        egui::FontId::monospace(8.5),
         tokens.text_muted,
     );
     painter.text(
-        Pos2::new(curve_rect.right(), curve_rect.bottom() + 2.0),
+        Pos2::new(bar_rect.right(), bar_rect.bottom() + 4.0),
         egui::Align2::RIGHT_TOP,
-        format!("{target} spp"),
-        egui::FontId::monospace(8.0),
+        format!("{target} SPP"),
+        egui::FontId::monospace(8.5),
         tokens.text_muted,
     );
 }
@@ -475,8 +467,8 @@ fn render_bvh_diagnostics_panel(
         ("TLAS Instances", instances_str.as_str()),
         ("Watertight Tris", tris_str.as_str()),
         ("Build Duration", duration_str.as_str()),
-        ("Node Layout", "32 bytes (16B align)"),
-        ("SAH Split Bins", "16 per axis"),
+        ("Node Layout", "Node 32B"),
+        ("SAH Split Bins", "16 / axis"),
     ];
 
     for (i, (k, v)) in rows.iter().enumerate() {
@@ -517,7 +509,7 @@ fn render_bvh_diagnostics_panel(
     painter.text(
         tag_rect.center(),
         egui::Align2::CENTER_CENTER,
-        "Iterative Stack Traversal • O(log N)",
+        "Stack Traversal • O(log N)",
         egui::FontId::monospace(9.5),
         tokens.accent,
     );
@@ -559,7 +551,7 @@ fn render_material_glass_panel(
     );
 
     let display_title: &'static str = match glass_name.as_str() {
-        "N-BK7" | "BK7" => "BK7 (Schott)",
+        "N-BK7" | "BK7" => "N-BK7 (Schott)",
         "SF11" => "SF11 (Schott)",
         "F2" => "F2 (Schott)",
         "Fused Silica" => "Fused Silica (Corning)",
@@ -576,7 +568,7 @@ fn render_material_glass_panel(
                 .width(width - 24.0)
                 .show_ui(ui, |ui| {
                     let glasses = [
-                        ("N-BK7", "BK7 (Schott)"),
+                        ("N-BK7", "N-BK7 (Schott)"),
                         ("SF11", "SF11 (Schott)"),
                         ("F2", "F2 (Schott)"),
                         ("Fused Silica", "Fused Silica (Corning)"),
@@ -600,7 +592,7 @@ fn render_material_glass_panel(
         _ => optics_glass::GlassMaterial::n_bk7(),
     };
 
-    let grid_top = combo_rect.bottom() + 8.0;
+    let grid_top = combo_rect.bottom() + 6.0;
     let nd_str = format!("{:.5}", material.nd);
     let vd_str = format!("{:.2}", material.vd);
     let model_str = match material.dispersion {
@@ -620,7 +612,7 @@ fn render_material_glass_panel(
     ];
 
     for (i, (key, val)) in rows.iter().enumerate() {
-        let y = grid_top + (i as f32) * 15.0;
+        let y = grid_top + (i as f32) * 14.0;
         painter.text(
             Pos2::new(rect.min.x + 10.0, y),
             egui::Align2::LEFT_CENTER,
@@ -638,7 +630,7 @@ fn render_material_glass_panel(
     }
 
     // Physical Dispersion curve preview n(λ)
-    let spec_top = grid_top + 64.0;
+    let spec_top = grid_top + 58.0;
     painter.text(
         Pos2::new(rect.min.x + 10.0, spec_top),
         egui::Align2::LEFT_CENTER,
@@ -648,8 +640,8 @@ fn render_material_glass_panel(
     );
 
     let curve_rect = Rect::from_min_max(
-        Pos2::new(rect.min.x + 10.0, spec_top + 8.0),
-        Pos2::new(rect.max.x - 12.0, spec_top + 28.0),
+        Pos2::new(rect.min.x + 10.0, spec_top + 6.0),
+        Pos2::new(rect.max.x - 12.0, spec_top + 22.0),
     );
 
     // Compute refractive index across 380 nm to 780 nm
@@ -679,30 +671,31 @@ fn render_material_glass_panel(
         );
     }
     painter.text(
-        Pos2::new(curve_rect.left(), curve_rect.bottom() + 6.0),
+        Pos2::new(curve_rect.left(), curve_rect.bottom() + 1.0),
         egui::Align2::LEFT_TOP,
         "380",
         egui::FontId::monospace(8.0),
         tokens.text_muted,
     );
     painter.text(
-        Pos2::new(curve_rect.center().x, curve_rect.bottom() + 6.0),
+        Pos2::new(curve_rect.center().x, curve_rect.bottom() + 1.0),
         egui::Align2::CENTER_TOP,
         "588",
         egui::FontId::monospace(8.0),
         tokens.text_muted,
     );
     painter.text(
-        Pos2::new(curve_rect.right(), curve_rect.bottom() + 6.0),
+        Pos2::new(curve_rect.right(), curve_rect.bottom() + 1.0),
         egui::Align2::RIGHT_TOP,
         "780",
         egui::FontId::monospace(8.0),
         tokens.text_muted,
     );
 
-    // Edit Material button at bottom
+    // Edit Material button dynamically positioned below dispersion curve
+    let btn_top = (curve_rect.bottom() + 14.0).max(rect.bottom() - 22.0);
     let btn_rect = Rect::from_min_size(
-        Pos2::new(rect.min.x + 12.0, rect.bottom() - 24.0),
+        Pos2::new(rect.min.x + 12.0, btn_top),
         Vec2::new(width - 24.0, 18.0),
     );
 
@@ -729,17 +722,11 @@ mod tests {
 
     #[test]
     fn test_analytics_convergence_math() {
-        let spp_1 = 1.0_f64;
-        let spp_4 = 4.0_f64;
-        let spp_16 = 16.0_f64;
-
-        let rmse_1 = 1.0 / spp_1.sqrt();
-        let rmse_4 = 1.0 / spp_4.sqrt();
-        let rmse_16 = 1.0 / spp_16.sqrt();
-
-        // Standard Monte Carlo error halves when sample count quadruples: O(1/sqrt(N))
-        assert!((rmse_4 - rmse_1 * 0.5).abs() < 1e-10);
-        assert!((rmse_16 - rmse_4 * 0.5).abs() < 1e-10);
+        let spp = 256_u64;
+        let target = 256_u64;
+        let pct = ((spp as f32 / target as f32) * 100.0).clamp(0.0, 100.0);
+        assert!((pct - 100.0).abs() < 1e-6);
+        assert!(spp >= target, "At or above target SPP status must be complete");
     }
 
     #[test]
