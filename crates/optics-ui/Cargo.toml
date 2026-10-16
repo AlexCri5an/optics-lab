@@ -17,6 +17,7 @@ egui            = { workspace = true }
 eframe          = { workspace = true, features = ["accesskit"] }
 egui-phosphor   = { workspace = true }
 serde           = { workspace = true }
+serde_json      = { workspace = true }
 
 [dev-dependencies]
 egui_kittest = { version = "0.32.3", features = ["snapshot"] }

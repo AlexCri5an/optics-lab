@@ -37,6 +37,9 @@ pub use lens_view::{render_lens_system_panel, render_prescription_table_view};
 pub use sim::{
     EdgeState, PrismSimulation, ReflectedBranch2D, TracedRay2D, map_reflectance_to_alpha,
 };
-pub use theme::{OpticsTokens, apply_tokens, wcag_contrast_ratio, wcag_relative_luminance};
+pub use theme::{
+    AppPreferences, CanvasBackgroundPreference, OpticsTokens, ThemePreference, apply_tokens,
+    ray_color_for_background, resolve_theme, wcag_contrast_ratio, wcag_relative_luminance,
+};
 pub use view_transform::ViewTransform;
 pub use widgets::{abbe_diagram, dispersion_curve_plot, scrub_field};

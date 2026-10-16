@@ -12,11 +12,10 @@ use egui::{
     Ui, Vec2,
 };
 use optics_core::prescription::OpticalSurface;
-use optics_spectral::color::display_color_for_wavelength;
 
 use crate::formatting::format_percent;
 use crate::lens_sim::{LensPreset, LensSimulation, LensSubview};
-use crate::theme::OpticsTokens;
+use crate::theme::{OpticsTokens, ray_color_for_background};
 use crate::view_transform::ViewTransform;
 
 /// Renders the complete Lens System & Aberration analysis workbench.
@@ -356,9 +355,14 @@ fn render_lens_cross_section_view(
     // 4. Draw Traced Cross-Section Rays
     for ray in &sim.cross_section_rays {
         if ray.vertices.len() >= 2 {
-            let rgb = display_color_for_wavelength(ray.wavelength_nm);
+            let base_color = ray_color_for_background(ray.wavelength_nm, tokens.canvas);
             let alpha = if ray.passed { 210 } else { 80 };
-            let color = Color32::from_rgba_unmultiplied(rgb[0], rgb[1], rgb[2], alpha);
+            let color = Color32::from_rgba_unmultiplied(
+                base_color.r(),
+                base_color.g(),
+                base_color.b(),
+                alpha,
+            );
             let stroke = Stroke::new(1.2, color);
 
             for pair in ray.vertices.windows(2) {
@@ -484,8 +488,7 @@ fn render_spot_diagram_view(ui: &mut Ui, sim: &LensSimulation, tokens: &OpticsTo
     }
 
     // 4. Spot Points
-    let rgb = display_color_for_wavelength(sim.wavelength_nm);
-    let dot_color = Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
+    let dot_color = ray_color_for_background(sim.wavelength_nm, tokens.canvas);
     for pt in &spot.points {
         let dx_um = (pt.x_mm - metrics.centroid_x_mm) * 1000.0;
         let dy_um = (pt.y_mm - metrics.centroid_y_mm) * 1000.0;

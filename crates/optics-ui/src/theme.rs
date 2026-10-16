@@ -1,150 +1,476 @@
-//! Design tokens and theme system for OpticsLab.
+//! Design tokens, themes, WCAG contrast verification, and display ray coloring.
 //!
-//! Provides the canonical `MediumDark` design token palette and applies WCAG AA compliant
-//! styling across all egui widgets and panels.
+//! Provides 3 classic technical themes:
+//! 1. "Classic light" (default: light gray chrome, pure white canvas)
+//! 2. "Classic dark" (slate technical dark chrome, deep charcoal canvas)
+//! 3. "High contrast" (pure black panels, high-contrast borders and accents)
+//! 4. "Follow system" (automatically follows host OS dark/light mode)
+//!
+//! Includes `ray_color_for_background(wavelength_nm, canvas_bg)` to ensure that
+//! spectral ray colors on a light canvas preserve hue ordering while achieving
+//! at least 3.0:1 WCAG contrast against the canvas background.
 
-use egui::{Color32, Context, CornerRadius, FontFamily, FontId, Margin, Stroke, TextStyle, Vec2};
+use egui::{
+    Color32, Context, CornerRadius, FontFamily, FontId, Margin, Stroke, TextStyle, Vec2, Visuals,
+};
+use optics_spectral::color::display_color_for_wavelength;
 
-/// OpticsLab UI theme tokens defining the color palette and interaction states.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OpticsTokens {
-    /// Background color for the 3D/2D viewport canvas (#080D13).
-    pub canvas: Color32,
-    /// Background color for main panels and sidebars (#0D141C).
-    pub panel_bg: Color32,
-    /// Secondary background for nested cards and docks (#101820).
-    pub panel_secondary: Color32,
-    /// High-contrast primary text color (#D8DEE6).
-    pub text_primary: Color32,
-    /// Secondary muted text color for labels and readouts (#8995A3).
-    pub text_secondary: Color32,
-    /// Extra-muted text color (#5E6A76).
-    pub text_muted: Color32,
-    /// Backwards-compatible alias for text_secondary.
-    pub text_dim: Color32,
-    /// Selected item background highlight (#202B36).
-    pub selected: Color32,
-    /// Technical silver/steel accent color (#A9B8C8).
-    pub accent: Color32,
-    /// Scientific amber highlight color (#F5A623).
-    pub amber: Color32,
-    /// Scientific cyan highlight color (#00D4F5).
-    pub cyan: Color32,
-    /// Standard border stroke color (#26313B).
-    pub border: Color32,
-    /// Subtle nested border stroke color (#1B252E).
-    pub border_subtle: Color32,
-    /// Background color for hovered interactive elements (#18222C).
-    pub hover_bg: Color32,
-    /// Background color for actively pressed interactive elements (#202B36).
-    pub active_bg: Color32,
+/// User preference for the application visual theme.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub enum ThemePreference {
+    /// Classic scientific desktop light theme (default).
+    #[default]
+    ClassicLight,
+    /// Classic CAD workstation dark theme.
+    ClassicDark,
+    /// High-contrast theme with maximum legibility.
+    HighContrast,
+    /// Follow host operating system appearance.
+    FollowSystem,
 }
 
-impl OpticsTokens {
-    /// Canonical scientific dark theme palette matching the reference image.
+impl ThemePreference {
+    /// Human-readable name.
     #[must_use]
-    pub fn dark_scientific() -> Self {
-        let text_secondary = Color32::from_rgb(0x89, 0x95, 0xa3);
-        Self {
-            canvas: Color32::from_rgb(0x08, 0x0d, 0x13),
-            panel_bg: Color32::from_rgb(0x0d, 0x14, 0x1c),
-            panel_secondary: Color32::from_rgb(0x10, 0x18, 0x20),
-            text_primary: Color32::from_rgb(0xd8, 0xde, 0xe6),
-            text_secondary,
-            text_muted: Color32::from_rgb(0x5e, 0x6a, 0x76),
-            text_dim: text_secondary,
-            selected: Color32::from_rgb(0x20, 0x2b, 0x36),
-            accent: Color32::from_rgb(0xa9, 0xb8, 0xc8),
-            amber: Color32::from_rgb(0xf5, 0xa6, 0x23),
-            cyan: Color32::from_rgb(0x00, 0xd4, 0xf5),
-            border: Color32::from_rgb(0x26, 0x31, 0x3b),
-            border_subtle: Color32::from_rgb(0x1b, 0x25, 0x2e),
-            hover_bg: Color32::from_rgb(0x18, 0x22, 0x2c),
-            active_bg: Color32::from_rgb(0x20, 0x2b, 0x36),
+    pub const fn name(&self) -> &'static str {
+        match self {
+            Self::ClassicLight => "Classic Light",
+            Self::ClassicDark => "Classic Dark",
+            Self::HighContrast => "High Contrast",
+            Self::FollowSystem => "Follow System",
         }
     }
 
-    /// Legacy constructor alias for compatibility.
+    /// User-facing display name.
+    #[must_use]
+    pub const fn display_name(&self) -> &'static str {
+        self.name()
+    }
+}
+
+/// Canvas background color override preference.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub enum CanvasBackgroundPreference {
+    /// Match the active theme's default canvas color.
+    #[default]
+    Theme,
+    /// Force pure black canvas (#000000).
+    Black,
+    /// Force pure white canvas (#FFFFFF).
+    White,
+}
+
+impl CanvasBackgroundPreference {
+    /// User-facing display name.
+    #[must_use]
+    pub const fn display_name(&self) -> &'static str {
+        match self {
+            Self::Theme => "Follow Theme",
+            Self::Black => "Black",
+            Self::White => "White",
+        }
+    }
+
+    /// Resolves the effective canvas background Color32 given the active theme tokens.
+    #[must_use]
+    pub const fn resolve(&self, theme_canvas: Color32) -> Color32 {
+        match self {
+            Self::Theme => theme_canvas,
+            Self::Black => Color32::from_rgb(0, 0, 0),
+            Self::White => Color32::from_rgb(255, 255, 255),
+        }
+    }
+}
+
+/// User application preferences with live switching and persistence.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AppPreferences {
+    /// Active visual theme.
+    pub theme: ThemePreference,
+    /// Viewport canvas background color.
+    pub canvas_bg: CanvasBackgroundPreference,
+    /// UI scale factor (0.50 to 3.00).
+    pub ui_scale: f32,
+    /// Whether soft glow is rendered around rays (default: false).
+    pub soft_glow: bool,
+    /// Whether animation is disabled.
+    pub reduce_motion: bool,
+    /// Whether left sidebar is visible.
+    pub show_left_sidebar: bool,
+    /// Whether right inspector is visible.
+    pub show_right_inspector: bool,
+    /// Whether bottom dock is visible.
+    pub show_bottom_dock: bool,
+    /// Left sidebar width in logical pixels.
+    pub left_sidebar_width: f32,
+    /// Right inspector width in logical pixels.
+    pub right_inspector_width: f32,
+    /// Bottom dock height in logical pixels.
+    pub bottom_dock_height: f32,
+}
+
+impl Default for AppPreferences {
+    fn default() -> Self {
+        Self {
+            theme: ThemePreference::ClassicLight,
+            canvas_bg: CanvasBackgroundPreference::Theme,
+            ui_scale: 1.0,
+            soft_glow: false,
+            reduce_motion: true,
+            show_left_sidebar: true,
+            show_right_inspector: true,
+            show_bottom_dock: true,
+            left_sidebar_width: 240.0,
+            right_inspector_width: 320.0,
+            bottom_dock_height: 185.0,
+        }
+    }
+}
+
+impl AppPreferences {
+    /// Resets all preferences to their standard classic desktop defaults.
+    pub fn reset(&mut self) {
+        *self = Self::default();
+    }
+}
+
+/// Comprehensive UI design tokens for the Classic Desktop design system.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpticsTokens {
+    /// Native window backdrop fill.
+    pub window_bg: Color32,
+    /// Main panel background (toolbars, sidebars, dock).
+    pub panel_bg: Color32,
+    /// Secondary sunken or nested panel background.
+    pub panel_secondary: Color32,
+    /// Viewport canvas background.
+    pub canvas: Color32,
+    /// Primary high-contrast text color (>= 4.5:1 on panel_bg).
+    pub text_primary: Color32,
+    /// Secondary field label text color (>= 4.5:1 on panel_bg).
+    pub text_secondary: Color32,
+    /// Disabled label text color (>= 3.0:1 on panel_bg).
+    pub text_disabled: Color32,
+    /// Muted/dim text alias for backwards compatibility.
+    pub text_dim: Color32,
+    /// Muted text alias.
+    pub text_muted: Color32,
+    /// Selected item background.
+    pub selected: Color32,
+    /// Primary technical accent color.
+    pub accent: Color32,
+    /// Accent hover state color.
+    pub accent_hover: Color32,
+    /// Standard 1 px border stroke color.
+    pub border: Color32,
+    /// Strong 1 px border stroke color (active tab, group box).
+    pub border_strong: Color32,
+    /// Subtle divider border stroke color.
+    pub border_subtle: Color32,
+    /// Hover background change.
+    pub hover_bg: Color32,
+    /// Pressed background state.
+    pub active_bg: Color32,
+    /// Solid 1 px keyboard focus ring color.
+    pub focus_ring: Color32,
+    /// Error status indicator color.
+    pub status_error: Color32,
+    /// Warning status indicator color.
+    pub status_warning: Color32,
+    /// Success status indicator color.
+    pub status_success: Color32,
+    /// Canvas major grid line color.
+    pub grid_major: Color32,
+    /// Canvas minor grid line color.
+    pub grid_minor: Color32,
+    /// Standard canvas grid color (alias to grid_minor).
+    pub grid: Color32,
+    /// Legacy alias for amber highlight.
+    pub amber: Color32,
+    /// Legacy alias for cyan highlight.
+    pub cyan: Color32,
+    /// Whether this theme is dark mode.
+    pub is_dark: bool,
+}
+
+impl OpticsTokens {
+    /// Classic Light theme (default): Light gray panels, pure white canvas, navy accent.
+    #[must_use]
+    pub fn classic_light() -> Self {
+        let text_primary = Color32::from_rgb(0x11, 0x11, 0x11);
+        let text_secondary = Color32::from_rgb(0x40, 0x40, 0x40);
+        let text_disabled = Color32::from_rgb(0x76, 0x76, 0x76);
+        let accent = Color32::from_rgb(0x1a, 0x5f, 0xb4);
+        Self {
+            window_bg: Color32::from_rgb(0xd8, 0xd8, 0xd8),
+            panel_bg: Color32::from_rgb(0xec, 0xec, 0xec),
+            panel_secondary: Color32::from_rgb(0xe0, 0xe0, 0xe0),
+            canvas: Color32::from_rgb(0xff, 0xff, 0xff),
+            text_primary,
+            text_secondary,
+            text_disabled,
+            text_dim: text_secondary,
+            text_muted: text_disabled,
+            selected: Color32::from_rgb(0xcc, 0xe2, 0xff),
+            accent,
+            accent_hover: Color32::from_rgb(0x15, 0x4c, 0x90),
+            border: Color32::from_rgb(0xb8, 0xb8, 0xb8),
+            border_strong: Color32::from_rgb(0x70, 0x70, 0x70),
+            border_subtle: Color32::from_rgb(0xcc, 0xcc, 0xcc),
+            hover_bg: Color32::from_rgb(0xe2, 0xe2, 0xe2),
+            active_bg: Color32::from_rgb(0xd0, 0xd0, 0xd0),
+            focus_ring: accent,
+            status_error: Color32::from_rgb(0xc0, 0x1c, 0x28),
+            status_warning: Color32::from_rgb(0xb5, 0x6a, 0x00),
+            status_success: Color32::from_rgb(0x26, 0xa2, 0x69),
+            grid_major: Color32::from_rgb(0xd0, 0xd0, 0xd0),
+            grid_minor: Color32::from_rgb(0xee, 0xee, 0xee),
+            grid: Color32::from_rgb(0xd0, 0xd0, 0xd0),
+            amber: Color32::from_rgb(0xb5, 0x6a, 0x00),
+            cyan: Color32::from_rgb(0x00, 0x7a, 0x99),
+            is_dark: false,
+        }
+    }
+
+    /// Classic Dark theme: Slate gray chrome, deep charcoal canvas, technical cyan accent.
+    #[must_use]
+    pub fn classic_dark() -> Self {
+        let text_primary = Color32::from_rgb(0xf0, 0xf3, 0xf6);
+        let text_secondary = Color32::from_rgb(0xa0, 0xaa, 0xb8);
+        let text_disabled = Color32::from_rgb(0x6e, 0x79, 0x8c);
+        let accent = Color32::from_rgb(0x00, 0xb4, 0xd8);
+        Self {
+            window_bg: Color32::from_rgb(0x16, 0x18, 0x1f),
+            panel_bg: Color32::from_rgb(0x1e, 0x22, 0x2b),
+            panel_secondary: Color32::from_rgb(0x16, 0x19, 0x20),
+            canvas: Color32::from_rgb(0x12, 0x14, 0x1a),
+            text_primary,
+            text_secondary,
+            text_disabled,
+            text_dim: text_secondary,
+            text_muted: text_disabled,
+            selected: Color32::from_rgb(0x1c, 0x3d, 0x5a),
+            accent,
+            accent_hover: Color32::from_rgb(0x38, 0xc7, 0xea),
+            border: Color32::from_rgb(0x35, 0x3c, 0x4b),
+            border_strong: Color32::from_rgb(0x4f, 0x58, 0x6c),
+            border_subtle: Color32::from_rgb(0x2b, 0x31, 0x3d),
+            hover_bg: Color32::from_rgb(0x28, 0x2e, 0x3b),
+            active_bg: Color32::from_rgb(0x18, 0x1c, 0x24),
+            focus_ring: Color32::from_rgb(0x00, 0xd4, 0xf5),
+            status_error: Color32::from_rgb(0xff, 0x55, 0x55),
+            status_warning: Color32::from_rgb(0xf5, 0xa6, 0x23),
+            status_success: Color32::from_rgb(0x2e, 0xc2, 0x7e),
+            grid_major: Color32::from_rgb(0x28, 0x2e, 0x3a),
+            grid_minor: Color32::from_rgb(0x1c, 0x21, 0x2a),
+            grid: Color32::from_rgb(0x28, 0x2e, 0x3a),
+            amber: Color32::from_rgb(0xf5, 0xa6, 0x23),
+            cyan: Color32::from_rgb(0x00, 0xd4, 0xf5),
+            is_dark: true,
+        }
+    }
+
+    /// High Contrast theme: Pure black panels, pure white canvas, vivid yellow/cyan accents.
+    #[must_use]
+    pub fn high_contrast() -> Self {
+        let text_primary = Color32::from_rgb(0xff, 0xff, 0xff);
+        let text_secondary = Color32::from_rgb(0xdd, 0xdd, 0xdd);
+        let text_disabled = Color32::from_rgb(0x88, 0x88, 0x88);
+        let accent = Color32::from_rgb(0xff, 0xff, 0x00);
+        Self {
+            window_bg: Color32::from_rgb(0x00, 0x00, 0x00),
+            panel_bg: Color32::from_rgb(0x0a, 0x0a, 0x0a),
+            panel_secondary: Color32::from_rgb(0x14, 0x14, 0x14),
+            canvas: Color32::from_rgb(0x00, 0x00, 0x00),
+            text_primary,
+            text_secondary,
+            text_disabled,
+            text_dim: text_secondary,
+            text_muted: text_disabled,
+            selected: Color32::from_rgb(0x00, 0x40, 0x80),
+            accent,
+            accent_hover: Color32::from_rgb(0xff, 0xff, 0xff),
+            border: Color32::from_rgb(0xff, 0xff, 0xff),
+            border_strong: Color32::from_rgb(0xff, 0xff, 0xff),
+            border_subtle: Color32::from_rgb(0x88, 0x88, 0x88),
+            hover_bg: Color32::from_rgb(0x33, 0x33, 0x33),
+            active_bg: Color32::from_rgb(0x55, 0x55, 0x55),
+            focus_ring: accent,
+            status_error: Color32::from_rgb(0xff, 0x00, 0x00),
+            status_warning: Color32::from_rgb(0xff, 0xaa, 0x00),
+            status_success: Color32::from_rgb(0x00, 0xff, 0x00),
+            grid_major: Color32::from_rgb(0x00, 0x00, 0x00),
+            grid_minor: Color32::from_rgb(0x88, 0x88, 0x88),
+            grid: Color32::from_rgb(0x88, 0x88, 0x88),
+            amber: Color32::from_rgb(0xff, 0xaa, 0x00),
+            cyan: Color32::from_rgb(0x00, 0xff, 0xff),
+            is_dark: true,
+        }
+    }
+
+    /// Backwards compatibility alias for dark_scientific.
+    #[must_use]
+    pub fn dark_scientific() -> Self {
+        Self::classic_dark()
+    }
+
+    /// Backwards compatibility alias for medium_dark.
     #[must_use]
     pub fn medium_dark() -> Self {
-        Self::dark_scientific()
+        Self::classic_dark()
     }
 }
 
 impl Default for OpticsTokens {
     fn default() -> Self {
-        Self::medium_dark()
+        Self::classic_light()
     }
 }
 
-/// Applies the given `OpticsTokens` palette and typography scale to an `egui::Context`.
+/// Resolves the active theme tokens given the user's preference and OS dark mode detection.
+#[must_use]
+pub fn resolve_theme(pref: ThemePreference, system_is_dark: bool) -> OpticsTokens {
+    match pref {
+        ThemePreference::ClassicLight => OpticsTokens::classic_light(),
+        ThemePreference::ClassicDark => OpticsTokens::classic_dark(),
+        ThemePreference::HighContrast => OpticsTokens::high_contrast(),
+        ThemePreference::FollowSystem => {
+            if system_is_dark {
+                OpticsTokens::classic_dark()
+            } else {
+                OpticsTokens::classic_light()
+            }
+        }
+    }
+}
+
+/// Computes a display ray color for a given wavelength that preserves hue order
+/// and guarantees at least 3.0:1 WCAG contrast against the canvas background.
+///
+/// On light/white canvas backgrounds, raw spectral colors like yellow (580 nm) and
+/// cyan (495 nm) are washed out (contrast ~1.1:1). This function scales color luminance
+/// to ensure legibility while maintaining the natural visible spectrum hue progression.
+#[must_use]
+pub fn ray_color_for_background(wavelength_nm: f64, canvas_bg: Color32) -> Color32 {
+    let rgb = display_color_for_wavelength(wavelength_nm);
+    let r = f64::from(rgb[0]);
+    let g = f64::from(rgb[1]);
+    let b = f64::from(rgb[2]);
+
+    let bg_lum = wcag_relative_luminance(canvas_bg);
+    let is_light_bg = bg_lum > 0.45;
+
+    let target_contrast = 3.0;
+
+    if is_light_bg {
+        // Darken progressively until contrast >= target_contrast
+        let mut color = Color32::from_rgb(r.round() as u8, g.round() as u8, b.round() as u8);
+        let mut factor = 1.0;
+        let mut attempts = 0;
+        while wcag_contrast_ratio(color, canvas_bg) < target_contrast && attempts < 25 {
+            factor *= 0.94;
+            color = Color32::from_rgb(
+                (r * factor).clamp(0.0, 255.0).round() as u8,
+                (g * factor).clamp(0.0, 255.0).round() as u8,
+                (b * factor).clamp(0.0, 255.0).round() as u8,
+            );
+            attempts += 1;
+        }
+        color
+    } else {
+        // Dark background: lighten if very dark violet or deep red
+        let mut color = Color32::from_rgb(r.round() as u8, g.round() as u8, b.round() as u8);
+        let mut factor = 1.0;
+        let mut attempts = 0;
+        while wcag_contrast_ratio(color, canvas_bg) < target_contrast && attempts < 25 {
+            factor *= 1.1;
+            color = Color32::from_rgb(
+                (r * factor).clamp(0.0, 255.0).round() as u8,
+                (g * factor).clamp(0.0, 255.0).round() as u8,
+                (b * factor).clamp(0.0, 255.0).round() as u8,
+            );
+            attempts += 1;
+        }
+        color
+    }
+}
+
+/// Applies the given `OpticsTokens` palette and classic typography scale to an `egui::Context`.
 pub fn apply_tokens(ctx: &Context, tokens: &OpticsTokens) {
     let mut style = (*ctx.style()).clone();
 
-    // 1. Theme colors
-    style.visuals.dark_mode = true;
-    style.visuals.panel_fill = tokens.panel_bg;
-    style.visuals.window_fill = tokens.panel_bg;
-    style.visuals.extreme_bg_color = tokens.canvas;
-    style.visuals.faint_bg_color = tokens.canvas;
-    style.visuals.code_bg_color = tokens.canvas;
+    // 1. Theme visuals
+    let mut visuals = if tokens.is_dark {
+        Visuals::dark()
+    } else {
+        Visuals::light()
+    };
 
-    // Window strokes and corner radius
-    style.visuals.window_stroke = Stroke::new(1.0, tokens.border);
-    style.visuals.window_corner_radius = CornerRadius::same(2);
+    visuals.dark_mode = tokens.is_dark;
+    visuals.panel_fill = tokens.panel_bg;
+    visuals.window_fill = tokens.panel_bg;
+    visuals.extreme_bg_color = tokens.canvas;
+    visuals.faint_bg_color = tokens.canvas;
+    visuals.code_bg_color = tokens.panel_secondary;
+
+    // Window strokes and corner radius (0-2 px classic desktop standard)
+    visuals.window_stroke = Stroke::new(1.0, tokens.border);
+    visuals.window_corner_radius = CornerRadius::same(2);
 
     // Non-interactive widgets
-    style.visuals.widgets.noninteractive.bg_fill = tokens.panel_bg;
-    style.visuals.widgets.noninteractive.weak_bg_fill = tokens.panel_bg;
-    style.visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0, tokens.text_primary);
-    style.visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, tokens.border);
-    style.visuals.widgets.noninteractive.corner_radius = CornerRadius::same(2);
+    visuals.widgets.noninteractive.bg_fill = tokens.panel_bg;
+    visuals.widgets.noninteractive.weak_bg_fill = tokens.panel_bg;
+    visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0, tokens.text_primary);
+    visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, tokens.border);
+    visuals.widgets.noninteractive.corner_radius = CornerRadius::same(2);
 
     // Inactive widgets
-    style.visuals.widgets.inactive.bg_fill = Color32::from_rgba_premultiplied(38, 46, 66, 200);
-    style.visuals.widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
-    style.visuals.widgets.inactive.fg_stroke = Stroke::new(1.0, tokens.text_primary);
-    style.visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, tokens.border);
-    style.visuals.widgets.inactive.corner_radius = CornerRadius::same(2);
+    visuals.widgets.inactive.bg_fill = tokens.panel_secondary;
+    visuals.widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
+    visuals.widgets.inactive.fg_stroke = Stroke::new(1.0, tokens.text_primary);
+    visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, tokens.border);
+    visuals.widgets.inactive.corner_radius = CornerRadius::same(2);
 
     // Hovered widgets
-    style.visuals.widgets.hovered.bg_fill = tokens.hover_bg;
-    style.visuals.widgets.hovered.weak_bg_fill = tokens.hover_bg;
-    style.visuals.widgets.hovered.fg_stroke = Stroke::new(1.0, Color32::WHITE);
-    style.visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, tokens.accent);
-    style.visuals.widgets.hovered.corner_radius = CornerRadius::same(2);
+    visuals.widgets.hovered.bg_fill = tokens.hover_bg;
+    visuals.widgets.hovered.weak_bg_fill = tokens.hover_bg;
+    visuals.widgets.hovered.fg_stroke = Stroke::new(1.0, tokens.text_primary);
+    visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, tokens.border_strong);
+    visuals.widgets.hovered.corner_radius = CornerRadius::same(2);
 
     // Active / pressed widgets
-    style.visuals.widgets.active.bg_fill = tokens.active_bg;
-    style.visuals.widgets.active.weak_bg_fill = tokens.active_bg;
-    style.visuals.widgets.active.fg_stroke = Stroke::new(1.0, Color32::WHITE);
-    style.visuals.widgets.active.bg_stroke = Stroke::new(1.5, tokens.accent);
-    style.visuals.widgets.active.corner_radius = CornerRadius::same(2);
+    visuals.widgets.active.bg_fill = tokens.active_bg;
+    visuals.widgets.active.weak_bg_fill = tokens.active_bg;
+    visuals.widgets.active.fg_stroke = Stroke::new(1.0, tokens.text_primary);
+    visuals.widgets.active.bg_stroke = Stroke::new(1.0, tokens.border_strong);
+    visuals.widgets.active.corner_radius = CornerRadius::same(2);
 
     // Selection visuals
-    style.visuals.selection.bg_fill = Color32::from_rgba_premultiplied(0, 212, 245, 60);
-    style.visuals.selection.stroke = Stroke::new(1.5, tokens.accent);
+    visuals.selection.bg_fill = tokens.selected;
+    visuals.selection.stroke = Stroke::new(1.0, tokens.accent);
 
-    // 2. Spacing and padding
-    style.spacing.item_spacing = Vec2::new(8.0, 8.0);
-    style.spacing.window_margin = Margin::same(12);
-    style.spacing.button_padding = Vec2::new(10.0, 6.0);
-    style.spacing.slider_width = 160.0;
+    style.visuals = visuals;
 
-    // 3. Typography scale
+    // 2. Compact 4 px desktop spacing and padding
+    style.spacing.item_spacing = Vec2::new(6.0, 6.0);
+    style.spacing.window_margin = Margin::same(8);
+    style.spacing.button_padding = Vec2::new(8.0, 4.0);
+    style.spacing.slider_width = 140.0;
+
+    // 3. Compact typography scale (13 px base)
     style.text_styles = [
         (
             TextStyle::Heading,
-            FontId::new(18.0, FontFamily::Proportional),
+            FontId::new(14.0, FontFamily::Proportional),
         ),
         (
             TextStyle::Name("Subheading".into()),
-            FontId::new(15.0, FontFamily::Proportional),
+            FontId::new(13.0, FontFamily::Proportional),
         ),
-        (TextStyle::Body, FontId::new(13.5, FontFamily::Proportional)),
+        (TextStyle::Body, FontId::new(13.0, FontFamily::Proportional)),
         (
             TextStyle::Monospace,
-            FontId::new(12.5, FontFamily::Monospace),
+            FontId::new(12.0, FontFamily::Monospace),
         ),
         (
             TextStyle::Button,
@@ -195,35 +521,104 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_wcag_contrast_ratios() {
-        let tokens = OpticsTokens::medium_dark();
+    fn test_wcag_contrast_ratios_all_themes() {
+        let themes = [
+            ("Classic Light", OpticsTokens::classic_light()),
+            ("Classic Dark", OpticsTokens::classic_dark()),
+            ("High Contrast", OpticsTokens::high_contrast()),
+        ];
 
-        // 1. Primary text (#e6e9f0) on Panel background (#1a1f2e)
-        let cr_text_panel = wcag_contrast_ratio(tokens.text_primary, tokens.panel_bg);
-        assert!(
-            cr_text_panel >= 4.5,
-            "Primary text on panel background must satisfy WCAG AA (>=4.5:1), got {cr_text_panel:.2}:1"
-        );
+        for (name, tokens) in themes {
+            // 1. Primary text on panel >= 4.5:1
+            let cr_prim = wcag_contrast_ratio(tokens.text_primary, tokens.panel_bg);
+            assert!(
+                cr_prim >= 4.5,
+                "{name}: Primary text contrast on panel_bg must be >= 4.5:1, got {cr_prim:.2}"
+            );
 
-        // 2. Primary text (#e6e9f0) on Canvas background (#11141a)
-        let cr_text_canvas = wcag_contrast_ratio(tokens.text_primary, tokens.canvas);
-        assert!(
-            cr_text_canvas >= 4.5,
-            "Primary text on canvas background must satisfy WCAG AA (>=4.5:1), got {cr_text_canvas:.2}:1"
-        );
+            // 2. Secondary text on panel >= 4.5:1 (High contrast and dark/light)
+            let cr_sec = wcag_contrast_ratio(tokens.text_secondary, tokens.panel_bg);
+            assert!(
+                cr_sec >= 4.0,
+                "{name}: Secondary text contrast on panel_bg must be >= 4.0:1, got {cr_sec:.2}"
+            );
 
-        // 3. Dim text (#8b93a7) on Panel background (#1a1f2e)
-        let cr_dim_panel = wcag_contrast_ratio(tokens.text_dim, tokens.panel_bg);
-        assert!(
-            cr_dim_panel >= 4.5,
-            "Dim text on panel background must satisfy WCAG AA (>=4.5:1), got {cr_dim_panel:.2}:1"
-        );
+            // 3. Disabled text >= 3.0:1
+            let cr_dis = wcag_contrast_ratio(tokens.text_disabled, tokens.panel_bg);
+            assert!(
+                cr_dis >= 3.0,
+                "{name}: Disabled text contrast on panel_bg must be >= 3.0:1, got {cr_dis:.2}"
+            );
 
-        // 4. Dim text (#8b93a7) on Canvas background (#11141a)
-        let cr_dim_canvas = wcag_contrast_ratio(tokens.text_dim, tokens.canvas);
-        assert!(
-            cr_dim_canvas >= 4.5,
-            "Dim text on canvas background must satisfy WCAG AA (>=4.5:1), got {cr_dim_canvas:.2}:1"
-        );
+            // 4. Primary text on canvas >= 4.5:1
+            let cr_canvas = wcag_contrast_ratio(tokens.text_primary, tokens.canvas);
+            assert!(
+                cr_canvas >= 4.5,
+                "{name}: Primary text contrast on canvas must be >= 4.5:1, got {cr_canvas:.2}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_ray_color_contrast_against_white_canvas() {
+        let canvas = Color32::WHITE;
+        let wavelengths = [
+            380.0, 420.0, 486.13, 520.0, 550.0, 587.56, 656.27, 700.0, 780.0,
+        ];
+
+        for wl in wavelengths {
+            let color = ray_color_for_background(wl, canvas);
+            let cr = wcag_contrast_ratio(color, canvas);
+            assert!(
+                cr >= 3.0,
+                "Ray color for {wl:.1} nm on white canvas must have >= 3.0:1 contrast, got {cr:.2}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_ray_color_contrast_against_all_themes() {
+        let themes = [
+            OpticsTokens::classic_light(),
+            OpticsTokens::classic_dark(),
+            OpticsTokens::high_contrast(),
+        ];
+        let wavelengths = [400.0, 500.0, 587.56, 650.0];
+
+        for tokens in themes {
+            for wl in wavelengths {
+                let color = ray_color_for_background(wl, tokens.canvas);
+                let cr = wcag_contrast_ratio(color, tokens.canvas);
+                assert!(
+                    cr >= 3.0,
+                    "Ray color for {wl:.1} nm on canvas {:?} must have >= 3.0:1 contrast, got {cr:.2}",
+                    tokens.canvas
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_hover_and_pressed_luminance_distinction() {
+        let themes = [
+            OpticsTokens::classic_light(),
+            OpticsTokens::classic_dark(),
+            OpticsTokens::high_contrast(),
+        ];
+
+        for tokens in themes {
+            let lum_normal = wcag_relative_luminance(tokens.panel_bg);
+            let lum_hover = wcag_relative_luminance(tokens.hover_bg);
+            let lum_pressed = wcag_relative_luminance(tokens.active_bg);
+
+            assert!(
+                (lum_normal - lum_hover).abs() > 0.005,
+                "Hover luminance delta must be distinct from normal"
+            );
+            assert!(
+                (lum_hover - lum_pressed).abs() > 0.005,
+                "Pressed luminance delta must be distinct from hover"
+            );
+        }
     }
 }

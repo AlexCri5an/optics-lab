@@ -5,10 +5,9 @@
 
 use egui::epaint::PathShape;
 use egui::{Color32, Pos2, Rect, Stroke, Vec2};
-use optics_spectral::color::display_color_for_wavelength;
 
 use crate::sim::PrismSimulation;
-use crate::theme::OpticsTokens;
+use crate::theme::{OpticsTokens, ray_color_for_background};
 
 /// Represents a 3D point in world space.
 #[derive(Clone, Copy, Debug)]
@@ -89,28 +88,20 @@ pub fn render_viewport_3d(
     tokens: &OpticsTokens,
     selected_ray: &mut Option<usize>,
     hovered_ray: &mut Option<usize>,
+    soft_glow: bool,
 ) {
     let painter = ui.painter_at(rect);
     let center = rect.center();
     let camera = Camera3D::default();
 
-    // 1. Studio background gradient
+    // 1. Flat Canvas Background (no decorative gradient/vignette)
     painter.rect_filled(rect, egui::CornerRadius::ZERO, tokens.canvas);
 
-    // Subtle dark studio radial vignette/illumination
-    let light_center = center + Vec2::new(80.0, -30.0);
-    for r in (50..=450).step_by(50) {
-        let alpha = ((1.0 - (r as f32 / 450.0)) * 12.0) as u8;
-        painter.circle_filled(
-            light_center,
-            r as f32,
-            Color32::from_rgba_premultiplied(22, 34, 48, alpha),
-        );
-    }
+    let is_light_canvas =
+        tokens.canvas.r() > 180 && tokens.canvas.g() > 180 && tokens.canvas.b() > 180;
 
-    // 2. Perspective Floor Grid
-    let grid_color = Color32::from_rgba_premultiplied(30, 42, 54, 45);
-    let grid_stroke = Stroke::new(1.0, grid_color);
+    // 2. Perspective Floor Grid using theme tokens
+    let grid_stroke = Stroke::new(1.0, tokens.grid);
     let floor_y = -35.0;
 
     // Longitudinal grid lines
@@ -185,31 +176,57 @@ pub fn render_viewport_3d(
         Stroke::new(1.0, Color32::from_rgba_premultiplied(85, 120, 160, 80)),
     ));
 
-    // 4. Incident White Ray
+    // 4. Incident Ray (contrasting against canvas)
     let inc_start_3d = Vec3D::new(prism_center_x - 170.0, floor_y + 42.0, 0.0);
     let hit_enter_3d = Vec3D::new(prism_center_x - prism_w * 0.28, floor_y + 49.0, 0.0);
 
     let p_inc_start = camera.project(inc_start_3d, center);
     let p_hit_enter = camera.project(hit_enter_3d, center);
 
-    // Luminous halo around incident beam
-    painter.line_segment(
-        [p_inc_start, p_hit_enter],
-        Stroke::new(4.5, Color32::from_rgba_premultiplied(255, 255, 255, 40)),
-    );
-    painter.line_segment(
-        [p_inc_start, p_hit_enter],
-        Stroke::new(2.0, Color32::from_rgba_premultiplied(255, 255, 255, 160)),
-    );
-    painter.line_segment([p_inc_start, p_hit_enter], Stroke::new(1.0, Color32::WHITE));
+    let incident_color = if is_light_canvas {
+        Color32::from_rgb(45, 52, 65)
+    } else {
+        Color32::WHITE
+    };
 
-    // Incident refraction focal glare dot
-    painter.circle_filled(
-        p_hit_enter,
-        4.0,
-        Color32::from_rgba_premultiplied(255, 255, 255, 120),
-    );
-    painter.circle_filled(p_hit_enter, 1.8, Color32::WHITE);
+    if soft_glow {
+        painter.line_segment(
+            [p_inc_start, p_hit_enter],
+            Stroke::new(
+                4.5,
+                Color32::from_rgba_premultiplied(
+                    incident_color.r(),
+                    incident_color.g(),
+                    incident_color.b(),
+                    40,
+                ),
+            ),
+        );
+        painter.line_segment(
+            [p_inc_start, p_hit_enter],
+            Stroke::new(
+                2.0,
+                Color32::from_rgba_premultiplied(
+                    incident_color.r(),
+                    incident_color.g(),
+                    incident_color.b(),
+                    160,
+                ),
+            ),
+        );
+        painter.circle_filled(
+            p_hit_enter,
+            4.0,
+            Color32::from_rgba_premultiplied(
+                incident_color.r(),
+                incident_color.g(),
+                incident_color.b(),
+                120,
+            ),
+        );
+    }
+    painter.line_segment([p_inc_start, p_hit_enter], Stroke::new(1.5, incident_color));
+    painter.circle_filled(p_hit_enter, 2.0, incident_color);
 
     // 5. Internal and Emerging Spectral Ray Fan
     let ray_count = sim.rays.len().max(16);
@@ -219,8 +236,7 @@ pub fn render_viewport_3d(
 
     for (idx, ray) in sim.rays.iter().enumerate() {
         let t = idx as f32 / (ray_count.max(1) - 1) as f32;
-        let rgb = display_color_for_wavelength(ray.wavelength_nm);
-        let color = Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
+        let color = ray_color_for_background(ray.wavelength_nm, tokens.canvas);
 
         // Dispersed exit point along right face (internal ray)
         let hit_exit_3d = Vec3D::new(
@@ -231,7 +247,7 @@ pub fn render_viewport_3d(
         let p_hit_exit = camera.project(hit_exit_3d, center);
 
         // Internal refracted ray
-        let internal_alpha = 140;
+        let internal_alpha = if is_light_canvas { 180 } else { 140 };
         let internal_color =
             Color32::from_rgba_premultiplied(color.r(), color.g(), color.b(), internal_alpha);
         painter.line_segment([p_hit_enter, p_hit_exit], Stroke::new(1.2, internal_color));
@@ -249,33 +265,45 @@ pub fn render_viewport_3d(
         let is_selected = *selected_ray == Some(idx);
         let is_hovered = *hovered_ray == Some(idx);
 
-        // Ray stroke width and alpha
+        // Crisp lines by default, width & markers on hover/selected
         let (stroke_w, glow_w, alpha_glow) = if is_selected {
-            (2.4, 7.0, 180)
+            (2.4, 6.0, 160)
         } else if is_hovered {
-            (2.0, 5.5, 130)
+            (2.0, 5.0, 120)
         } else {
-            (1.4, 4.0, 60)
+            (1.5, 3.5, 60)
         };
 
-        // Outer glow
-        let glow_color =
-            Color32::from_rgba_premultiplied(color.r(), color.g(), color.b(), alpha_glow);
-        painter.line_segment([p_hit_exit, p_fan_end], Stroke::new(glow_w, glow_color));
-        // Sharp core
+        if soft_glow {
+            let glow_color =
+                Color32::from_rgba_premultiplied(color.r(), color.g(), color.b(), alpha_glow);
+            painter.line_segment([p_hit_exit, p_fan_end], Stroke::new(glow_w, glow_color));
+        }
+        // Sharp core ray
         painter.line_segment([p_hit_exit, p_fan_end], Stroke::new(stroke_w, color));
 
-        // Floor light projection strip
-        let floor_proj_end =
-            camera.project(Vec3D::new(fan_end_3d.x, floor_y, fan_end_3d.z), center);
-        let floor_alpha = alpha_glow / 4;
-        painter.line_segment(
-            [p_hit_exit, floor_proj_end],
-            Stroke::new(
-                1.0,
-                Color32::from_rgba_premultiplied(color.r(), color.g(), color.b(), floor_alpha),
-            ),
-        );
+        // Markers for selection and hover (differing by markers + width, not color alone)
+        if is_selected {
+            painter.circle_filled(p_hit_exit, 2.5, color);
+            painter.circle_filled(p_fan_end, 3.2, color);
+        } else if is_hovered {
+            painter.circle_filled(p_hit_exit, 2.0, color);
+            painter.circle_filled(p_fan_end, 2.5, color);
+        }
+
+        if soft_glow {
+            // Floor light projection strip
+            let floor_proj_end =
+                camera.project(Vec3D::new(fan_end_3d.x, floor_y, fan_end_3d.z), center);
+            let floor_alpha = alpha_glow / 4;
+            painter.line_segment(
+                [p_hit_exit, floor_proj_end],
+                Stroke::new(
+                    1.0,
+                    Color32::from_rgba_premultiplied(color.r(), color.g(), color.b(), floor_alpha),
+                ),
+            );
+        }
 
         // Hit testing for ray inspection
         if let Some(pos) = mouse_pos {

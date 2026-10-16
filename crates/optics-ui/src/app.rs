@@ -23,7 +23,10 @@ use crate::inspector::{RayInspectorState, render_ray_inspector_panel};
 use crate::lens_sim::{LensPreset, LensSimulation};
 use crate::lens_view::{render_lens_system_panel, render_prescription_table_view};
 use crate::sim::PrismSimulation;
-use crate::theme::{OpticsTokens, apply_tokens};
+use crate::theme::{
+    AppPreferences, CanvasBackgroundPreference, OpticsTokens, ThemePreference, apply_tokens,
+    resolve_theme,
+};
 use crate::view_transform::ViewTransform;
 use crate::viewport_3d::render_viewport_3d;
 use crate::widgets::dispersion_curve_plot;
@@ -186,6 +189,10 @@ pub struct OpticsLabApp {
     pub convergence_spp: u32,
     /// Whether icon fonts have been registered in egui font definitions.
     pub fonts_initialized: bool,
+    /// User application preferences (theme, UI scale, visual options).
+    pub prefs: AppPreferences,
+    /// Whether the Preferences modal dialog is open.
+    pub show_preferences: bool,
 }
 
 impl Default for OpticsLabApp {
@@ -203,10 +210,13 @@ impl Default for OpticsLabApp {
             RightPanelTab::RayInspector,
         );
 
+        let prefs = AppPreferences::default();
+        let tokens = OpticsTokens::classic_light();
+
         Self {
             app_mode: default_app_mode,
             viewport_mode: default_viewport_mode,
-            tokens: OpticsTokens::dark_scientific(),
+            tokens,
             active_tool: ActiveTool::Select,
             view: ViewTransform::default(),
             sim: PrismSimulation::default(),
@@ -219,6 +229,7 @@ impl Default for OpticsLabApp {
             copy_status: None,
             needs_fit: true,
             show_about: false,
+            show_preferences: false,
             inspector_state: RayInspectorState::default(),
             scene_tree_scene_open: true,
             scene_tree_prism_open: true,
@@ -232,19 +243,31 @@ impl Default for OpticsLabApp {
             bvh_benchmark_result: None,
             convergence_spp: 128,
             fonts_initialized: false,
+            prefs,
         }
     }
 }
 
 impl OpticsLabApp {
-    /// Creates a new OpticsLab application instance with default settings.
+    /// Storage key for persisted user preferences.
+    pub const PREFS_STORAGE_KEY: &'static str = "optics_lab_preferences";
+
+    /// Creates a new OpticsLab application instance with default settings and persisted preferences.
     #[must_use]
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         init_icon_fonts(&cc.egui_ctx);
-        Self {
-            fonts_initialized: true,
-            ..Default::default()
+        let mut app = Self::default();
+        if let Some(storage) = cc.storage {
+            if let Some(json) = storage.get_string(Self::PREFS_STORAGE_KEY) {
+                if let Ok(saved_prefs) = serde_json::from_str::<AppPreferences>(&json) {
+                    app.prefs = saved_prefs;
+                }
+            }
         }
+        let system_is_dark = cc.egui_ctx.style().visuals.dark_mode;
+        app.tokens = resolve_theme(app.prefs.theme, system_is_dark);
+        app.fonts_initialized = true;
+        app
     }
 
     /// Handles keyboard shortcuts.
@@ -264,8 +287,22 @@ impl OpticsLabApp {
         if ctx.input(|i| i.key_pressed(Key::F1)) {
             self.show_shortcuts_help = !self.show_shortcuts_help;
         }
+        if ctx.input(|i| (i.modifiers.command || i.modifiers.ctrl) && i.key_pressed(Key::Comma)) {
+            self.show_preferences = !self.show_preferences;
+        }
+        if ctx.input(|i| {
+            (i.modifiers.command || i.modifiers.ctrl)
+                && (i.key_pressed(Key::Plus) || i.key_pressed(Key::Equals))
+        }) {
+            self.prefs.ui_scale = (self.prefs.ui_scale + 0.1).min(3.0);
+        }
+        if ctx.input(|i| (i.modifiers.command || i.modifiers.ctrl) && i.key_pressed(Key::Minus)) {
+            self.prefs.ui_scale = (self.prefs.ui_scale - 0.1).max(0.5);
+        }
         if ctx.input(|i| i.key_pressed(Key::Escape)) {
-            if self.show_shortcuts_help {
+            if self.show_preferences {
+                self.show_preferences = false;
+            } else if self.show_shortcuts_help {
                 self.show_shortcuts_help = false;
             } else if self.show_about {
                 self.show_about = false;
@@ -405,6 +442,11 @@ impl OpticsLabApp {
                         });
 
                         ui.menu_button("Edit", |ui| {
+                            if ui.button("Preferences... (Cmd+,)").clicked() {
+                                self.show_preferences = true;
+                                ui.close();
+                            }
+                            ui.separator();
                             if ui.button("Reset defaults").clicked() {
                                 self.sim = PrismSimulation::default();
                                 self.needs_fit = true;
@@ -544,7 +586,7 @@ impl OpticsLabApp {
                                     self.needs_fit = true;
                                 }
                                 ActiveTool::Settings => {
-                                    self.show_shortcuts_help = true;
+                                    self.show_preferences = true;
                                 }
                             }
                         }
@@ -1006,6 +1048,7 @@ impl OpticsLabApp {
                         &self.tokens,
                         &mut self.selected_ray_index,
                         &mut self.hovered_ray_index,
+                        self.prefs.soft_glow,
                     );
                 }
                 ViewportMode::View2D => {
@@ -1019,6 +1062,7 @@ impl OpticsLabApp {
                             &self.tokens,
                             &mut self.selected_ray_index,
                             &mut self.hovered_ray_index,
+                            self.prefs.soft_glow,
                         );
                     }
                 }
@@ -1390,6 +1434,131 @@ impl OpticsLabApp {
                 });
             });
     }
+
+    /// Renders the user application preferences modal dialog.
+    fn render_preferences_dialog(&mut self, ctx: &Context) {
+        if !self.show_preferences {
+            return;
+        }
+
+        Window::new("Preferences")
+            .collapsible(false)
+            .resizable(false)
+            .default_size(Vec2::new(420.0, 340.0))
+            .show(ctx, |ui| {
+                ui.add_space(4.0);
+                ui.label(
+                    egui::RichText::new("Application Preferences")
+                        .strong()
+                        .color(self.tokens.text_primary),
+                );
+                ui.separator();
+
+                egui::Grid::new("preferences_grid")
+                    .num_columns(2)
+                    .spacing([18.0, 8.0])
+                    .show(ui, |ui| {
+                        // Theme
+                        ui.label(
+                            egui::RichText::new("Color theme:").color(self.tokens.text_secondary),
+                        );
+                        egui::ComboBox::from_id_salt("theme_combobox")
+                            .selected_text(self.prefs.theme.display_name())
+                            .show_ui(ui, |ui| {
+                                for theme in [
+                                    ThemePreference::ClassicLight,
+                                    ThemePreference::ClassicDark,
+                                    ThemePreference::HighContrast,
+                                    ThemePreference::FollowSystem,
+                                ] {
+                                    let is_selected = self.prefs.theme == theme;
+                                    if ui
+                                        .selectable_label(is_selected, theme.display_name())
+                                        .clicked()
+                                    {
+                                        self.prefs.theme = theme;
+                                    }
+                                }
+                            });
+                        ui.end_row();
+
+                        // Canvas Background
+                        ui.label(
+                            egui::RichText::new("Canvas background:")
+                                .color(self.tokens.text_secondary),
+                        );
+                        egui::ComboBox::from_id_salt("canvas_bg_combobox")
+                            .selected_text(self.prefs.canvas_bg.display_name())
+                            .show_ui(ui, |ui| {
+                                for bg in [
+                                    CanvasBackgroundPreference::Theme,
+                                    CanvasBackgroundPreference::Black,
+                                    CanvasBackgroundPreference::White,
+                                ] {
+                                    let is_selected = self.prefs.canvas_bg == bg;
+                                    if ui
+                                        .selectable_label(is_selected, bg.display_name())
+                                        .clicked()
+                                    {
+                                        self.prefs.canvas_bg = bg;
+                                    }
+                                }
+                            });
+                        ui.end_row();
+
+                        // UI Scale
+                        ui.label(
+                            egui::RichText::new("UI scale:").color(self.tokens.text_secondary),
+                        );
+                        ui.horizontal(|ui| {
+                            ui.add(
+                                egui::Slider::new(&mut self.prefs.ui_scale, 0.5..=3.0)
+                                    .step_by(0.05)
+                                    .custom_formatter(|n, _| format!("{:.0}%", n * 100.0)),
+                            );
+                            if ui.button("100%").clicked() {
+                                self.prefs.ui_scale = 1.0;
+                            }
+                        });
+                        ui.end_row();
+
+                        // Soft glow
+                        ui.label(
+                            egui::RichText::new("Visual effects:")
+                                .color(self.tokens.text_secondary),
+                        );
+                        ui.checkbox(&mut self.prefs.soft_glow, "Soft glow on rays");
+                        ui.end_row();
+
+                        // Reduce motion
+                        ui.label(
+                            egui::RichText::new("Accessibility:").color(self.tokens.text_secondary),
+                        );
+                        ui.checkbox(&mut self.prefs.reduce_motion, "Reduce motion");
+                        ui.end_row();
+                    });
+
+                ui.add_space(14.0);
+                ui.separator();
+                ui.add_space(4.0);
+
+                ui.horizontal(|ui| {
+                    if ui.button("Reset preferences").clicked() {
+                        self.prefs.reset();
+                    }
+
+                    if ui.button("Keyboard shortcuts...").clicked() {
+                        self.show_shortcuts_help = true;
+                    }
+
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        if ui.button("Close").clicked() {
+                            self.show_preferences = false;
+                        }
+                    });
+                });
+            });
+    }
 }
 
 impl eframe::App for OpticsLabApp {
@@ -1398,7 +1567,22 @@ impl eframe::App for OpticsLabApp {
             init_icon_fonts(ctx);
             self.fonts_initialized = true;
         }
+
+        // Live theme resolution & canvas override
+        let system_is_dark = ctx.style().visuals.dark_mode;
+        self.tokens = resolve_theme(self.prefs.theme, system_is_dark);
+        match self.prefs.canvas_bg {
+            CanvasBackgroundPreference::Theme => {}
+            CanvasBackgroundPreference::Black => {
+                self.tokens.canvas = Color32::from_rgb(17, 20, 26);
+            }
+            CanvasBackgroundPreference::White => {
+                self.tokens.canvas = Color32::WHITE;
+            }
+        }
+        ctx.set_zoom_factor(self.prefs.ui_scale);
         apply_tokens(ctx, &self.tokens);
+
         self.handle_shortcuts(ctx);
         self.handle_file_drag_and_drop(ctx);
 
@@ -1423,6 +1607,13 @@ impl eframe::App for OpticsLabApp {
         // 7. Dialogs
         self.render_about_dialog(ctx);
         self.render_shortcuts_modal(ctx);
+        self.render_preferences_dialog(ctx);
+    }
+
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        if let Ok(json) = serde_json::to_string(&self.prefs) {
+            storage.set_string(Self::PREFS_STORAGE_KEY, json);
+        }
     }
 }
 
