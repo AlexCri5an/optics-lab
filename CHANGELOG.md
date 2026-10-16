@@ -8,6 +8,32 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+#### Desktop Native Consolidation & Reality Cleanup (`slice-g/native-cleanup`)
+- **Single-Platform Desktop Native Focus:**
+  - Removed `apps/optics-web` workspace crate, Trunk configuration, web assets, and all WASM dependencies (`wasm-bindgen`, `web-sys`, `js-sys`).
+  - Pruned WASM build checks from GitHub Actions CI workflow to focus exclusively on native desktop workstation targets (Metal, Vulkan, DX12).
+- **Physical Reality & Telemetry Corrections:**
+  - Eliminated duplicate `r.render_frame()` invocation in 3D viewport paint callback and enforced strict `sample_count <= target_spp` cap.
+  - Replaced CPU command encoding duration timer with wall-clock pacing, eliminating phantom 5000+ FPS reporting.
+  - Removed synthetic $1/\sqrt{\text{SPP}}$ RMSE formula in Convergence dock, replacing it with transparent progress and honest "Complete (256/256 SPP)" status.
+  - Disabled stubbed buttons (`Save Project`, `Export Image`, `Scale` tool) with informative reasons until native file dialogs and disk I/O are implemented.
+  - Connected `Move` and `Rotate` tools directly to numeric translation/rotation controls in the Properties tab.
+- **Dynamic WGSL Glass Dispersion:**
+  - Replaced hardcoded N-BK7 Sellmeier coefficients in `crates/optics-render/src/shaders/path_tracer.wgsl` with dynamic uniform parameters passed via `RenderParams`.
+  - Added `set_material_sellmeier` to `PathTracingRenderer` dynamically uploading active material coefficients.
+  - Repaired 10× division typos for 4 Schott glasses in `optical_glasses.json` (`LITHOSIL-Q`, `N-LAF32`, `N-LASF31`, `N-LASF46`).
+  - Unified optical glass naming across dock, inspector, and catalog to `"N-BK7 (Schott)"`.
+- **Real 3D Viewport Scene Modes:**
+  - Added `SceneModel::from_optical_prescription` to tessellate sequential lens systems into watertight 3D meshes with outward-facing normals.
+  - Implemented 3D camera-facing ribbon propagation for sequential lens systems in the 3D viewport.
+  - Bound lens simulation geometry and auto-framing ($Z \in [0, 50]$ mm) when switching to Lens System mode, loading presets, or dragging and dropping `.zmx` files.
+- **Window Chrome & Typography:**
+  - Overrode `clear_color` on `OpticsLabApp` (`eframe::App`) returning `self.tokens.panel_bg`, eliminating the solid black title bar gap on macOS.
+  - Set minimum window inner size to 900x600 in `apps/optics-lab/src/main.rs`.
+  - Enforced strict sentence case and removed trailing colons across all UI labels.
+
 ### Added
 
 #### Realistic UI & Viewport Overhaul (`overhaul/realistic-ui`) — Phases P0–P11

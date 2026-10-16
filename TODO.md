@@ -42,7 +42,7 @@
   - `cargo clippy --all -- -D warnings`
   - `cargo test --all`
   - `cargo fmt --check`
-  - WASM build check: `cargo build --target wasm32-unknown-unknown -p optics-web`
+  - WASM build check: pruned (consolidated to desktop native)
 
 ### 1.2 Crate Scaffolding (empty `lib.rs` stubs only)
 - [x] `crates/optics-core/` — `Cargo.toml`, `src/lib.rs`
@@ -56,7 +56,7 @@
 ### 1.3 App Scaffolding
 - [x] `apps/optics-lab/` — native desktop binary (`eframe` main entry)
 - [x] `apps/optics-cli/` — headless binary (no GPU, pure diagnostic runner)
-- [x] `apps/optics-web/` — `wasm32-unknown-unknown` target, `index.html`
+- [-] `apps/optics-web/` — pruned (consolidated to desktop native)
 
 ### 1.4 Dependency Declarations
 - [x] `wgpu = "25"` in `optics-render` (matches `eframe = "0.32.3"`)
@@ -534,26 +534,21 @@
 
 ---
 
-## Phase 12 — WebAssembly App (`apps/optics-web`)
+## Phase 12 — WebAssembly App [-] PRUNED (Single-Platform Desktop Native Focus)
 
-> Browser deployment via egui `wasm32-unknown-unknown` + WebGL/Glow (WebGPU in Slice C)
+> Pruned: Replaced by single-platform Desktop Native Consolidation (`apps/optics-lab` via Metal/Vulkan/DX12). All Web/WASM targets and dependencies removed.
 
 ### 12.1 Local WASM Build (via Trunk)
-- [x] Setup `Trunk.toml` configuration for `apps/optics-web`
-- [x] `trunk build --release` produces standalone bundle in `dist/` (verified locally: 3.20 MB raw, 1.44 MB gzip)
-- [x] `index.html` with WebGL/WASM availability check + loading indicator + error fallback banner
-- [x] `dist/` and `.trunk/` in `.gitignore`
-- [-] Web worker for heavy BVH build (off main thread) — deferred for Slice A
+- [-] `apps/optics-web` workspace crate pruned
+- [-] `Trunk.toml`, `index.html` build artifacts deleted
 
 ### 12.2 Browser Compatibility
-- [x] WebGL2/WebGL detection with plain-text fallback banner for unsupported browsers
-- [ ] [Slice C] WebGPU feature detection and browser compatibility matrix (Chromium 113+, Firefox Nightly, Safari TP)
+- [-] Pruned: desktop native only
 
 ### 12.3 WASM-Specific Features
-- [x] Drag-and-drop `.zmx` file onto canvas to load (via `DroppedFile` parsing in `handle_file_drag_and_drop`)
-- [x] Embed sample Cooke Triplet scene as default WASM load (WASM starts directly in `AppMode::LensSystem` with Cooke Triplet preset)
-- [-] Share URL: encode scene state as base64 URL param — deferred
-- [-] PWA manifest for offline install (`manifest.json`, service worker) — deferred
+- [x] Drag-and-drop `.zmx` file onto window to load (native desktop via `DroppedFile` in `handle_file_drag_and_drop`)
+- [x] Embedded canonical presets (Cooke Triplet, Double Gauss, Plano-Convex) in native app
+- [-] Web-specific features pruned
 
 ---
 
@@ -578,7 +573,7 @@
 - [x] End-to-end: load Cooke Triplet `.zmx` → trace → EFL within 0.1% of expected (nominal 50.0 mm, verified 50.021 mm)
 - [x] End-to-end: spot diagram RMS radius < 50 μm for Cooke Triplet at 0° field (verified 4.70 μm)
 - [x] Round-trip: parse → write → parse `.zmx` gives identical prescription (verified on Cooke Triplet, Double Gauss, Plano-Convex)
-- [ ] WASM build test: headless test via trunk/wasm-bindgen-test
+- [-] WASM build test: pruned (consolidated to desktop native)
 
 ### 14.2 Performance Benchmarks (`apps/optics-cli benchmark`)
 > Note: Performance numbers are aspirational targets, not hard release blockers.
@@ -606,7 +601,7 @@
 
 ### 15.2 User Documentation (mdBook)
 - [ ] `docs/` mdBook with:
-  - [ ] Getting Started (build from source, run native, run WASM)
+  - [ ] Getting Started (build from source, run native)
   - [ ] Optical Theory Reference (Snell, Fresnel, Sellmeier — pulled from RE docs)
   - [ ] Glass Catalog Guide (how to read Abbe diagram, add custom glass)
   - [ ] Zemax Import Guide
@@ -617,7 +612,7 @@
 ### 15.3 Contributing Guide
 - [ ] `CONTRIBUTING.md`:
   - [ ] Code of Conduct
-  - [ ] Development setup (rustup, wgpu requirements, node for docs)
+  - [ ] Development setup (rustup, wgpu requirements)
   - [ ] PR checklist: tests pass, clippy clean, docs updated
   - [ ] RE methodology note: how to add new reference analysis docs
 
@@ -628,7 +623,7 @@
 > Deferred: zero publishing, tagging, deployments or release packaging permitted until explicit user instruction.
 
 ### Milestone Gate: Feature-Complete + Polish
-- [-] All quality gates pass (`cargo fmt`, `cargo clippy -D warnings`, `cargo test`, `cargo build --target wasm32-unknown-unknown`)
+- [-] All quality gates pass (`cargo fmt`, `cargo clippy -D warnings`, `cargo test`, `cargo run -p optics-lab -- --self-test`)
 - [-] Golden image visual regression suite clean at 1x and 2x DPI
 - [-] Complete documentation in mdBook and rustdoc clean with 0 warnings
 - [-] Zero unverified claims in reports
@@ -645,8 +640,7 @@
 - [-] `brew tap` formula for macOS install
 
 ### 16.3 Web & Documentation Deployments
-- [-] GitHub Actions workflow that builds with trunk and deploys `dist/` to GitHub Pages
-- [-] Deploy mdBook docs to GitHub Pages
+- [-] GitHub Actions workflow that builds and deploys mdBook docs to GitHub Pages
 
 ---
 
@@ -664,7 +658,6 @@
 | `optics-mcp` | `optics-core`, `optics-render`, `serde_json` |
 | `apps/optics-lab` | `optics-ui`, `eframe`, `rfd`, `image`, `exr` |
 | `apps/optics-cli` | `optics-core`, `optics-spectral`, `optics-glass`, `optics-zemax`, `clap` |
-| `apps/optics-web` | `optics-ui`, `wasm-bindgen`, `web-sys` |
 
 ---
 
