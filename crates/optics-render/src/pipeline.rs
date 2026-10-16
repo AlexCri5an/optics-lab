@@ -602,6 +602,56 @@ mod tests {
         block_on(fut)
     }
 
+    #[test]
+    fn test_headless_render_frame_bgra8unorm() -> TestResult {
+        let fut = async {
+            let ctx = match GpuContext::create_headless().await {
+                Ok(c) => c,
+                Err(RenderError::AdapterRequestFailed) => {
+                    return Ok(());
+                }
+                Err(e) => return Err(Box::new(e) as Box<dyn std::error::Error>),
+            };
+
+            let tri = optics_bvh::Triangle::new(
+                optics_core::Vec3::new(-1.0, -1.0, 5.0),
+                optics_core::Vec3::new(1.0, -1.0, 5.0),
+                optics_core::Vec3::new(0.0, 1.0, 5.0),
+                0,
+            );
+            let aabb = tri.aabb();
+            let inst = optics_bvh::BlasInstance::new(0, &aabb, nalgebra::Matrix4::identity());
+            let scene = BvhScene::build(vec![vec![tri]], vec![inst]);
+
+            let camera = ThinLensCamera::new(
+                optics_core::Vec3::new(0.0, 0.0, 0.0),
+                optics_core::Vec3::new(0.0, 0.0, 5.0),
+                optics_core::Vec3::new(0.0, 1.0, 0.0),
+                60.0,
+                0.0,
+                5.0,
+            );
+
+            // Metal macOS surface format: Bgra8Unorm
+            let mut renderer = PathTracingRenderer::new(
+                ctx,
+                &scene,
+                &camera,
+                64,
+                64,
+                wgpu::TextureFormat::Bgra8Unorm,
+            )?;
+
+            assert_eq!(renderer.get_sample_count(), 0);
+            renderer.render_frame();
+            assert_eq!(renderer.get_sample_count(), 1);
+
+            Ok(())
+        };
+
+        block_on(fut)
+    }
+
     fn block_on<F: std::future::Future>(fut: F) -> F::Output {
         let mut fut = std::pin::pin!(fut);
         let waker = std::task::Waker::noop();
