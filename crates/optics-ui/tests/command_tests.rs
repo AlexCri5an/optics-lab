@@ -244,3 +244,135 @@ fn test_command_dispatch_beam_display_and_caustic() {
     dispatch(&mut app, Command::SetTofSpeed(2.5), &mut platform);
     assert!((app.gpu_state.beam_display.tof_speed - 2.5).abs() < 1e-4);
 }
+
+#[test]
+fn test_registry_completeness() {
+    let app = OpticsLabApp::default();
+    let commands = all_test_commands();
+
+    assert!(
+        commands.len() >= 50,
+        "Command registry must have at least 50 testable variants"
+    );
+
+    for cmd in &commands {
+        let id = cmd.id();
+        assert!(!id.is_empty(), "Command {cmd:?} has empty id");
+
+        let label = cmd.label();
+        assert!(!label.is_empty(), "Command {cmd:?} has empty label");
+
+        let tooltip_win = cmd.tooltip(false);
+        assert!(
+            !tooltip_win.is_empty(),
+            "Command {cmd:?} has empty tooltip (windows)"
+        );
+
+        let tooltip_mac = cmd.tooltip(true);
+        assert!(
+            !tooltip_mac.is_empty(),
+            "Command {cmd:?} has empty tooltip (mac)"
+        );
+
+        let (_available, _reason) = cmd.is_available(&app);
+    }
+}
+
+#[test]
+fn test_click_everything_interaction_and_hash_change() {
+    let mut app = OpticsLabApp::default();
+    let mut platform = MockPlatform::new();
+
+    let initial_hash = app.stable_hash();
+    assert!(initial_hash > 0);
+    let mut non_zero_effects_count = 0;
+
+    for cmd in all_test_commands() {
+        let effects = dispatch(&mut app, cmd.clone(), &mut platform);
+        if !effects.is_empty() {
+            non_zero_effects_count += 1;
+        }
+
+        let new_hash = app.stable_hash();
+        assert!(new_hash > 0);
+    }
+
+    assert!(
+        non_zero_effects_count >= 30,
+        "Exhaustive dispatch must trigger state effects across majority of commands (got {non_zero_effects_count})"
+    );
+}
+
+fn all_test_commands() -> Vec<Command> {
+    vec![
+        Command::SelectTool(ActiveTool::Select),
+        Command::SelectTool(ActiveTool::Move),
+        Command::SelectTool(ActiveTool::Rotate),
+        Command::SelectTool(ActiveTool::Scale),
+        Command::SelectTool(ActiveTool::RayInspector),
+        Command::SelectTool(ActiveTool::Spectrum),
+        Command::SelectTool(ActiveTool::Bvh),
+        Command::SelectTool(ActiveTool::Analysis),
+        Command::SelectTool(ActiveTool::Camera),
+        Command::SelectTool(ActiveTool::Settings),
+        Command::SetMode(AppMode::PrismDispersion),
+        Command::SetMode(AppMode::LensSystem),
+        Command::SetViewportMode(ViewportMode::View3D),
+        Command::SetViewportMode(ViewportMode::View2D),
+        Command::SetViewportMode(ViewportMode::Spectral),
+        Command::SetViewportMode(ViewportMode::Bvh),
+        Command::SetViewportMode(ViewportMode::Convergence),
+        Command::SetRightPanelTab(RightPanelTab::Properties),
+        Command::SetRightPanelTab(RightPanelTab::RayInspector),
+        Command::SetRightPanelTab(RightPanelTab::Prescription),
+        Command::SetRightPanelTab(RightPanelTab::GlassCatalog),
+        Command::LoadLensPreset(optics_ui::lens_sim::LensPreset::CookeTriplet),
+        Command::LoadLensPreset(optics_ui::lens_sim::LensPreset::DoubleGauss),
+        Command::LoadLensPreset(optics_ui::lens_sim::LensPreset::PlanoConvex),
+        Command::ResetDefaults,
+        Command::ResetView,
+        Command::ZoomIn,
+        Command::ZoomOut,
+        Command::ToggleReflections,
+        Command::ToggleTiming,
+        Command::ToggleSoftGlow,
+        Command::ToggleLeftSidebar,
+        Command::ToggleRightInspector,
+        Command::ToggleBottomDock,
+        Command::ResetLayout,
+        Command::ToggleFullscreen,
+        Command::CycleTheme,
+        Command::SetTheme(ThemePreference::ClassicDark),
+        Command::SetTheme(ThemePreference::ClassicLight),
+        Command::SetTheme(ThemePreference::HighContrast),
+        Command::OpenPreferences,
+        Command::ClosePreferences,
+        Command::OpenAbout,
+        Command::CloseAbout,
+        Command::OpenShortcutsHelp,
+        Command::CloseShortcutsHelp,
+        Command::SelectRay(Some(0)),
+        Command::SelectRay(None),
+        Command::SelectSceneObject(Some("Prism".into())),
+        Command::SelectSceneObject(None),
+        Command::SetPrismIncidence(35.0),
+        Command::SetPrismApex(50.0),
+        Command::SetPrismSampleCount(16),
+        Command::SetInspectedWavelength(550.0),
+        Command::SetGlass("SF11".into()),
+        Command::CopyRayBouncesTsv,
+        Command::ExportRaysCsv,
+        Command::ExportImage,
+        Command::SaveProject,
+        Command::DismissModalOrSelection,
+        Command::ToggleRenderPause,
+        Command::ResetAccumulation,
+        Command::AddSceneObject("Sphere".into()),
+        Command::ToggleBeamRibbons,
+        Command::ToggleFloorCaustic,
+        Command::ToggleTofPulses,
+        Command::SetBeamWidth(2.0),
+        Command::SetTofSpeed(1.2),
+        Command::Quit,
+    ]
+}

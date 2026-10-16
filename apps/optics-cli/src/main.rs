@@ -18,12 +18,19 @@ use std::path::PathBuf;
 #[derive(Parser)]
 #[command(name = "optics-cli", author, version, about = "OpticsLab CLI tools")]
 struct Cli {
+    /// Run complete automated self-test suite and exit with code 0 on success
+    #[arg(long)]
+    self_test: bool,
+
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Runs complete headless automated self-tests across all computational optics engines.
+    SelfTest,
+
     /// Simulates dispersion through a prism, prints deviation table, and outputs 2D SVG.
     Prism {
         /// Glass material name (e.g. N-BK7, SF11, F2, Fused Silica)
@@ -112,7 +119,19 @@ enum Commands {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
-    match cli.command {
+    if cli.self_test || matches!(cli.command, Some(Commands::SelfTest)) {
+        return run_self_test();
+    }
+
+    let Some(command) = cli.command else {
+        println!(
+            "No command specified. Use --help for usage or --self-test to run diagnostic self-tests."
+        );
+        return Ok(());
+    };
+
+    match command {
+        Commands::SelfTest => run_self_test(),
         Commands::Prism {
             glass,
             apex,
@@ -838,5 +857,130 @@ fn run_benchmark_command(
     println!("Average Ray Latency:  {:.1} ns / ray", latency_ns);
     println!("============================================================");
 
+    Ok(())
+}
+
+fn run_self_test() -> Result<(), Box<dyn std::error::Error>> {
+    println!("============================================================");
+    println!("OpticsLab Automated Headless Self-Test");
+    println!("============================================================");
+
+    // 1. Physical Prism Dispersion & Snell's Law
+    let start_prism = std::time::Instant::now();
+    let nbk7 = GlassMaterial::n_bk7();
+    let n_red = nbk7.refractive_index(700.0);
+    let n_green = nbk7.refractive_index(546.07);
+    let n_blue = nbk7.refractive_index(435.83);
+    if !(n_blue > n_green && n_green > n_red) {
+        return Err(
+            "Prism dispersion monotonicity failed: expected n(blue) > n(green) > n(red)".into(),
+        );
+    }
+
+    // Verify Fresnel at normal incidence
+    let (rs, rp) = optics_core::fresnel_dielectric(1.0, 1.0, nbk7.nd);
+    let r_expected = ((1.0 - nbk7.nd) / (1.0 + nbk7.nd)).powi(2);
+    if (rs - r_expected).abs() > 1e-6 || (rp - r_expected).abs() > 1e-6 {
+        return Err("Fresnel reflectance calculation failed at normal incidence".into());
+    }
+    let elapsed_prism = start_prism.elapsed();
+    println!(
+        "[PASS] Physical Prism Dispersion & Snell's Law ({:.2} ms)",
+        elapsed_prism.as_secs_f64() * 1000.0
+    );
+
+    // 2. Lens Presets & Paraxial Solvers
+    let start_lens = std::time::Instant::now();
+    let catalog = GlassCatalogDb::load_bundled()?;
+    let cooke = cooke_triplet_f4_5()?.resolve(&catalog)?;
+    let cooke_paraxial = calculate_paraxial_properties(&cooke, LAMBDA_D_NM)?;
+    if (cooke_paraxial.efl_mm - 50.0).abs() / 50.0 > 0.01 {
+        return Err("Cooke Triplet paraxial EFL deviates by > 1% from design".into());
+    }
+
+    let double_gauss = double_gauss_50mm()?.resolve(&catalog)?;
+    let dg_paraxial = calculate_paraxial_properties(&double_gauss, LAMBDA_D_NM)?;
+    if (dg_paraxial.efl_mm - 50.0).abs() / 50.0 > 0.01 {
+        return Err("Double Gauss paraxial EFL deviates by > 1% from design".into());
+    }
+
+    let plano = plano_convex_100mm()?.resolve(&catalog)?;
+    let plano_paraxial = calculate_paraxial_properties(&plano, LAMBDA_D_NM)?;
+    if (plano_paraxial.efl_mm - 100.0).abs() / 100.0 > 0.01 {
+        return Err("Plano-Convex paraxial EFL deviates by > 1% from design".into());
+    }
+    let elapsed_lens = start_lens.elapsed();
+    println!(
+        "[PASS] Sequential Lens Presets & Paraxial Solvers ({:.2} ms)",
+        elapsed_lens.as_secs_f64() * 1000.0
+    );
+
+    // 3. Zemax ZMX Specification & Round-Trip
+    let start_zmx = std::time::Instant::now();
+    let zmx_bytes = optics_zemax::presets::COOKE_TRIPLET_F4_5_ZMX.as_bytes();
+    let parsed_zmx = parse_zmx_bytes(zmx_bytes)?;
+    if parsed_zmx.surfaces.len() != 8 {
+        return Err("Parsed Cooke Triplet surface count mismatch".into());
+    }
+    let zmx_str = optics_zemax::write_zmx(&parsed_zmx);
+    let round_trip = parse_zmx_bytes(zmx_str.as_bytes())?;
+    if round_trip.surfaces.len() != parsed_zmx.surfaces.len() {
+        return Err("Zemax round-trip serialization changed surface count".into());
+    }
+    let elapsed_zmx = start_zmx.elapsed();
+    println!(
+        "[PASS] Zemax .zmx Specification & Round-Trip ({:.2} ms)",
+        elapsed_zmx.as_secs_f64() * 1000.0
+    );
+
+    // 4. Optical Glass Catalog Database
+    let start_glass = std::time::Instant::now();
+    let glass_count = catalog.len();
+    if glass_count < 600 {
+        return Err(
+            format!("Glass catalog incomplete: found {glass_count} glasses (< 600)").into(),
+        );
+    }
+    let sf11 = catalog
+        .lookup("SF11")
+        .ok_or("Failed to lookup SF11 in glass catalog")?;
+    if (sf11.nd - 1.7847).abs() > 0.005 {
+        return Err("SF11 refractive index nd does not match reference".into());
+    }
+    let elapsed_glass = start_glass.elapsed();
+    println!(
+        "[PASS] Optical Glass Catalog Database ({} glasses, {:.2} ms)",
+        glass_count,
+        elapsed_glass.as_secs_f64() * 1000.0
+    );
+
+    // 5. BVH Construction & Ray-AABB Slab Traversal
+    let start_bvh = std::time::Instant::now();
+    let p0 = Vec3::new(-10.0, 0.0, 0.0);
+    let p1 = Vec3::new(10.0, 0.0, 0.0);
+    let p2 = Vec3::new(0.0, 20.0, 0.0);
+    let tri = BvhTriangle::new(p0, p1, p2, 1);
+    let local_aabb = tri.aabb();
+    let instance = BlasInstance::new(0, &local_aabb, nalgebra::Matrix4::identity());
+    let scene = BvhScene::build(vec![vec![tri]], vec![instance]);
+    let test_ray = Ray::new(
+        Vec3::new(0.0, 5.0, -10.0),
+        Vec3::new(0.0, 0.0, 1.0),
+        550.0,
+        1.0,
+    )?;
+    let hit = scene.intersect(&test_ray);
+    if hit.is_none() {
+        return Err("BVH test ray failed to intersect triangle".into());
+    }
+    let elapsed_bvh = start_bvh.elapsed();
+    println!(
+        "[PASS] BVH Construction & Ray-AABB Slab Traversal ({:.2} ms)",
+        elapsed_bvh.as_secs_f64() * 1000.0
+    );
+
+    println!("============================================================");
+    println!("All 5 automated self-test suites passed successfully.");
+    println!("============================================================");
     Ok(())
 }

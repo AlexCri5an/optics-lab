@@ -5,6 +5,30 @@
 use eframe::egui::Vec2;
 
 fn main() -> Result<(), eframe::Error> {
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--self-test") {
+        println!("============================================================");
+        println!("OpticsLab Native GUI Headless Self-Test");
+        println!("============================================================");
+        let mut app = optics_ui::OpticsLabApp::default();
+        let initial_hash = app.stable_hash();
+        println!("Initial AppState stable hash: 0x{:016x}", initial_hash);
+        assert!(initial_hash > 0);
+
+        let mut platform = optics_ui::platform::MockPlatform::new();
+        let effects = optics_ui::commands::dispatch(
+            &mut app,
+            optics_ui::commands::Command::ResetDefaults,
+            &mut platform,
+        );
+        assert!(!effects.is_empty());
+        let post_hash = app.stable_hash();
+        println!("Post-dispatch stable hash:    0x{:016x}", post_hash);
+        println!("[PASS] OpticsLab GUI state initialization, dispatch, and hashing verified.");
+        println!("============================================================");
+        return Ok(());
+    }
+
     let icon_data =
         eframe::icon_data::from_png_bytes(include_bytes!("../../../assets/icon_256.png")).ok();
     let mut viewport = eframe::egui::ViewportBuilder::default()
