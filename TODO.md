@@ -457,12 +457,12 @@
 
 ### 9.7 Top Menu Bar
 - [x] **File**: Quit, window close
-- [x] **Edit**: Reset defaults
-- [x] **View**: Reset view, Show reflections, Show timing
-- [x] **Render**: Start/Pause path tracer placeholder
-- [x] **Diagnostics**: Single-ray inspect mode, BVH slab test
+- [x] **Edit**: Reset defaults, Preferences
+- [x] **View**: Reset view, Show reflections, Show timing, Panel toggles
+- [ ] **Render**: Standalone top-level menu (currently in View menu and viewport overlay buttons)
+- [ ] **Diagnostics**: Standalone top-level menu (currently accessed via Tools menu and Bottom Dock)
 - [x] **Help**: About OpticsLab dialog window, Keyboard Shortcuts (F1)
-- [x] Sample counter (128 spp) and native window controls (minimize, maximize, close)
+- [ ] Sample counter (128 spp) and native window controls (HUD SPP overruns target; macOS window bar defect V1)
 
 ### 9.8 Widgets Library
 - [x] `fn scrub_field(ui: &mut Ui, label: &str, value: &mut f64, min: f64, max: f64, precision: usize)` — drag-to-edit numeric field
