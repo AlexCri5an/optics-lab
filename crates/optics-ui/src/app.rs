@@ -265,7 +265,7 @@ impl Default for OpticsLabApp {
         );
 
         let prefs = AppPreferences::default();
-        let tokens = OpticsTokens::classic_light();
+        let tokens = resolve_theme(prefs.theme, false);
 
         Self {
             app_mode: default_app_mode,

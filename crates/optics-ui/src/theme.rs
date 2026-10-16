@@ -18,10 +18,10 @@ use optics_spectral::color::display_color_for_wavelength;
 /// User preference for the application visual theme.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum ThemePreference {
-    /// Classic scientific desktop light theme (default).
-    #[default]
+    /// Classic scientific desktop light theme.
     ClassicLight,
-    /// Classic CAD workstation dark theme.
+    /// Classic CAD workstation dark theme (default).
+    #[default]
     ClassicDark,
     /// High-contrast theme with maximum legibility.
     HighContrast,
@@ -112,7 +112,7 @@ pub struct AppPreferences {
 impl Default for AppPreferences {
     fn default() -> Self {
         Self {
-            theme: ThemePreference::ClassicLight,
+            theme: ThemePreference::ClassicDark,
             canvas_bg: CanvasBackgroundPreference::Theme,
             ui_scale: 1.0,
             soft_glow: false,
