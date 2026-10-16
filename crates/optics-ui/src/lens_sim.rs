@@ -17,7 +17,7 @@ use optics_glass::catalog::GlassCatalogDb;
 use optics_zemax::presets::{cooke_triplet_f4_5, double_gauss_50mm, plano_convex_100mm};
 
 /// Available canonical lens system presets.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum LensPreset {
     /// Cooke Triplet F/4.5 (f = 50 mm, 3-element).
     CookeTriplet,

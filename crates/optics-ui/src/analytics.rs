@@ -27,28 +27,32 @@ pub fn render_analytics_dock(
     let panel_height = 195.0;
     let card_width = ((avail_width - 24.0) / 4.0).max(180.0);
 
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing = Vec2::new(8.0, 0.0);
+    egui::ScrollArea::horizontal()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing = Vec2::new(8.0, 0.0);
 
-        // Panel 1: Convergence
-        render_convergence_panel(ui, card_width, panel_height, tokens);
+                // Panel 1: Convergence
+                render_convergence_panel(ui, card_width, panel_height, tokens);
 
-        // Panel 2: Spectral Power
-        render_spectral_power_panel(ui, card_width, panel_height, tokens);
+                // Panel 2: Spectral Power
+                render_spectral_power_panel(ui, card_width, panel_height, tokens);
 
-        // Panel 3: BVH Diagnostics
-        render_bvh_diagnostics_panel(ui, card_width, panel_height, tokens);
+                // Panel 3: BVH Diagnostics
+                render_bvh_diagnostics_panel(ui, card_width, panel_height, tokens);
 
-        // Panel 4: Material / Glass
-        render_material_glass_panel(
-            ui,
-            card_width,
-            panel_height,
-            tokens,
-            glass_name,
-            on_edit_material,
-        );
-    });
+                // Panel 4: Material / Glass
+                render_material_glass_panel(
+                    ui,
+                    card_width,
+                    panel_height,
+                    tokens,
+                    glass_name,
+                    on_edit_material,
+                );
+            });
+        });
 }
 
 /// Panel 1: Convergence tracking (RMSE & Variance).
@@ -94,14 +98,14 @@ fn render_convergence_panel(ui: &mut egui::Ui, width: f32, height: f32, tokens: 
         inner_rect.center() - Vec2::new(0.0, 10.0),
         egui::Align2::CENTER_CENTER,
         "No data. Render not started.",
-        egui::FontId::proportional(11.5),
+        egui::FontId::proportional(11.0),
         tokens.text_secondary,
     );
     painter.text(
         inner_rect.center() + Vec2::new(0.0, 10.0),
         egui::Align2::CENTER_CENTER,
-        "Monte Carlo RMSE tracking activates during path tracing.",
-        egui::FontId::proportional(10.0),
+        "Activates during path tracing",
+        egui::FontId::proportional(9.5),
         tokens.text_disabled,
     );
 }
@@ -148,14 +152,14 @@ fn render_spectral_power_panel(ui: &mut egui::Ui, width: f32, height: f32, token
         inner_rect.center() - Vec2::new(0.0, 10.0),
         egui::Align2::CENTER_CENTER,
         "Select a ray to inspect spectrum.",
-        egui::FontId::proportional(11.5),
+        egui::FontId::proportional(11.0),
         tokens.text_secondary,
     );
     painter.text(
         inner_rect.center() + Vec2::new(0.0, 10.0),
         egui::Align2::CENTER_CENTER,
-        "Wavelength energy readout activates upon ray selection.",
-        egui::FontId::proportional(10.0),
+        "Activates upon ray selection",
+        egui::FontId::proportional(9.5),
         tokens.text_disabled,
     );
 }
@@ -202,14 +206,14 @@ fn render_bvh_diagnostics_panel(ui: &mut egui::Ui, width: f32, height: f32, toke
         inner_rect.center() - Vec2::new(0.0, 10.0),
         egui::Align2::CENTER_CENTER,
         "No active BVH traversal.",
-        egui::FontId::proportional(11.5),
+        egui::FontId::proportional(11.0),
         tokens.text_secondary,
     );
     painter.text(
         inner_rect.center() + Vec2::new(0.0, 10.0),
         egui::Align2::CENTER_CENTER,
-        "Acceleration structure telemetry activates during GPU ray traversal.",
-        egui::FontId::proportional(10.0),
+        "Activates during ray traversal",
+        egui::FontId::proportional(9.5),
         tokens.text_disabled,
     );
 }

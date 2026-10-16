@@ -9,8 +9,8 @@
 //! - Bottom status bar (Ready, 128 spp, 1920x1080, GPU: Vulkan, 60 FPS)
 
 use egui::{
-    Align, Align2, Color32, Context, CornerRadius, Key, Layout, MenuBar, Pos2, Rect, ScrollArea,
-    Sense, SidePanel, Stroke, StrokeKind, TopBottomPanel, Vec2, Window,
+    Align, Color32, Context, CornerRadius, Key, Layout, MenuBar, Pos2, Rect, ScrollArea, Sense,
+    SidePanel, Stroke, StrokeKind, TopBottomPanel, Vec2, Window,
 };
 
 use optics_glass::GlassCatalogDb;
@@ -22,7 +22,7 @@ use crate::icons::{IconId, draw_icon, init_icon_fonts, toolbar_button};
 use crate::inspector::{RayInspectorState, render_ray_inspector_panel};
 use crate::lens_sim::{LensPreset, LensSimulation};
 use crate::lens_view::{render_lens_system_panel, render_prescription_table_view};
-use crate::shortcuts::{ALL_SHORTCUTS, ShortcutId, format_tooltip};
+use crate::shortcuts::ALL_SHORTCUTS;
 use crate::sim::PrismSimulation;
 use crate::theme::{
     AppPreferences, CanvasBackgroundPreference, OpticsTokens, ThemePreference, apply_tokens,
@@ -33,7 +33,7 @@ use crate::viewport_3d::render_viewport_3d;
 use crate::widgets::dispersion_curve_plot;
 
 /// Active tab in the right inspector panel.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum RightPanelTab {
     /// Ray inspector probe and physical bounce tables.
     #[default]
@@ -45,7 +45,7 @@ pub enum RightPanelTab {
 }
 
 /// Active user tool in the left toolbar.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum ActiveTool {
     /// Selection tool for rays and geometric elements.
     #[default]
@@ -107,7 +107,7 @@ impl ActiveTool {
 }
 
 /// Active viewport display mode.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum ViewportMode {
     /// 3D perspective ray-tracing viewport (reference image).
     #[default]
@@ -123,13 +123,56 @@ pub enum ViewportMode {
 }
 
 /// High-level mode of the OpticsLab application workbench.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum AppMode {
     /// Interactive 2D/3D prism spectral dispersion experiment (Slice A).
     #[default]
     PrismDispersion,
     /// Canonical lens systems and optical aberration analysis (Slice B).
     LensSystem,
+}
+
+/// Serializable snapshot of observable application state used for testing and persistence.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct AppStateSnapshot {
+    /// High-level mode.
+    pub app_mode: AppMode,
+    /// Viewport mode.
+    pub viewport_mode: ViewportMode,
+    /// Active tool.
+    pub active_tool: ActiveTool,
+    /// Right panel tab.
+    pub right_panel_tab: RightPanelTab,
+    /// Selected ray index.
+    pub selected_ray_index: Option<usize>,
+    /// Selected scene object.
+    pub selected_scene_object: Option<String>,
+    /// Reflections visibility.
+    pub show_reflections: bool,
+    /// Diagnostic timing visibility.
+    pub show_timing: bool,
+    /// Preferences dialog visibility.
+    pub show_preferences: bool,
+    /// About dialog visibility.
+    pub show_about: bool,
+    /// Shortcuts help visibility.
+    pub show_shortcuts_help: bool,
+    /// Fullscreen mode.
+    pub is_fullscreen: bool,
+    /// Inspected wavelength in nm.
+    pub inspected_wavelength: f64,
+    /// Prism incidence angle.
+    pub prism_incidence_deg: f64,
+    /// Prism apex angle.
+    pub prism_apex_deg: f64,
+    /// Prism sample count.
+    pub prism_sample_count: usize,
+    /// Prism glass material name.
+    pub prism_glass_name: String,
+    /// Application preferences.
+    pub prefs: AppPreferences,
+    /// Copy or status message.
+    pub copy_status: Option<String>,
 }
 
 /// The top-level OpticsLab application state.
@@ -194,6 +237,8 @@ pub struct OpticsLabApp {
     pub show_preferences: bool,
     /// Whether full screen viewport mode is active.
     pub is_fullscreen: bool,
+    /// Per-frame UI registry tracking all interactive controls.
+    pub ui_registry: crate::registry::UiRegistry,
 }
 
 impl Default for OpticsLabApp {
@@ -245,6 +290,7 @@ impl Default for OpticsLabApp {
             convergence_spp: 128,
             fonts_initialized: false,
             prefs,
+            ui_registry: crate::registry::UiRegistry::default(),
         }
     }
 }
@@ -271,59 +317,229 @@ impl OpticsLabApp {
         app
     }
 
-    /// Handles keyboard shortcuts.
+    /// Returns a serializable snapshot of the observable state fields.
+    #[must_use]
+    pub fn state_snapshot(&self) -> AppStateSnapshot {
+        AppStateSnapshot {
+            app_mode: self.app_mode,
+            viewport_mode: self.viewport_mode,
+            active_tool: self.active_tool,
+            right_panel_tab: self.right_panel_tab,
+            selected_ray_index: self.selected_ray_index,
+            selected_scene_object: self.selected_scene_object.clone(),
+            show_reflections: self.show_reflections,
+            show_timing: self.show_timing,
+            show_preferences: self.show_preferences,
+            show_about: self.show_about,
+            show_shortcuts_help: self.show_shortcuts_help,
+            is_fullscreen: self.is_fullscreen,
+            inspected_wavelength: self.inspected_wavelength,
+            prism_incidence_deg: self.sim.incidence_deg,
+            prism_apex_deg: self.sim.apex_deg,
+            prism_sample_count: self.sim.sample_count,
+            prism_glass_name: self.sim.glass_name.clone(),
+            prefs: self.prefs.clone(),
+            copy_status: self.copy_status.clone(),
+        }
+    }
+
+    /// Computes a stable, deterministic 64-bit FNV-1a hash of the observable state.
+    #[must_use]
+    pub fn stable_hash(&self) -> u64 {
+        let json = serde_json::to_string(&self.state_snapshot()).unwrap_or_default();
+        let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+        for byte in json.as_bytes() {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(0x0100_0000_01b3);
+        }
+        hash
+    }
+
+    /// Dispatches an action command through the central dispatcher.
+    pub fn dispatch(
+        &mut self,
+        cmd: crate::commands::Command,
+        platform: &mut dyn crate::platform::Platform,
+    ) -> Vec<crate::commands::Effect> {
+        crate::commands::dispatch(self, cmd, platform)
+    }
+
+    /// Handles keyboard shortcuts by routing them through the command architecture.
     fn handle_shortcuts(&mut self, ctx: &Context) {
+        use crate::commands::Command;
+
+        let mut platform = crate::platform::EguiPlatform::new(ctx);
+
         if ctx.input(|i| i.key_pressed(Key::S)) {
-            self.active_tool = ActiveTool::Select;
+            self.dispatch(Command::SelectTool(ActiveTool::Select), &mut platform);
         }
         if ctx.input(|i| i.key_pressed(Key::M)) {
-            self.active_tool = ActiveTool::Move;
+            self.dispatch(Command::SelectTool(ActiveTool::Move), &mut platform);
         }
         if ctx.input(|i| i.key_pressed(Key::R) && i.modifiers.alt) {
-            self.active_tool = ActiveTool::Rotate;
+            self.dispatch(Command::SelectTool(ActiveTool::Rotate), &mut platform);
         }
         if ctx.input(|i| i.key_pressed(Key::I)) {
-            self.active_tool = ActiveTool::RayInspector;
+            self.dispatch(Command::SelectTool(ActiveTool::RayInspector), &mut platform);
         }
         if ctx.input(|i| i.key_pressed(Key::F1)) {
-            self.show_shortcuts_help = !self.show_shortcuts_help;
+            let cmd = if self.show_shortcuts_help {
+                Command::CloseShortcutsHelp
+            } else {
+                Command::OpenShortcutsHelp
+            };
+            self.dispatch(cmd, &mut platform);
         }
         if ctx.input(|i| (i.modifiers.command || i.modifiers.ctrl) && i.key_pressed(Key::Comma)) {
-            self.show_preferences = !self.show_preferences;
+            let cmd = if self.show_preferences {
+                Command::ClosePreferences
+            } else {
+                Command::OpenPreferences
+            };
+            self.dispatch(cmd, &mut platform);
         }
         if ctx.input(|i| {
             (i.modifiers.command || i.modifiers.ctrl)
                 && (i.key_pressed(Key::Plus) || i.key_pressed(Key::Equals))
         }) {
-            self.prefs.ui_scale = (self.prefs.ui_scale + 0.1).min(3.0);
+            self.dispatch(Command::ZoomIn, &mut platform);
         }
         if ctx.input(|i| (i.modifiers.command || i.modifiers.ctrl) && i.key_pressed(Key::Minus)) {
-            self.prefs.ui_scale = (self.prefs.ui_scale - 0.1).max(0.5);
+            self.dispatch(Command::ZoomOut, &mut platform);
         }
         if ctx.input(|i| i.key_pressed(Key::B)) {
-            self.show_reflections = !self.show_reflections;
+            self.dispatch(Command::ToggleReflections, &mut platform);
         }
         if ctx.input(|i| i.key_pressed(Key::F11)) {
-            self.is_fullscreen = !self.is_fullscreen;
-            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(self.is_fullscreen));
+            self.dispatch(Command::ToggleFullscreen, &mut platform);
         }
         if ctx.input(|i| i.key_pressed(Key::Escape)) {
-            if self.show_preferences {
-                self.show_preferences = false;
-            } else if self.show_shortcuts_help {
-                self.show_shortcuts_help = false;
-            } else if self.show_about {
-                self.show_about = false;
-            } else if self.selected_ray_index.is_some() {
-                self.selected_ray_index = None;
-            } else if self.is_fullscreen {
-                self.is_fullscreen = false;
-                ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
-            }
+            self.dispatch(Command::DismissModalOrSelection, &mut platform);
         }
         if ctx.input(|i| (i.modifiers.command || i.modifiers.ctrl) && i.key_pressed(Key::Num0)) {
-            self.needs_fit = true;
+            self.dispatch(Command::ResetView, &mut platform);
         }
+    }
+
+    /// Renders a menu or dialog button bound to a command and registers it in the UI registry.
+    pub fn render_command_button(
+        &mut self,
+        ui: &mut egui::Ui,
+        cmd: crate::commands::Command,
+        location: &'static str,
+    ) -> egui::Response {
+        let is_macos = cfg!(target_os = "macos");
+        let (available, reason) = cmd.is_available(self);
+        let tooltip = cmd.tooltip(is_macos);
+
+        let resp = ui
+            .add_enabled_ui(available, |ui| {
+                let label = cmd.label();
+                let mut btn = ui.button(label);
+                if available {
+                    btn = btn.on_hover_text(&tooltip);
+                } else if !reason.is_empty() {
+                    btn = btn.on_hover_text(reason);
+                }
+                btn
+            })
+            .inner;
+
+        if resp.clicked() && available {
+            self.ui_registry.queued_commands.push(cmd.clone());
+            ui.close();
+        }
+
+        self.ui_registry
+            .widgets
+            .push(crate::registry::RegisteredWidget {
+                command: cmd,
+                location,
+                enabled: available,
+                disabled_reason: if available { None } else { Some(reason) },
+                rect: resp.rect,
+            });
+
+        resp
+    }
+
+    /// Renders a toolbar icon button bound to a command and registers it in the UI registry.
+    pub fn render_toolbar_command_button(
+        &mut self,
+        ui: &mut egui::Ui,
+        cmd: crate::commands::Command,
+        is_active: bool,
+        location: &'static str,
+    ) -> egui::Response {
+        let is_macos = cfg!(target_os = "macos");
+        let (available, reason) = cmd.is_available(self);
+        let tooltip = cmd.tooltip(is_macos);
+        let icon = cmd.icon().unwrap_or(crate::icons::IconId::Select);
+
+        let resp = if available {
+            toolbar_button(ui, icon, &self.tokens, is_active, &tooltip)
+        } else {
+            let (rect, resp) = ui.allocate_exact_size(Vec2::new(26.0, 24.0), Sense::click());
+            draw_icon(ui.painter(), rect, icon, self.tokens.text_disabled, 14.0);
+            if !reason.is_empty() {
+                resp.on_hover_text(reason)
+            } else {
+                resp
+            }
+        };
+
+        if resp.clicked() && available {
+            self.ui_registry.queued_commands.push(cmd.clone());
+        }
+
+        self.ui_registry
+            .widgets
+            .push(crate::registry::RegisteredWidget {
+                command: cmd,
+                location,
+                enabled: available,
+                disabled_reason: if available { None } else { Some(reason) },
+                rect: resp.rect,
+            });
+
+        resp
+    }
+
+    /// Renders a selectable label bound to a command and registers it in the UI registry.
+    pub fn render_selectable_command_label(
+        &mut self,
+        ui: &mut egui::Ui,
+        selected: bool,
+        cmd: crate::commands::Command,
+        location: &'static str,
+    ) -> egui::Response {
+        let (available, reason) = cmd.is_available(self);
+        let resp = ui
+            .add_enabled_ui(available, |ui| {
+                let label = cmd.label();
+                let mut lbl = ui.selectable_label(selected, label);
+                if !available && !reason.is_empty() {
+                    lbl = lbl.on_hover_text(reason);
+                }
+                lbl
+            })
+            .inner;
+
+        if resp.clicked() && available {
+            self.ui_registry.queued_commands.push(cmd.clone());
+        }
+
+        self.ui_registry
+            .widgets
+            .push(crate::registry::RegisteredWidget {
+                command: cmd,
+                location,
+                enabled: available,
+                disabled_reason: if available { None } else { Some(reason) },
+                rect: resp.rect,
+            });
+
+        resp
     }
 
     /// Handles file drag-and-drop events (e.g. dropping a Zemax `.zmx` file onto the window/canvas).
@@ -376,7 +592,7 @@ impl OpticsLabApp {
 
     /// Renders the top menu bar matching standard desktop chrome.
     fn render_top_bar(&mut self, ctx: &Context) {
-        let is_macos = cfg!(target_os = "macos");
+        let _is_macos = cfg!(target_os = "macos");
 
         TopBottomPanel::top("top_app_bar")
             .exact_height(28.0)
@@ -413,34 +629,34 @@ impl OpticsLabApp {
                     MenuBar::new().ui(ui, |ui| {
                         ui.menu_button("File", |ui| {
                             ui.menu_button("Load preset", |ui| {
-                                if ui.button("Cooke Triplet F/4.5").clicked() {
-                                    if let Some(ref mut sim) = self.lens_sim {
-                                        sim.select_preset(LensPreset::CookeTriplet);
-                                    }
-                                    self.app_mode = AppMode::LensSystem;
-                                    self.viewport_mode = ViewportMode::View2D;
-                                    self.right_panel_tab = RightPanelTab::Prescription;
-                                    ui.close();
-                                }
-                                if ui.button("Double Gauss F/2.0").clicked() {
-                                    if let Some(ref mut sim) = self.lens_sim {
-                                        sim.select_preset(LensPreset::DoubleGauss);
-                                    }
-                                    self.app_mode = AppMode::LensSystem;
-                                    self.viewport_mode = ViewportMode::View2D;
-                                    self.right_panel_tab = RightPanelTab::Prescription;
-                                    ui.close();
-                                }
-                                if ui.button("Plano-Convex Singlet").clicked() {
-                                    if let Some(ref mut sim) = self.lens_sim {
-                                        sim.select_preset(LensPreset::PlanoConvex);
-                                    }
-                                    self.app_mode = AppMode::LensSystem;
-                                    self.viewport_mode = ViewportMode::View2D;
-                                    self.right_panel_tab = RightPanelTab::Prescription;
-                                    ui.close();
-                                }
+                                self.render_command_button(
+                                    ui,
+                                    crate::commands::Command::LoadLensPreset(
+                                        LensPreset::CookeTriplet,
+                                    ),
+                                    "top_bar.file.preset_cooke",
+                                );
+                                self.render_command_button(
+                                    ui,
+                                    crate::commands::Command::LoadLensPreset(
+                                        LensPreset::DoubleGauss,
+                                    ),
+                                    "top_bar.file.preset_double_gauss",
+                                );
+                                self.render_command_button(
+                                    ui,
+                                    crate::commands::Command::LoadLensPreset(
+                                        LensPreset::PlanoConvex,
+                                    ),
+                                    "top_bar.file.preset_plano_convex",
+                                );
                             });
+                            ui.separator();
+                            self.render_command_button(
+                                ui,
+                                crate::commands::Command::SaveProject,
+                                "top_bar.file.save_project",
+                            );
                             ui.separator();
                             ui.label(
                                 egui::RichText::new("Drag & drop .zmx file to load")
@@ -448,118 +664,125 @@ impl OpticsLabApp {
                                     .color(self.tokens.text_muted),
                             );
                             ui.separator();
-                            if ui.button("Quit").clicked() {
-                                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                                ui.close();
-                            }
+                            self.render_command_button(
+                                ui,
+                                crate::commands::Command::Quit,
+                                "top_bar.file.quit",
+                            );
                         });
 
                         ui.menu_button("Edit", |ui| {
-                            let pref_label =
-                                format_tooltip("Preferences...", ShortcutId::Preferences, is_macos);
-                            if ui.button(pref_label).clicked() {
-                                self.show_preferences = true;
-                                ui.close();
-                            }
+                            self.render_command_button(
+                                ui,
+                                crate::commands::Command::OpenPreferences,
+                                "top_bar.edit.preferences",
+                            );
                             ui.separator();
-                            if ui.button("Reset defaults").clicked() {
-                                self.sim = PrismSimulation::default();
-                                self.needs_fit = true;
-                                ui.close();
-                            }
+                            self.render_command_button(
+                                ui,
+                                crate::commands::Command::ResetDefaults,
+                                "top_bar.edit.reset_defaults",
+                            );
                         });
 
                         ui.menu_button("View", |ui| {
-                            let reset_label =
-                                format_tooltip("Reset View", ShortcutId::FitView, is_macos);
-                            if ui.button(reset_label).clicked() {
-                                self.needs_fit = true;
-                                ui.close();
-                            }
+                            self.render_command_button(
+                                ui,
+                                crate::commands::Command::ResetView,
+                                "top_bar.view.reset_view",
+                            );
                             ui.separator();
-                            ui.checkbox(&mut self.show_reflections, "Show reflections (B)");
-                            ui.checkbox(&mut self.show_timing, "Show diagnostic timing");
-                            ui.checkbox(&mut self.prefs.soft_glow, "Soft glow on rays");
+                            self.render_command_button(
+                                ui,
+                                crate::commands::Command::ToggleReflections,
+                                "top_bar.view.toggle_reflections",
+                            );
+                            self.render_command_button(
+                                ui,
+                                crate::commands::Command::ToggleTiming,
+                                "top_bar.view.toggle_timing",
+                            );
+                            self.render_command_button(
+                                ui,
+                                crate::commands::Command::ToggleSoftGlow,
+                                "top_bar.view.toggle_soft_glow",
+                            );
                             ui.separator();
-                            ui.checkbox(&mut self.prefs.show_left_sidebar, "Left sidebar");
-                            ui.checkbox(&mut self.prefs.show_right_inspector, "Right inspector");
-                            ui.checkbox(&mut self.prefs.show_bottom_dock, "Bottom dock");
+                            self.render_command_button(
+                                ui,
+                                crate::commands::Command::ToggleLeftSidebar,
+                                "top_bar.view.toggle_left_sidebar",
+                            );
+                            self.render_command_button(
+                                ui,
+                                crate::commands::Command::ToggleRightInspector,
+                                "top_bar.view.toggle_right_inspector",
+                            );
+                            self.render_command_button(
+                                ui,
+                                crate::commands::Command::ToggleBottomDock,
+                                "top_bar.view.toggle_bottom_dock",
+                            );
                             ui.separator();
-                            if ui.button("Reset layout").clicked() {
-                                self.prefs.show_left_sidebar = true;
-                                self.prefs.show_right_inspector = true;
-                                self.prefs.show_bottom_dock = true;
-                                self.prefs.left_sidebar_width = 240.0;
-                                self.prefs.right_inspector_width = 320.0;
-                                self.prefs.bottom_dock_height = 185.0;
-                                ui.close();
-                            }
+                            self.render_command_button(
+                                ui,
+                                crate::commands::Command::ResetLayout,
+                                "top_bar.view.reset_layout",
+                            );
                             ui.separator();
-                            let fs_text = if self.is_fullscreen {
-                                "Exit full screen (F11)"
-                            } else {
-                                "Enter full screen (F11)"
-                            };
-                            if ui.button(fs_text).clicked() {
-                                self.is_fullscreen = !self.is_fullscreen;
-                                ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(
-                                    self.is_fullscreen,
-                                ));
-                                ui.close();
-                            }
+                            self.render_command_button(
+                                ui,
+                                crate::commands::Command::ToggleFullscreen,
+                                "top_bar.view.toggle_fullscreen",
+                            );
                         });
 
                         ui.menu_button("Tools", |ui| {
-                            let select_lbl =
-                                format_tooltip("Select", ShortcutId::SelectTool, is_macos);
-                            if ui.button(select_lbl).clicked() {
-                                self.active_tool = ActiveTool::Select;
-                                ui.close();
-                            }
-                            let move_lbl = format_tooltip("Move", ShortcutId::MoveTool, is_macos);
-                            if ui.button(move_lbl).clicked() {
-                                self.active_tool = ActiveTool::Move;
-                                ui.close();
-                            }
-                            let rot_lbl =
-                                format_tooltip("Rotate", ShortcutId::RotateTool, is_macos);
-                            if ui.button(rot_lbl).clicked() {
-                                self.active_tool = ActiveTool::Rotate;
-                                ui.close();
-                            }
-                            let probe_lbl =
-                                format_tooltip("Ray probe", ShortcutId::RayProbe, is_macos);
-                            if ui.button(probe_lbl).clicked() {
-                                self.active_tool = ActiveTool::RayInspector;
-                                ui.close();
-                            }
+                            self.render_command_button(
+                                ui,
+                                crate::commands::Command::SelectTool(ActiveTool::Select),
+                                "top_bar.tools.select",
+                            );
+                            self.render_command_button(
+                                ui,
+                                crate::commands::Command::SelectTool(ActiveTool::Move),
+                                "top_bar.tools.move",
+                            );
+                            self.render_command_button(
+                                ui,
+                                crate::commands::Command::SelectTool(ActiveTool::Rotate),
+                                "top_bar.tools.rotate",
+                            );
+                            self.render_command_button(
+                                ui,
+                                crate::commands::Command::SelectTool(ActiveTool::RayInspector),
+                                "top_bar.tools.ray_probe",
+                            );
                             ui.separator();
-                            if ui.button("Prism dispersion mode").clicked() {
-                                self.app_mode = AppMode::PrismDispersion;
-                                self.viewport_mode = ViewportMode::View3D;
-                                self.right_panel_tab = RightPanelTab::RayInspector;
-                                ui.close();
-                            }
-                            if ui.button("Lens system mode").clicked() {
-                                self.app_mode = AppMode::LensSystem;
-                                self.viewport_mode = ViewportMode::View2D;
-                                self.right_panel_tab = RightPanelTab::Prescription;
-                                ui.close();
-                            }
+                            self.render_command_button(
+                                ui,
+                                crate::commands::Command::SetMode(AppMode::PrismDispersion),
+                                "top_bar.tools.mode_prism",
+                            );
+                            self.render_command_button(
+                                ui,
+                                crate::commands::Command::SetMode(AppMode::LensSystem),
+                                "top_bar.tools.mode_lens",
+                            );
                         });
 
                         ui.menu_button("Help", |ui| {
-                            let help_lbl =
-                                format_tooltip("Keyboard shortcuts", ShortcutId::Help, is_macos);
-                            if ui.button(help_lbl).clicked() {
-                                self.show_shortcuts_help = true;
-                                ui.close();
-                            }
+                            self.render_command_button(
+                                ui,
+                                crate::commands::Command::OpenShortcutsHelp,
+                                "top_bar.help.shortcuts",
+                            );
                             ui.separator();
-                            if ui.button("About OpticsLab").clicked() {
-                                self.show_about = true;
-                                ui.close();
-                            }
+                            self.render_command_button(
+                                ui,
+                                crate::commands::Command::OpenAbout,
+                                "top_bar.help.about",
+                            );
                         });
                     });
                 });
@@ -568,8 +791,6 @@ impl OpticsLabApp {
 
     /// Renders the classic horizontal icon toolbar directly beneath the menu bar.
     fn render_toolbar(&mut self, ctx: &Context, plan: &crate::layout::LayoutPlan) {
-        let is_macos = cfg!(target_os = "macos");
-
         TopBottomPanel::top("main_toolbar")
             .exact_height(30.0)
             .show(ctx, |ui| {
@@ -578,152 +799,92 @@ impl OpticsLabApp {
 
                     // 1. Tool shortcuts
                     let tools = [
-                        (ActiveTool::Select, IconId::Select, ShortcutId::SelectTool),
-                        (ActiveTool::Move, IconId::Move, ShortcutId::MoveTool),
-                        (ActiveTool::Rotate, IconId::Rotate, ShortcutId::RotateTool),
-                        (
-                            ActiveTool::RayInspector,
-                            IconId::RayProbe,
-                            ShortcutId::RayProbe,
-                        ),
+                        (ActiveTool::Select, "toolbar.select"),
+                        (ActiveTool::Move, "toolbar.move"),
+                        (ActiveTool::Rotate, "toolbar.rotate"),
+                        (ActiveTool::RayInspector, "toolbar.ray_probe"),
                     ];
 
-                    for (tool, icon, shortcut_id) in tools {
+                    for (tool, loc) in tools {
                         let is_active = self.active_tool == tool;
-                        let tt = format_tooltip(tool.name(), shortcut_id, is_macos);
-                        if toolbar_button(ui, icon, &self.tokens, is_active, &tt).clicked() {
-                            self.active_tool = tool;
-                        }
+                        self.render_toolbar_command_button(
+                            ui,
+                            crate::commands::Command::SelectTool(tool),
+                            is_active,
+                            loc,
+                        );
                     }
 
                     ui.separator();
 
                     // 2. View actions
-                    let fit_tt = format_tooltip("Reset view", ShortcutId::FitView, is_macos);
-                    if toolbar_button(ui, IconId::ResetView, &self.tokens, false, &fit_tt).clicked()
-                    {
-                        self.needs_fit = true;
-                    }
+                    self.render_toolbar_command_button(
+                        ui,
+                        crate::commands::Command::ResetView,
+                        false,
+                        "toolbar.reset_view",
+                    );
 
                     if plan.breakpoint != crate::layout::Breakpoint::Compact {
-                        let zin_tt = format_tooltip("Zoom in", ShortcutId::ZoomIn, is_macos);
-                        if toolbar_button(ui, IconId::ZoomIn, &self.tokens, false, &zin_tt)
-                            .clicked()
-                        {
-                            self.prefs.ui_scale = (self.prefs.ui_scale + 0.1).min(3.0);
-                        }
-
-                        let zout_tt = format_tooltip("Zoom out", ShortcutId::ZoomOut, is_macos);
-                        if toolbar_button(ui, IconId::ZoomOut, &self.tokens, false, &zout_tt)
-                            .clicked()
-                        {
-                            self.prefs.ui_scale = (self.prefs.ui_scale - 0.1).max(0.5);
-                        }
-
+                        self.render_toolbar_command_button(
+                            ui,
+                            crate::commands::Command::ZoomIn,
+                            false,
+                            "toolbar.zoom_in",
+                        );
+                        self.render_toolbar_command_button(
+                            ui,
+                            crate::commands::Command::ZoomOut,
+                            false,
+                            "toolbar.zoom_out",
+                        );
                         ui.separator();
                     }
 
                     // 3. Reflections toggle
-                    let ref_tt = format_tooltip(
-                        "Toggle reflections",
-                        ShortcutId::ToggleReflections,
-                        is_macos,
-                    );
-                    if toolbar_button(
+                    self.render_toolbar_command_button(
                         ui,
-                        IconId::ReflectionsToggle,
-                        &self.tokens,
+                        crate::commands::Command::ToggleReflections,
                         self.show_reflections,
-                        &ref_tt,
-                    )
-                    .clicked()
-                    {
-                        self.show_reflections = !self.show_reflections;
-                    }
+                        "toolbar.toggle_reflections",
+                    );
 
                     ui.separator();
 
                     // 4. Panel toggles
-                    let left_tt = if self.prefs.show_left_sidebar {
-                        "Hide left sidebar"
-                    } else {
-                        "Show left sidebar"
-                    };
-                    if toolbar_button(
+                    self.render_toolbar_command_button(
                         ui,
-                        IconId::PanelsToggle,
-                        &self.tokens,
+                        crate::commands::Command::ToggleLeftSidebar,
                         self.prefs.show_left_sidebar,
-                        left_tt,
-                    )
-                    .clicked()
-                    {
-                        self.prefs.show_left_sidebar = !self.prefs.show_left_sidebar;
-                    }
-
-                    let btm_tt = if self.prefs.show_bottom_dock {
-                        "Hide bottom dock"
-                    } else {
-                        "Show bottom dock"
-                    };
-                    if toolbar_button(
+                        "toolbar.toggle_left_sidebar",
+                    );
+                    self.render_toolbar_command_button(
                         ui,
-                        IconId::Bvh,
-                        &self.tokens,
+                        crate::commands::Command::ToggleBottomDock,
                         self.prefs.show_bottom_dock,
-                        btm_tt,
-                    )
-                    .clicked()
-                    {
-                        self.prefs.show_bottom_dock = !self.prefs.show_bottom_dock;
-                    }
+                        "toolbar.toggle_bottom_dock",
+                    );
 
                     // 5. Right-aligned actions: Theme, Preferences, Fullscreen
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        let fs_tt = format_tooltip(
-                            "Toggle full screen",
-                            ShortcutId::ToggleFullscreen,
-                            is_macos,
-                        );
-                        if toolbar_button(
+                        self.render_toolbar_command_button(
                             ui,
-                            IconId::Fullscreen,
-                            &self.tokens,
+                            crate::commands::Command::ToggleFullscreen,
                             self.is_fullscreen,
-                            &fs_tt,
-                        )
-                        .clicked()
-                        {
-                            self.is_fullscreen = !self.is_fullscreen;
-                            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(
-                                self.is_fullscreen,
-                            ));
-                        }
-
-                        let pref_tt =
-                            format_tooltip("Preferences", ShortcutId::Preferences, is_macos);
-                        if toolbar_button(
+                            "toolbar.fullscreen",
+                        );
+                        self.render_toolbar_command_button(
                             ui,
-                            IconId::Settings,
-                            &self.tokens,
+                            crate::commands::Command::OpenPreferences,
                             self.show_preferences,
-                            &pref_tt,
-                        )
-                        .clicked()
-                        {
-                            self.show_preferences = !self.show_preferences;
-                        }
-
-                        if toolbar_button(ui, IconId::Theme, &self.tokens, false, "Cycle UI theme")
-                            .clicked()
-                        {
-                            self.prefs.theme = match self.prefs.theme {
-                                ThemePreference::ClassicLight => ThemePreference::ClassicDark,
-                                ThemePreference::ClassicDark => ThemePreference::HighContrast,
-                                ThemePreference::HighContrast => ThemePreference::ClassicLight,
-                                ThemePreference::FollowSystem => ThemePreference::ClassicLight,
-                            };
-                        }
+                            "toolbar.preferences",
+                        );
+                        self.render_toolbar_command_button(
+                            ui,
+                            crate::commands::Command::CycleTheme,
+                            false,
+                            "toolbar.cycle_theme",
+                        );
                     });
                 });
             });
@@ -749,16 +910,18 @@ impl OpticsLabApp {
                         let is_prism = self.app_mode == AppMode::PrismDispersion;
                         let is_lens = self.app_mode == AppMode::LensSystem;
 
-                        if ui.selectable_label(is_prism, "Prism").clicked() {
-                            self.app_mode = AppMode::PrismDispersion;
-                            self.viewport_mode = ViewportMode::View3D;
-                            self.right_panel_tab = RightPanelTab::RayInspector;
-                        }
-                        if ui.selectable_label(is_lens, "Lens system").clicked() {
-                            self.app_mode = AppMode::LensSystem;
-                            self.viewport_mode = ViewportMode::View2D;
-                            self.right_panel_tab = RightPanelTab::Prescription;
-                        }
+                        self.render_selectable_command_label(
+                            ui,
+                            is_prism,
+                            crate::commands::Command::SetMode(AppMode::PrismDispersion),
+                            "left_sidebar.mode_prism",
+                        );
+                        self.render_selectable_command_label(
+                            ui,
+                            is_lens,
+                            crate::commands::Command::SetMode(AppMode::LensSystem),
+                            "left_sidebar.mode_lens",
+                        );
                     });
 
                     ui.add_space(4.0);
@@ -777,18 +940,11 @@ impl OpticsLabApp {
                             LensPreset::DoubleGauss,
                             LensPreset::PlanoConvex,
                         ] {
-                            let label = match preset {
-                                LensPreset::CookeTriplet => "Cooke Triplet F/4.5",
-                                LensPreset::DoubleGauss => "Double Gauss F/2.0",
-                                LensPreset::PlanoConvex => "Plano-Convex Singlet",
-                            };
-                            if ui.button(label).clicked() {
-                                if let Some(ref mut sim) = self.lens_sim {
-                                    sim.select_preset(preset);
-                                }
-                                self.right_panel_tab = RightPanelTab::Prescription;
-                                self.needs_fit = true;
-                            }
+                            self.render_command_button(
+                                ui,
+                                crate::commands::Command::LoadLensPreset(preset),
+                                "left_sidebar.lens_preset",
+                            );
                         }
 
                         ui.add_space(6.0);
@@ -814,164 +970,168 @@ impl OpticsLabApp {
                         ui.add_space(4.0);
                     }
 
-                    // Quick Interactive Simulation Controls
-                    ui.label(
-                        egui::RichText::new("Prism Controls")
-                            .strong()
-                            .color(self.tokens.text_primary),
-                    );
-
-                    let mut retrace_needed = false;
-
-                    ui.horizontal(|ui| {
-                        ui.label("Incidence:");
-                        if ui
-                            .add(
-                                egui::Slider::new(&mut self.sim.incidence_deg, 0.0..=80.0)
-                                    .suffix("°")
-                                    .show_value(true),
-                            )
-                            .changed()
-                        {
-                            retrace_needed = true;
-                        }
-                    });
-
-                    ui.horizontal(|ui| {
-                        ui.label("Apex:");
-                        if ui
-                            .add(
-                                egui::Slider::new(&mut self.sim.apex_deg, 30.0..=80.0)
-                                    .suffix("°")
-                                    .show_value(true),
-                            )
-                            .changed()
-                        {
-                            retrace_needed = true;
-                        }
-                    });
-
-                    ui.horizontal(|ui| {
-                        ui.label("Rays:");
-                        if ui
-                            .add(
-                                egui::Slider::new(&mut self.sim.sample_count, 8..=64)
-                                    .show_value(true),
-                            )
-                            .changed()
-                        {
-                            retrace_needed = true;
-                        }
-                    });
-
-                    if ui.button("Reset Defaults").clicked() {
-                        self.sim.incidence_deg = 45.0;
-                        self.sim.apex_deg = 60.0;
-                        self.sim.sample_count = 32;
-                        retrace_needed = true;
-                        self.needs_fit = true;
-                    }
-
-                    if retrace_needed {
-                        self.sim.retrace();
-                    }
-
-                    ui.add_space(8.0);
-                    ui.separator();
-                    ui.add_space(6.0);
-
-                    // 2. Scene hierarchy tree section
-                    ui.horizontal(|ui| {
-                        let (icon_rect, _) =
-                            ui.allocate_exact_size(Vec2::new(14.0, 14.0), Sense::hover());
-                        draw_icon(
-                            ui.painter(),
-                            icon_rect,
-                            IconId::Scene,
-                            self.tokens.text_muted,
-                            12.0,
-                        );
+                    if self.app_mode == AppMode::PrismDispersion {
+                        // Quick Interactive Simulation Controls
                         ui.label(
-                            egui::RichText::new("Scene")
-                                .size(11.5)
-                                .color(self.tokens.text_secondary),
+                            egui::RichText::new("Prism Controls")
+                                .strong()
+                                .color(self.tokens.text_primary),
                         );
-                    });
 
-                    ui.add_space(4.0);
+                        let mut retrace_needed = false;
 
-                    // Tree item: Scene
-                    let scene_glyph = if self.scene_tree_scene_open {
-                        IconId::CaretDown.glyph()
-                    } else {
-                        IconId::CaretRight.glyph()
-                    };
-                    if ui
-                        .selectable_label(
-                            self.selected_scene_object.as_deref() == Some("Scene"),
-                            format!("{scene_glyph} Scene"),
-                        )
-                        .clicked()
-                    {
-                        self.scene_tree_scene_open = !self.scene_tree_scene_open;
-                        self.selected_scene_object = Some("Scene".into());
-                    }
-
-                    if self.scene_tree_scene_open {
-                        ui.indent("scene_tree_body", |ui| {
-                            // Camera
+                        ui.horizontal(|ui| {
+                            ui.label("Incidence:");
                             if ui
-                                .selectable_label(
-                                    self.selected_scene_object.as_deref() == Some("Camera"),
-                                    format!("{} Camera", IconId::Camera.glyph()),
+                                .add(
+                                    egui::Slider::new(&mut self.sim.incidence_deg, 0.0..=80.0)
+                                        .suffix("°")
+                                        .show_value(true),
                                 )
-                                .clicked()
+                                .changed()
                             {
-                                self.selected_scene_object = Some("Camera".into());
-                            }
-
-                            // Prism (expandable)
-                            let prism_glyph = if self.scene_tree_prism_open {
-                                IconId::CaretDown.glyph()
-                            } else {
-                                IconId::CaretRight.glyph()
-                            };
-                            if ui
-                                .selectable_label(
-                                    self.selected_scene_object.as_deref() == Some("Prism"),
-                                    format!("{prism_glyph} Prism"),
-                                )
-                                .clicked()
-                            {
-                                self.scene_tree_prism_open = !self.scene_tree_prism_open;
-                                self.selected_scene_object = Some("Prism".into());
-                            }
-
-                            if self.scene_tree_prism_open {
-                                ui.indent("prism_children", |ui| {
-                                    let glass_label = format!("Glass ({})", self.sim.glass_name);
-                                    let is_glass_sel =
-                                        self.selected_scene_object.as_deref() == Some("Glass");
-                                    if ui.selectable_label(is_glass_sel, &glass_label).clicked() {
-                                        self.selected_scene_object = Some("Glass".into());
-                                        self.right_panel_tab = RightPanelTab::GlassCatalog;
-                                        self.glass_browser_state.selected_glass =
-                                            self.sim.glass_name.clone();
-                                    }
-                                });
-                            }
-
-                            // Light
-                            if ui
-                                .selectable_label(
-                                    self.selected_scene_object.as_deref() == Some("Light"),
-                                    format!("{} Collimated Beam", IconId::LightSource.glyph()),
-                                )
-                                .clicked()
-                            {
-                                self.selected_scene_object = Some("Light".into());
+                                retrace_needed = true;
                             }
                         });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Apex:");
+                            if ui
+                                .add(
+                                    egui::Slider::new(&mut self.sim.apex_deg, 30.0..=80.0)
+                                        .suffix("°")
+                                        .show_value(true),
+                                )
+                                .changed()
+                            {
+                                retrace_needed = true;
+                            }
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Rays:");
+                            if ui
+                                .add(
+                                    egui::Slider::new(&mut self.sim.sample_count, 8..=64)
+                                        .show_value(true),
+                                )
+                                .changed()
+                            {
+                                retrace_needed = true;
+                            }
+                        });
+
+                        if ui.button("Reset Defaults").clicked() {
+                            self.sim.incidence_deg = 45.0;
+                            self.sim.apex_deg = 60.0;
+                            self.sim.sample_count = 32;
+                            retrace_needed = true;
+                            self.needs_fit = true;
+                        }
+
+                        if retrace_needed {
+                            self.sim.retrace();
+                        }
+
+                        ui.add_space(8.0);
+                        ui.separator();
+                        ui.add_space(6.0);
+
+                        // 2. Scene hierarchy tree section
+                        ui.horizontal(|ui| {
+                            let (icon_rect, _) =
+                                ui.allocate_exact_size(Vec2::new(14.0, 14.0), Sense::hover());
+                            draw_icon(
+                                ui.painter(),
+                                icon_rect,
+                                IconId::Scene,
+                                self.tokens.text_muted,
+                                12.0,
+                            );
+                            ui.label(
+                                egui::RichText::new("Scene")
+                                    .size(11.5)
+                                    .color(self.tokens.text_secondary),
+                            );
+                        });
+
+                        ui.add_space(4.0);
+
+                        // Tree item: Scene
+                        let scene_glyph = if self.scene_tree_scene_open {
+                            IconId::CaretDown.glyph()
+                        } else {
+                            IconId::CaretRight.glyph()
+                        };
+                        if ui
+                            .selectable_label(
+                                self.selected_scene_object.as_deref() == Some("Scene"),
+                                format!("{scene_glyph} Scene"),
+                            )
+                            .clicked()
+                        {
+                            self.scene_tree_scene_open = !self.scene_tree_scene_open;
+                            self.selected_scene_object = Some("Scene".into());
+                        }
+
+                        if self.scene_tree_scene_open {
+                            ui.indent("scene_tree_body", |ui| {
+                                // Camera
+                                if ui
+                                    .selectable_label(
+                                        self.selected_scene_object.as_deref() == Some("Camera"),
+                                        format!("{} Camera", IconId::Camera.glyph()),
+                                    )
+                                    .clicked()
+                                {
+                                    self.selected_scene_object = Some("Camera".into());
+                                }
+
+                                // Prism (expandable)
+                                let prism_glyph = if self.scene_tree_prism_open {
+                                    IconId::CaretDown.glyph()
+                                } else {
+                                    IconId::CaretRight.glyph()
+                                };
+                                if ui
+                                    .selectable_label(
+                                        self.selected_scene_object.as_deref() == Some("Prism"),
+                                        format!("{prism_glyph} Prism"),
+                                    )
+                                    .clicked()
+                                {
+                                    self.scene_tree_prism_open = !self.scene_tree_prism_open;
+                                    self.selected_scene_object = Some("Prism".into());
+                                }
+
+                                if self.scene_tree_prism_open {
+                                    ui.indent("prism_children", |ui| {
+                                        let glass_label =
+                                            format!("Glass ({})", self.sim.glass_name);
+                                        let is_glass_sel =
+                                            self.selected_scene_object.as_deref() == Some("Glass");
+                                        if ui.selectable_label(is_glass_sel, &glass_label).clicked()
+                                        {
+                                            self.selected_scene_object = Some("Glass".into());
+                                            self.right_panel_tab = RightPanelTab::GlassCatalog;
+                                            self.glass_browser_state.selected_glass =
+                                                self.sim.glass_name.clone();
+                                        }
+                                    });
+                                }
+
+                                // Light
+                                if ui
+                                    .selectable_label(
+                                        self.selected_scene_object.as_deref() == Some("Light"),
+                                        format!("{} Collimated Beam", IconId::LightSource.glyph()),
+                                    )
+                                    .clicked()
+                                {
+                                    self.selected_scene_object = Some("Light".into());
+                                }
+                            });
+                        }
                     }
                 });
             });
@@ -1111,11 +1271,14 @@ impl OpticsLabApp {
                         (RightPanelTab::GlassCatalog, "Catalog"),
                     ];
 
-                    for (tab, label) in tabs {
+                    for (tab, _) in tabs {
                         let is_active = self.right_panel_tab == tab;
-                        if ui.selectable_label(is_active, label).clicked() {
-                            self.right_panel_tab = tab;
-                        }
+                        self.render_selectable_command_label(
+                            ui,
+                            is_active,
+                            crate::commands::Command::SetRightPanelTab(tab),
+                            "right_panel.tab",
+                        );
                     }
                 });
 
@@ -1132,7 +1295,7 @@ impl OpticsLabApp {
                         );
                     }
                     RightPanelTab::Prescription => {
-                        if let Some(lens_sim) = &mut self.lens_sim {
+                        if self.lens_sim.is_some() {
                             ui.horizontal(|ui| {
                                 ui.label(egui::RichText::new("Preset:").strong());
                                 for preset in [
@@ -1140,21 +1303,24 @@ impl OpticsLabApp {
                                     LensPreset::DoubleGauss,
                                     LensPreset::PlanoConvex,
                                 ] {
-                                    let is_sel = lens_sim.preset == Some(preset);
-                                    if ui.selectable_label(is_sel, preset.name()).clicked() {
-                                        lens_sim.select_preset(preset);
-                                    }
+                                    self.render_command_button(
+                                        ui,
+                                        crate::commands::Command::LoadLensPreset(preset),
+                                        "right_panel.prescription_preset",
+                                    );
                                 }
                             });
                             ui.add_space(4.0);
-                            if ui
-                                .button("Open 2D Layout & Aberrations in Center")
-                                .clicked()
-                            {
-                                self.viewport_mode = ViewportMode::View2D;
-                            }
+                            self.render_command_button(
+                                ui,
+                                crate::commands::Command::SetViewportMode(ViewportMode::View2D),
+                                "right_panel.open_2d_view",
+                            );
                             ui.separator();
-                            render_prescription_table_view(ui, lens_sim, &self.tokens);
+                            let tokens = &self.tokens;
+                            if let Some(lens_sim) = &mut self.lens_sim {
+                                render_prescription_table_view(ui, lens_sim, tokens);
+                            }
                         } else {
                             ui.label("No active lens simulation.");
                         }
@@ -1191,95 +1357,38 @@ impl OpticsLabApp {
                     (ViewportMode::Convergence, "Convergence"),
                 ];
 
-                for (mode, label) in tabs {
+                for (mode, _) in tabs {
                     let is_active = self.viewport_mode == mode;
-                    let (rect, resp) =
-                        ui.allocate_exact_size(Vec2::new(76.0, 24.0), Sense::click());
-                    let painter = ui.painter_at(rect);
-
-                    if is_active {
-                        painter.rect_filled(rect, CornerRadius::same(2), self.tokens.selected);
-                        painter.rect_stroke(
-                            rect,
-                            CornerRadius::same(2),
-                            Stroke::new(1.0, self.tokens.border),
-                            StrokeKind::Inside,
-                        );
-                    } else if resp.hovered() {
-                        painter.rect_filled(rect, CornerRadius::same(2), self.tokens.hover_bg);
-                    }
-
-                    let text_col = if is_active {
-                        self.tokens.text_primary
-                    } else {
-                        self.tokens.text_muted
-                    };
-                    painter.text(
-                        rect.center(),
-                        Align2::CENTER_CENTER,
-                        label,
-                        egui::FontId::proportional(11.5),
-                        text_col,
+                    self.render_selectable_command_label(
+                        ui,
+                        is_active,
+                        crate::commands::Command::SetViewportMode(mode),
+                        "central_viewport.tab",
                     );
-
-                    if resp.clicked() {
-                        self.viewport_mode = mode;
-                    }
                 }
 
-                // Right buttons: Screenshot, Frame, Fullscreen
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    let (fs_rect, fs_resp) =
-                        ui.allocate_exact_size(Vec2::new(24.0, 24.0), Sense::click());
-                    draw_icon(
-                        ui.painter(),
-                        fs_rect,
-                        IconId::Fullscreen,
-                        if fs_resp.hovered() {
-                            self.tokens.accent
-                        } else {
-                            self.tokens.text_muted
-                        },
-                        14.0,
-                    );
-                    if fs_resp.clicked() {
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
-                    }
-
-                    let (frame_rect, frame_resp) =
-                        ui.allocate_exact_size(Vec2::new(24.0, 24.0), Sense::click());
-                    draw_icon(
-                        ui.painter(),
-                        frame_rect,
-                        IconId::ZoomFit,
-                        if frame_resp.hovered() {
-                            self.tokens.accent
-                        } else {
-                            self.tokens.text_muted
-                        },
-                        14.0,
-                    );
-                    if frame_resp.clicked() {
-                        self.needs_fit = true;
-                    }
-
-                    let (cam_rect, cam_resp) =
-                        ui.allocate_exact_size(Vec2::new(24.0, 24.0), Sense::click());
-                    draw_icon(
-                        ui.painter(),
-                        cam_rect,
-                        IconId::ExportImage,
-                        if cam_resp.hovered() {
-                            self.tokens.accent
-                        } else {
-                            self.tokens.text_muted
-                        },
-                        14.0,
-                    );
-                    if cam_resp.clicked() {
-                        self.copy_status = Some("Screenshot captured".into());
-                    }
-                });
+                if ui.available_width() >= 90.0 {
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        self.render_toolbar_command_button(
+                            ui,
+                            crate::commands::Command::ToggleFullscreen,
+                            self.is_fullscreen,
+                            "central_viewport.fullscreen",
+                        );
+                        self.render_toolbar_command_button(
+                            ui,
+                            crate::commands::Command::ResetView,
+                            false,
+                            "central_viewport.reset_view",
+                        );
+                        self.render_toolbar_command_button(
+                            ui,
+                            crate::commands::Command::ExportImage,
+                            false,
+                            "central_viewport.export_image",
+                        );
+                    });
+                }
             });
 
             ui.add_space(2.0);
@@ -1776,7 +1885,7 @@ impl OpticsLabApp {
                                     .step_by(0.05)
                                     .custom_formatter(|n, _| format!("{:.0}%", n * 100.0)),
                             );
-                            if ui.button("100%").clicked() {
+                            if ui.button("Reset").clicked() {
                                 self.prefs.ui_scale = 1.0;
                             }
                         });
@@ -1843,6 +1952,8 @@ impl eframe::App for OpticsLabApp {
         ctx.set_zoom_factor(self.prefs.ui_scale);
         apply_tokens(ctx, &self.tokens);
 
+        self.ui_registry.clear();
+
         self.handle_shortcuts(ctx);
         self.handle_file_drag_and_drop(ctx);
 
@@ -1881,6 +1992,13 @@ impl eframe::App for OpticsLabApp {
         self.render_about_dialog(ctx);
         self.render_shortcuts_modal(ctx);
         self.render_preferences_dialog(ctx);
+
+        // 9. Dispatch all queued commands triggered during this frame
+        let queued = std::mem::take(&mut self.ui_registry.queued_commands);
+        let mut platform = crate::platform::EguiPlatform::new(ctx);
+        for cmd in queued {
+            self.dispatch(cmd, &mut platform);
+        }
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {

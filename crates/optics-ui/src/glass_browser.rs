@@ -91,11 +91,12 @@ pub fn render_glass_catalog_panel(
         ui.label("Catalog Glasses:");
         let query_lower = state.search_query.trim().to_lowercase();
 
-        let filtered_glasses: Vec<&GlassMaterial> = catalog
+        let mut filtered_glasses: Vec<&GlassMaterial> = catalog
             .all_glasses()
             .filter(|g| query_lower.is_empty() || g.name.to_lowercase().contains(&query_lower))
-            .take(100) // Display top 100 matches
             .collect();
+        filtered_glasses.sort_by(|a, b| a.name.cmp(&b.name));
+        filtered_glasses.truncate(100);
 
         egui::Grid::new("glass_catalog_grid")
             .striped(true)

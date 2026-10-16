@@ -83,7 +83,7 @@ impl CanvasBackgroundPreference {
 }
 
 /// User application preferences with live switching and persistence.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct AppPreferences {
     /// Active visual theme.
     pub theme: ThemePreference,
@@ -416,6 +416,8 @@ pub fn apply_tokens(ctx: &Context, tokens: &OpticsTokens) {
     // Window strokes and corner radius (0-2 px classic desktop standard)
     visuals.window_stroke = Stroke::new(1.0, tokens.border);
     visuals.window_corner_radius = CornerRadius::same(2);
+    visuals.window_shadow = egui::Shadow::NONE;
+    visuals.popup_shadow = egui::Shadow::NONE;
 
     // Non-interactive widgets
     visuals.widgets.noninteractive.bg_fill = tokens.panel_bg;

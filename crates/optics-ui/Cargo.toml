@@ -20,7 +20,7 @@ serde           = { workspace = true }
 serde_json      = { workspace = true }
 
 [dev-dependencies]
-egui_kittest = { version = "0.32.3", features = ["snapshot"] }
+egui_kittest = { version = "0.32.3", features = ["snapshot", "wgpu"] }
 
 [lints]
 workspace = true
