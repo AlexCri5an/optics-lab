@@ -27,7 +27,7 @@ pub use formatting::{
 };
 pub use glass_browser::{GlassBrowserState, render_glass_catalog_panel};
 pub use hit_test::{find_hovered_ray_index, point_to_segment_distance};
-pub use icons::{ToolIcon, draw_tool_icon};
+pub use icons::{IconId, draw_icon, icon_button, init_icon_fonts};
 pub use legend::{draw_wavelength_legend, find_closest_ray_by_x, wavelength_to_x, x_to_wavelength};
 pub use lens_sim::{
     LensElement2D, LensPreset, LensSimulation, LensSubview, TracedSequentialRay2D,

@@ -679,7 +679,7 @@ fn render_material_glass_panel(
             )),
         |ui| {
             if ui
-                .button(egui::RichText::new("✎ Edit Material").size(10.0))
+                .button(egui::RichText::new("Edit Material").size(10.0))
                 .clicked()
             {
                 on_edit_material();

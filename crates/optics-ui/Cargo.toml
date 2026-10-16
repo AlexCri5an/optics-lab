@@ -15,6 +15,7 @@ optics-glass    = { workspace = true }
 optics-zemax    = { workspace = true }
 egui            = { workspace = true }
 eframe          = { workspace = true, features = ["accesskit"] }
+egui-phosphor   = { workspace = true }
 serde           = { workspace = true }
 
 [dev-dependencies]

@@ -62,8 +62,9 @@ bytemuck   = { version = "1", features = ["derive"] }
 half       = "2"
 
 # UI
-egui       = "0.32"
-eframe     = { version = "0.32.3", default-features = false, features = ["glow", "default_fonts"] }
+egui          = "0.32"
+eframe        = { version = "0.32.3", default-features = false, features = ["glow", "default_fonts"] }
+egui-phosphor = { version = "0.10.0", default-features = false, features = ["regular"] }
 
 # Internal crates
 optics-core     = { path = "crates/optics-core" }

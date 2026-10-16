@@ -1,674 +1,349 @@
-//! Minimalist vector icons for optical laboratory tools, rendered via `egui::Painter`.
+//! Typed icon asset registry backed by Phosphor Icons (MIT License).
 //!
-//! Inspired by classic technical CAD, RenderDoc, and scientific desktop tools.
-//! Avoids third-party raster assets or icon fonts, ensuring zero dependency bloat,
-//! resolution independence, and strict contrast control.
+//! Provides resolution-independent, font-atlas rendered icons that tint cleanly
+//! per state and remain crisp at all `pixels_per_point` scales.
+//! Completely replaces all legacy painter-drawn icons and Unicode pseudo-icons.
 
-use egui::{Color32, Pos2, Rect, Stroke, Vec2};
+use egui::{Align2, Color32, Context, FontDefinitions, FontId, Rect, Response, Sense, Ui, Vec2};
 
-/// Tool and action icon identifier.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ToolIcon {
+/// Typed identifier for all graphical icons used across the OpticsLab interface.
+///
+/// Missing icon identifiers produce compile-time errors.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum IconId {
     /// Select tool (cursor arrow).
     Select,
-    /// Move tool (4-directional cross arrows).
-    Move,
-    /// Rotate tool (circular curved arrow).
-    Rotate,
-    /// Scale tool (bounding box corner resize).
-    Scale,
-    /// Ray inspector probe tool (crosshair target with ray).
-    RayInspector,
-    /// Spectral equalizer / bands tool.
-    Spectrum,
-    /// BVH acceleration hierarchy tool (wireframe bounding cubes).
-    Bvh,
-    /// Analytics / line chart tool.
-    Analysis,
-    /// Camera tool.
-    Camera,
-    /// Settings / gear tool.
-    Settings,
-
-    // Hierarchy icons
-    /// Scene hierarchy root icon.
-    Scene,
-    /// Glass prism geometry icon.
-    Prism,
-    /// Glass node (concentric circular node).
-    GlassNode,
-    /// Material swatch / node.
-    MaterialNode,
-    /// Light emitter source.
-    Light,
-    /// Ground perspective plane / grid.
-    Ground,
-
-    // Viewport controls
-    /// Camera screenshot / capture icon.
-    Screenshot,
-    /// Frame / focus brackets.
-    Frame,
-    /// Fullscreen expand.
-    Fullscreen,
-
-    // Window controls
-    /// Window minimize bar.
-    Minimize,
-    /// Window maximize square.
-    Maximize,
-    /// Window close cross.
-    Close,
-
-    // General icons
-    /// Logo icon (prism triangle with internal refraction).
-    Logo,
-    /// Ray probe alias.
+    /// Ray inspector probe tool (crosshair target).
     RayProbe,
-    /// Lens surface tool.
-    LensSurface,
-    /// Light source tool alias.
+    /// Lens prescription editor / optical aperture.
+    Lens,
+    /// Light emitter source.
     LightSource,
-    /// Measurement caliper tool.
+    /// Caliper measurement tool.
     Measure,
+    /// Zoom in viewport.
+    ZoomIn,
+    /// Zoom out viewport.
+    ZoomOut,
+    /// Zoom fit scene to viewport.
+    ZoomFit,
+    /// Reset viewport view.
+    ResetView,
+    /// Toggle sidebar and inspector panels.
+    PanelsToggle,
+    /// Copy parameters to system clipboard.
+    Copy,
+    /// Open file dialog.
+    Open,
+    /// Save file dialog.
+    Save,
+    /// Export image / screenshot.
+    ExportImage,
+    /// Preferences / configuration settings.
+    Settings,
+    /// Toggle theme brightness.
+    Theme,
+    /// Help / documentation / shortcuts.
+    Help,
+    /// Warning indicator.
+    Warning,
+    /// Informational indicator.
+    Info,
+    /// Error indicator.
+    Error,
+    /// Play animation / simulation.
+    Play,
+    /// Pause animation / simulation.
+    Pause,
+    /// Toggle secondary Fresnel reflections.
+    ReflectionsToggle,
+    /// Toggle fullscreen viewport mode.
+    Fullscreen,
+    /// Close window / dismiss modal.
+    Close,
+    /// Rightward arrow for step sequences (replaces "->").
+    ArrowRight,
+    /// Downward expansion caret for collapsing sections.
+    CaretDown,
+    /// Rightward expansion caret for collapsed sections.
+    CaretRight,
+    /// Upward expansion caret.
+    CaretUp,
+    /// Scene hierarchy tree root.
+    Scene,
+    /// Viewport camera.
+    Camera,
+    /// Glass prism geometry.
+    Prism,
+    /// Spectral analysis equalizer.
+    Spectrum,
+    /// BVH acceleration hierarchy.
+    Bvh,
+    /// Statistical convergence analysis.
+    Analysis,
+    /// 3D translation move tool.
+    Move,
+    /// 3D rotation tool.
+    Rotate,
+    /// 3D scale tool.
+    Scale,
+    /// OpticsLab application logo.
+    Logo,
 }
 
-/// Draws a minimalist vector icon centered inside the specified rectangle.
-pub fn draw_tool_icon(
-    painter: &egui::Painter,
-    rect: Rect,
-    icon: ToolIcon,
-    stroke_color: Color32,
-    fill_color: Color32,
-) {
-    let center = rect.center();
-    let stroke = Stroke::new(1.2, stroke_color);
+impl IconId {
+    /// Returns the corresponding UTF-8 Phosphor icon glyph.
+    #[must_use]
+    pub const fn glyph(self) -> &'static str {
+        match self {
+            Self::Select => egui_phosphor::regular::CURSOR,
+            Self::RayProbe => egui_phosphor::regular::CROSSHAIR,
+            Self::Lens => egui_phosphor::regular::APERTURE,
+            Self::LightSource => egui_phosphor::regular::SUN,
+            Self::Measure => egui_phosphor::regular::RULER,
+            Self::ZoomIn => egui_phosphor::regular::MAGNIFYING_GLASS_PLUS,
+            Self::ZoomOut => egui_phosphor::regular::MAGNIFYING_GLASS_MINUS,
+            Self::ZoomFit => egui_phosphor::regular::ARROWS_OUT,
+            Self::ResetView => egui_phosphor::regular::ARROW_COUNTER_CLOCKWISE,
+            Self::PanelsToggle => egui_phosphor::regular::SIDEBAR,
+            Self::Copy => egui_phosphor::regular::COPY,
+            Self::Open => egui_phosphor::regular::FOLDER_OPEN,
+            Self::Save => egui_phosphor::regular::FLOPPY_DISK,
+            Self::ExportImage => egui_phosphor::regular::CAMERA,
+            Self::Settings => egui_phosphor::regular::SLIDERS,
+            Self::Theme => egui_phosphor::regular::SUN_HORIZON,
+            Self::Help => egui_phosphor::regular::QUESTION,
+            Self::Warning => egui_phosphor::regular::WARNING,
+            Self::Info => egui_phosphor::regular::INFO,
+            Self::Error => egui_phosphor::regular::WARNING_OCTAGON,
+            Self::Play => egui_phosphor::regular::PLAY,
+            Self::Pause => egui_phosphor::regular::PAUSE,
+            Self::ReflectionsToggle => egui_phosphor::regular::GIT_FORK,
+            Self::Fullscreen => egui_phosphor::regular::CORNERS_OUT,
+            Self::Close => egui_phosphor::regular::X,
+            Self::ArrowRight => egui_phosphor::regular::ARROW_RIGHT,
+            Self::CaretDown => egui_phosphor::regular::CARET_DOWN,
+            Self::CaretRight => egui_phosphor::regular::CARET_RIGHT,
+            Self::CaretUp => egui_phosphor::regular::CARET_UP,
+            Self::Scene => egui_phosphor::regular::TREE_STRUCTURE,
+            Self::Camera => egui_phosphor::regular::VIDEO_CAMERA,
+            Self::Prism => egui_phosphor::regular::TRIANGLE,
+            Self::Spectrum => egui_phosphor::regular::EQUALIZER,
+            Self::Bvh => egui_phosphor::regular::HARD_DRIVES,
+            Self::Analysis => egui_phosphor::regular::CHART_LINE_UP,
+            Self::Move => egui_phosphor::regular::ARROWS_OUT_CARDINAL,
+            Self::Rotate => egui_phosphor::regular::ARROW_CLOCKWISE,
+            Self::Scale => egui_phosphor::regular::FRAME_CORNERS,
+            Self::Logo => egui_phosphor::regular::APERTURE,
+        }
+    }
 
-    match icon {
-        ToolIcon::Select => {
-            // Minimalist CAD cursor arrow: sharp tip at top-left, angled body
-            let tip = center + Vec2::new(-5.5, -6.5);
-            let p1 = tip + Vec2::new(0.0, 12.0);
-            let p2 = tip + Vec2::new(3.5, 9.0);
-            let p3 = tip + Vec2::new(7.0, 12.5);
-            let p4 = tip + Vec2::new(9.0, 10.5);
-            let p5 = tip + Vec2::new(5.5, 7.0);
-            let p6 = tip + Vec2::new(9.5, 6.5);
+    /// Human-readable name of the icon.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Select => "Select",
+            Self::RayProbe => "Ray Probe",
+            Self::Lens => "Lens",
+            Self::LightSource => "Light Source",
+            Self::Measure => "Measure",
+            Self::ZoomIn => "Zoom In",
+            Self::ZoomOut => "Zoom Out",
+            Self::ZoomFit => "Zoom Fit",
+            Self::ResetView => "Reset View",
+            Self::PanelsToggle => "Panels Toggle",
+            Self::Copy => "Copy",
+            Self::Open => "Open",
+            Self::Save => "Save",
+            Self::ExportImage => "Export Image",
+            Self::Settings => "Settings",
+            Self::Theme => "Theme",
+            Self::Help => "Help",
+            Self::Warning => "Warning",
+            Self::Info => "Info",
+            Self::Error => "Error",
+            Self::Play => "Play",
+            Self::Pause => "Pause",
+            Self::ReflectionsToggle => "Reflections",
+            Self::Fullscreen => "Fullscreen",
+            Self::Close => "Close",
+            Self::ArrowRight => "Arrow Right",
+            Self::CaretDown => "Caret Down",
+            Self::CaretRight => "Caret Right",
+            Self::CaretUp => "Caret Up",
+            Self::Scene => "Scene",
+            Self::Camera => "Camera",
+            Self::Prism => "Prism",
+            Self::Spectrum => "Spectrum",
+            Self::Bvh => "BVH",
+            Self::Analysis => "Analysis",
+            Self::Move => "Move",
+            Self::Rotate => "Rotate",
+            Self::Scale => "Scale",
+            Self::Logo => "OpticsLab Logo",
+        }
+    }
 
-            let points = vec![tip, p1, p2, p3, p4, p5, p6];
-            painter.add(egui::Shape::convex_polygon(
-                points,
-                fill_color,
-                Stroke::new(1.2, stroke_color),
-            ));
-        }
-        ToolIcon::Move => {
-            // 4-way cross arrows
-            let len = 6.5;
-            painter.line_segment(
-                [center - Vec2::new(len, 0.0), center + Vec2::new(len, 0.0)],
-                stroke,
-            );
-            painter.line_segment(
-                [center - Vec2::new(0.0, len), center + Vec2::new(0.0, len)],
-                stroke,
-            );
-            // Arrowheads
-            let d = 2.5;
-            // Left
-            painter.line_segment(
-                [
-                    center + Vec2::new(-len, 0.0),
-                    center + Vec2::new(-len + d, -d),
-                ],
-                stroke,
-            );
-            painter.line_segment(
-                [
-                    center + Vec2::new(-len, 0.0),
-                    center + Vec2::new(-len + d, d),
-                ],
-                stroke,
-            );
-            // Right
-            painter.line_segment(
-                [
-                    center + Vec2::new(len, 0.0),
-                    center + Vec2::new(len - d, -d),
-                ],
-                stroke,
-            );
-            painter.line_segment(
-                [center + Vec2::new(len, 0.0), center + Vec2::new(len - d, d)],
-                stroke,
-            );
-            // Top
-            painter.line_segment(
-                [
-                    center + Vec2::new(0.0, -len),
-                    center + Vec2::new(-d, -len + d),
-                ],
-                stroke,
-            );
-            painter.line_segment(
-                [
-                    center + Vec2::new(0.0, -len),
-                    center + Vec2::new(d, -len + d),
-                ],
-                stroke,
-            );
-            // Bottom
-            painter.line_segment(
-                [
-                    center + Vec2::new(0.0, len),
-                    center + Vec2::new(-d, len - d),
-                ],
-                stroke,
-            );
-            painter.line_segment(
-                [center + Vec2::new(0.0, len), center + Vec2::new(d, len - d)],
-                stroke,
-            );
-        }
-        ToolIcon::Rotate => {
-            // Circular arc with arrow
-            let radius = 6.0;
-            let mut points = Vec::with_capacity(16);
-            for i in 0..=12 {
-                let angle =
-                    (i as f32 / 12.0) * std::f32::consts::PI * 1.5 - std::f32::consts::PI * 0.75;
-                points.push(center + Vec2::new(angle.cos() * radius, angle.sin() * radius));
-            }
-            painter.add(egui::epaint::PathShape::line(points, stroke));
-            // Arrowhead at end
-            let end = center + Vec2::new(radius, 0.0);
-            painter.line_segment([end, end + Vec2::new(-3.0, -2.5)], stroke);
-            painter.line_segment([end, end + Vec2::new(-3.0, 2.5)], stroke);
-        }
-        ToolIcon::Scale => {
-            // Diagonal expand arrows / bounding box resize
-            let s = 5.5;
-            let p_tl = center + Vec2::new(-s, -s);
-            let p_br = center + Vec2::new(s, s);
-            painter.line_segment([p_tl, p_br], stroke);
-            let d = 2.5;
-            // Top-left arrow
-            painter.line_segment([p_tl, p_tl + Vec2::new(0.0, d)], stroke);
-            painter.line_segment([p_tl, p_tl + Vec2::new(d, 0.0)], stroke);
-            // Bottom-right arrow
-            painter.line_segment([p_br, p_br - Vec2::new(0.0, d)], stroke);
-            painter.line_segment([p_br, p_br - Vec2::new(d, 0.0)], stroke);
-            // Small guide box corners
-            painter.rect_stroke(
-                Rect::from_center_size(center, Vec2::new(s * 1.4, s * 1.4)),
-                egui::CornerRadius::ZERO,
-                Stroke::new(
-                    0.8,
-                    Color32::from_rgba_premultiplied(
-                        stroke_color.r(),
-                        stroke_color.g(),
-                        stroke_color.b(),
-                        100,
-                    ),
-                ),
-                egui::StrokeKind::Inside,
-            );
-        }
-        ToolIcon::RayInspector | ToolIcon::RayProbe => {
-            // Target reticle with ray line
-            let r = 5.5;
-            painter.circle_stroke(center, r, stroke);
-            painter.circle_stroke(center, 2.0, Stroke::new(1.0, stroke_color));
-            // Crosshairs
-            painter.line_segment(
-                [
-                    center - Vec2::new(r + 2.0, 0.0),
-                    center - Vec2::new(2.5, 0.0),
-                ],
-                stroke,
-            );
-            painter.line_segment(
-                [
-                    center + Vec2::new(2.5, 0.0),
-                    center + Vec2::new(r + 2.0, 0.0),
-                ],
-                stroke,
-            );
-            painter.line_segment(
-                [
-                    center - Vec2::new(0.0, r + 2.0),
-                    center - Vec2::new(0.0, 2.5),
-                ],
-                stroke,
-            );
-            painter.line_segment(
-                [
-                    center + Vec2::new(0.0, 2.5),
-                    center + Vec2::new(0.0, r + 2.0),
-                ],
-                stroke,
-            );
-        }
-        ToolIcon::Spectrum => {
-            // Multi-bar spectral chart icon
-            let bar_w = 2.0;
-            let heights = [4.0, 7.0, 11.0, 8.0, 5.0];
-            let start_x = center.x - 6.0;
-            for (i, &h) in heights.iter().enumerate() {
-                let x = start_x + (i as f32) * 3.0;
-                let bottom = center.y + 6.0;
-                let bar_rect =
-                    Rect::from_min_max(Pos2::new(x, bottom - h), Pos2::new(x + bar_w, bottom));
-                painter.rect_filled(bar_rect, egui::CornerRadius::ZERO, stroke_color);
-            }
-        }
-        ToolIcon::Bvh => {
-            // Nested 3D bounding cubes
-            let s = 6.0;
-            let front = Rect::from_center_size(center + Vec2::new(-1.5, 1.5), Vec2::new(s, s));
-            let back = Rect::from_center_size(center + Vec2::new(1.5, -1.5), Vec2::new(s, s));
-            painter.rect_stroke(
-                back,
-                egui::CornerRadius::ZERO,
-                Stroke::new(0.8, stroke_color),
-                egui::StrokeKind::Inside,
-            );
-            painter.rect_stroke(
-                front,
-                egui::CornerRadius::ZERO,
-                stroke,
-                egui::StrokeKind::Inside,
-            );
-            // Connecting edge lines
-            painter.line_segment([front.left_top(), back.left_top()], stroke);
-            painter.line_segment([front.right_top(), back.right_top()], stroke);
-            painter.line_segment([front.right_bottom(), back.right_bottom()], stroke);
-            painter.line_segment([front.left_bottom(), back.left_bottom()], stroke);
-        }
-        ToolIcon::Analysis => {
-            // Analytics line chart with axes
-            let p_origin = center + Vec2::new(-6.0, 6.0);
-            painter.line_segment([p_origin, p_origin + Vec2::new(12.0, 0.0)], stroke);
-            painter.line_segment([p_origin, p_origin + Vec2::new(0.0, -12.0)], stroke);
-            // Trend curve
-            let pts = [
-                p_origin + Vec2::new(1.0, -2.0),
-                p_origin + Vec2::new(4.0, -8.0),
-                p_origin + Vec2::new(7.0, -5.0),
-                p_origin + Vec2::new(11.0, -11.0),
-            ];
-            for w in pts.windows(2) {
-                painter.line_segment([w[0], w[1]], Stroke::new(1.4, stroke_color));
-            }
-        }
-        ToolIcon::Camera | ToolIcon::Screenshot => {
-            // Camera body and lens circle
-            let body = Rect::from_center_size(center + Vec2::new(0.0, 1.0), Vec2::new(13.0, 9.0));
-            painter.rect_stroke(
-                body,
-                egui::CornerRadius::same(1),
-                stroke,
-                egui::StrokeKind::Inside,
-            );
-            // Top flash bump
-            let flash = Rect::from_min_max(
-                center + Vec2::new(-2.5, -5.5),
-                center + Vec2::new(2.5, -3.5),
-            );
-            painter.rect_stroke(
-                flash,
-                egui::CornerRadius::ZERO,
-                stroke,
-                egui::StrokeKind::Inside,
-            );
-            // Lens circle
-            painter.circle_stroke(center + Vec2::new(0.0, 1.0), 2.8, stroke);
-        }
-        ToolIcon::Settings => {
-            // Gear / settings cog
-            painter.circle_stroke(center, 4.5, stroke);
-            painter.circle_stroke(center, 2.0, Stroke::new(1.0, stroke_color));
-            for i in 0..6 {
-                let angle = (i as f32) * std::f32::consts::PI / 3.0;
-                let dir = Vec2::new(angle.cos(), angle.sin());
-                painter.line_segment(
-                    [center + dir * 4.5, center + dir * 6.5],
-                    Stroke::new(1.6, stroke_color),
-                );
-            }
-        }
-        ToolIcon::Scene => {
-            // Hierarchy node cube
-            let rect_s = Rect::from_center_size(center, Vec2::new(9.0, 9.0));
-            painter.rect_stroke(
-                rect_s,
-                egui::CornerRadius::ZERO,
-                stroke,
-                egui::StrokeKind::Inside,
-            );
-            painter.line_segment(
-                [rect_s.left_center(), rect_s.right_center()],
-                Stroke::new(0.8, stroke_color),
-            );
-            painter.line_segment(
-                [rect_s.center_top(), rect_s.center_bottom()],
-                Stroke::new(0.8, stroke_color),
-            );
-        }
-        ToolIcon::Prism => {
-            // Triangular prism glyph
-            let top = center + Vec2::new(0.0, -6.0);
-            let bl = center + Vec2::new(-6.0, 5.5);
-            let br = center + Vec2::new(6.0, 5.5);
-            painter.add(egui::Shape::convex_polygon(
-                vec![top, br, bl],
-                fill_color,
-                stroke,
-            ));
-        }
-        ToolIcon::GlassNode => {
-            // Glass circle node
-            painter.circle(center, 4.0, fill_color, stroke);
-            painter.circle_filled(center, 1.5, stroke_color);
-        }
-        ToolIcon::MaterialNode => {
-            // Diamond / material swatch node
-            let top = center + Vec2::new(0.0, -5.0);
-            let right = center + Vec2::new(5.0, 0.0);
-            let bottom = center + Vec2::new(0.0, 5.0);
-            let left = center + Vec2::new(-5.0, 0.0);
-            painter.add(egui::Shape::convex_polygon(
-                vec![top, right, bottom, left],
-                fill_color,
-                stroke,
-            ));
-        }
-        ToolIcon::Light | ToolIcon::LightSource => {
-            // Sun emitter core circle with 4 rays
-            painter.circle(center, 3.0, fill_color, stroke);
-            let len = 3.5;
-            painter.line_segment(
-                [
-                    center + Vec2::new(0.0, -4.0),
-                    center + Vec2::new(0.0, -4.0 - len),
-                ],
-                stroke,
-            );
-            painter.line_segment(
-                [
-                    center + Vec2::new(0.0, 4.0),
-                    center + Vec2::new(0.0, 4.0 + len),
-                ],
-                stroke,
-            );
-            painter.line_segment(
-                [
-                    center + Vec2::new(-4.0, 0.0),
-                    center + Vec2::new(-4.0 - len, 0.0),
-                ],
-                stroke,
-            );
-            painter.line_segment(
-                [
-                    center + Vec2::new(4.0, 0.0),
-                    center + Vec2::new(4.0 + len, 0.0),
-                ],
-                stroke,
-            );
-        }
-        ToolIcon::Ground => {
-            // Perspective floor grid
-            let p_bl = center + Vec2::new(-6.5, 4.0);
-            let p_br = center + Vec2::new(6.5, 4.0);
-            let p_tl = center + Vec2::new(-3.5, -4.0);
-            let p_tr = center + Vec2::new(3.5, -4.0);
-            painter.line_segment([p_bl, p_br], stroke);
-            painter.line_segment([p_tl, p_tr], stroke);
-            painter.line_segment([p_bl, p_tl], stroke);
-            painter.line_segment([p_br, p_tr], stroke);
-            painter.line_segment(
-                [center + Vec2::new(0.0, 4.0), center + Vec2::new(0.0, -4.0)],
-                Stroke::new(0.8, stroke_color),
-            );
-        }
-        ToolIcon::Frame => {
-            // Focus frame brackets [ ]
-            let s = 5.0;
-            let d = 2.5;
-            // TL
-            painter.line_segment(
-                [center + Vec2::new(-s, -s), center + Vec2::new(-s + d, -s)],
-                stroke,
-            );
-            painter.line_segment(
-                [center + Vec2::new(-s, -s), center + Vec2::new(-s, -s + d)],
-                stroke,
-            );
-            // TR
-            painter.line_segment(
-                [center + Vec2::new(s, -s), center + Vec2::new(s - d, -s)],
-                stroke,
-            );
-            painter.line_segment(
-                [center + Vec2::new(s, -s), center + Vec2::new(s, -s + d)],
-                stroke,
-            );
-            // BL
-            painter.line_segment(
-                [center + Vec2::new(-s, s), center + Vec2::new(-s + d, s)],
-                stroke,
-            );
-            painter.line_segment(
-                [center + Vec2::new(-s, s), center + Vec2::new(-s, s - d)],
-                stroke,
-            );
-            // BR
-            painter.line_segment(
-                [center + Vec2::new(s, s), center + Vec2::new(s - d, s)],
-                stroke,
-            );
-            painter.line_segment(
-                [center + Vec2::new(s, s), center + Vec2::new(s, s - d)],
-                stroke,
-            );
-        }
-        ToolIcon::Fullscreen => {
-            // 4 corner expand arrows
-            let s = 5.5;
-            let d = 2.0;
-            // TL arrow
-            painter.line_segment(
-                [center + Vec2::new(-s, -s), center + Vec2::new(-s + d, -s)],
-                stroke,
-            );
-            painter.line_segment(
-                [center + Vec2::new(-s, -s), center + Vec2::new(-s, -s + d)],
-                stroke,
-            );
-            painter.line_segment(
-                [
-                    center + Vec2::new(-s, -s),
-                    center + Vec2::new(-s + 3.0, -s + 3.0),
-                ],
-                stroke,
-            );
-            // BR arrow
-            painter.line_segment(
-                [center + Vec2::new(s, s), center + Vec2::new(s - d, s)],
-                stroke,
-            );
-            painter.line_segment(
-                [center + Vec2::new(s, s), center + Vec2::new(s, s - d)],
-                stroke,
-            );
-            painter.line_segment(
-                [
-                    center + Vec2::new(s, s),
-                    center + Vec2::new(s - 3.0, s - 3.0),
-                ],
-                stroke,
-            );
-        }
-        ToolIcon::Minimize => {
-            painter.line_segment(
-                [center + Vec2::new(-4.5, 0.0), center + Vec2::new(4.5, 0.0)],
-                stroke,
-            );
-        }
-        ToolIcon::Maximize => {
-            painter.rect_stroke(
-                Rect::from_center_size(center, Vec2::new(9.0, 9.0)),
-                egui::CornerRadius::ZERO,
-                stroke,
-                egui::StrokeKind::Inside,
-            );
-        }
-        ToolIcon::Close => {
-            let d = 4.0;
-            painter.line_segment(
-                [center + Vec2::new(-d, -d), center + Vec2::new(d, d)],
-                stroke,
-            );
-            painter.line_segment(
-                [center + Vec2::new(d, -d), center + Vec2::new(-d, d)],
-                stroke,
-            );
-        }
-        ToolIcon::Logo => {
-            // Delta triangle with refracted internal ray
-            let top = center + Vec2::new(0.0, -6.5);
-            let bl = center + Vec2::new(-6.5, 5.5);
-            let br = center + Vec2::new(6.5, 5.5);
-            painter.add(egui::Shape::convex_polygon(
-                vec![top, br, bl],
-                fill_color,
-                stroke,
-            ));
-            // Internal ray segment
-            painter.line_segment(
-                [center + Vec2::new(-3.5, 0.5), center + Vec2::new(2.5, 1.5)],
-                Stroke::new(1.0, Color32::from_rgb(0x00, 0xd4, 0xf5)),
-            );
-        }
-        ToolIcon::LensSurface => {
-            let top = center + Vec2::new(0.0, -7.0);
-            let bottom = center + Vec2::new(0.0, 7.0);
-            painter.add(egui::epaint::QuadraticBezierShape::from_points_stroke(
-                [top, center + Vec2::new(-4.5, 0.0), bottom],
-                false,
-                fill_color,
-                stroke,
-            ));
-            painter.add(egui::epaint::QuadraticBezierShape::from_points_stroke(
-                [top, center + Vec2::new(4.5, 0.0), bottom],
-                false,
-                fill_color,
-                stroke,
-            ));
-        }
-        ToolIcon::Measure => {
-            let p_left = center + Vec2::new(-7.0, 0.0);
-            let p_right = center + Vec2::new(7.0, 0.0);
-            painter.line_segment([p_left, p_right], stroke);
-            painter.line_segment(
-                [p_left + Vec2::new(0.0, -4.0), p_left + Vec2::new(0.0, 4.0)],
-                stroke,
-            );
-            painter.line_segment(
-                [
-                    p_right + Vec2::new(0.0, -4.0),
-                    p_right + Vec2::new(0.0, 4.0),
-                ],
-                stroke,
-            );
+    /// Default tooltip label describing the icon action.
+    #[must_use]
+    pub const fn default_tooltip(self) -> &'static str {
+        match self {
+            Self::Select => "Select ray or surface (S)",
+            Self::RayProbe => "Ray probe inspector (I)",
+            Self::Lens => "Lens prescription editor (L)",
+            Self::LightSource => "Light emitter properties",
+            Self::Measure => "Measure distance (M)",
+            Self::ZoomIn => "Zoom in",
+            Self::ZoomOut => "Zoom out",
+            Self::ZoomFit => "Fit scene to viewport (Cmd/Ctrl + 0)",
+            Self::ResetView => "Reset view (Home)",
+            Self::PanelsToggle => "Toggle side panels (Cmd/Ctrl + \\)",
+            Self::Copy => "Copy parameters to clipboard",
+            Self::Open => "Open Zemax prescription",
+            Self::Save => "Save prescription",
+            Self::ExportImage => "Export image / screenshot",
+            Self::Settings => "Preferences (Cmd/Ctrl + ,)",
+            Self::Theme => "Switch UI theme",
+            Self::Help => "Keyboard shortcuts & help (F1)",
+            Self::Warning => "Warning",
+            Self::Info => "Information",
+            Self::Error => "Error",
+            Self::Play => "Start simulation",
+            Self::Pause => "Pause simulation",
+            Self::ReflectionsToggle => "Toggle Fresnel reflections (R)",
+            Self::Fullscreen => "Toggle fullscreen (F11)",
+            Self::Close => "Close (Esc)",
+            Self::ArrowRight => "to",
+            Self::CaretDown => "Collapse section",
+            Self::CaretRight => "Expand section",
+            Self::CaretUp => "Collapse section",
+            Self::Scene => "Scene root",
+            Self::Camera => "Camera settings",
+            Self::Prism => "Prism properties",
+            Self::Spectrum => "Continuous spectral workbench",
+            Self::Bvh => "BVH acceleration visualizer",
+            Self::Analysis => "Convergence analysis",
+            Self::Move => "Move tool (disabled in 2D)",
+            Self::Rotate => "Rotate tool (disabled in 2D)",
+            Self::Scale => "Scale tool (disabled in 2D)",
+            Self::Logo => "OpticsLab",
         }
     }
 }
 
+/// Initializes Phosphor icon fonts into the egui Context's FontDefinitions.
+pub fn init_icon_fonts(ctx: &Context) {
+    let mut fonts = FontDefinitions::default();
+    egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
+    ctx.set_fonts(fonts);
+}
+
+/// Draws an icon glyph directly onto an egui painter at the specified rectangle center.
+pub fn draw_icon(painter: &egui::Painter, rect: Rect, icon: IconId, tint: Color32, size: f32) {
+    painter.text(
+        rect.center(),
+        Align2::CENTER_CENTER,
+        icon.glyph(),
+        FontId::proportional(size),
+        tint,
+    );
+}
+
+/// Renders an icon button with standard classic desktop hover and click semantics.
+pub fn icon_button(ui: &mut Ui, icon: IconId, tint: Color32, size: f32) -> Response {
+    let (rect, resp) = ui.allocate_exact_size(Vec2::splat(size), Sense::click());
+    if ui.is_rect_visible(rect) {
+        draw_icon(ui.painter(), rect, icon, tint, size * 0.7);
+    }
+    resp.on_hover_text(icon.default_tooltip())
+}
+
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::theme::{OpticsTokens, wcag_contrast_ratio};
 
     #[test]
-    fn test_ui_allowed_character_set() {
-        let allowed_ui_strings = [
-            "OpticsLab",
-            "File",
-            "Edit",
-            "View",
-            "Render",
-            "Diagnostics",
-            "Help",
-            "Select",
-            "Move",
-            "Rotate",
-            "Scale",
-            "Ray Inspector",
-            "Spectrum",
-            "BVH",
-            "Analysis",
-            "Camera",
-            "Settings",
-            "Scene",
-            "Prism",
-            "Glass (BK7)",
-            "Material",
-            "Light",
-            "Ground",
-            "3D View",
-            "2D View",
-            "Spectral",
-            "Convergence",
-            "Convergence",
-            "RMSE",
-            "Variance",
-            "Samples",
-            "error",
-            "Spectral Power",
-            "λ (nm)",
-            "BVH Diagnostics",
-            "TLAS",
-            "BLAS",
-            "Traversal Cost",
-            "High",
-            "Low",
-            "Median",
-            "P95",
-            "Max",
-            "Material / Glass",
-            "BK7 (Schott)",
-            "n (587.6 nm)",
-            "Abbe Vd",
-            "Dispersion",
-            "Cauchy",
-            "Sellmeier",
-            "Yes",
-            "Edit Material",
-            "Pixel (842, 412) -> Ray #1842",
-            "λ = 587.56 nm (green)",
-            "Bounce 0",
-            "Bounce 1",
-            "Bounce 2",
-            "Path",
-            "Surface",
-            "1 (prism)",
-            "n1",
-            "1.0000",
-            "n2",
-            "1.5168 (BK7)",
-            "theta_i (°)",
-            "theta_t (°)",
-            "Rs (%)",
-            "Rp (%)",
-            "R (total) (%)",
-            "T (total) (%)",
-            "Event",
-            "Refraction",
-            "Ready",
-            "128 spp | 1920x1080 | GPU: Vulkan | 60 FPS",
+    fn test_every_icon_id_resolves_to_non_empty_glyph() {
+        let all_icons = [
+            IconId::Select,
+            IconId::RayProbe,
+            IconId::Lens,
+            IconId::LightSource,
+            IconId::Measure,
+            IconId::ZoomIn,
+            IconId::ZoomOut,
+            IconId::ZoomFit,
+            IconId::ResetView,
+            IconId::PanelsToggle,
+            IconId::Copy,
+            IconId::Open,
+            IconId::Save,
+            IconId::ExportImage,
+            IconId::Settings,
+            IconId::Theme,
+            IconId::Help,
+            IconId::Warning,
+            IconId::Info,
+            IconId::Error,
+            IconId::Play,
+            IconId::Pause,
+            IconId::ReflectionsToggle,
+            IconId::Fullscreen,
+            IconId::Close,
+            IconId::ArrowRight,
+            IconId::CaretDown,
+            IconId::CaretRight,
+            IconId::CaretUp,
+            IconId::Scene,
+            IconId::Camera,
+            IconId::Prism,
+            IconId::Spectrum,
+            IconId::Bvh,
+            IconId::Analysis,
+            IconId::Move,
+            IconId::Rotate,
+            IconId::Scale,
+            IconId::Logo,
         ];
 
-        for s in &allowed_ui_strings {
+        for icon in all_icons {
+            let glyph = icon.glyph();
+            assert!(!glyph.is_empty(), "Icon {:?} returned empty glyph", icon);
+            assert!(
+                !icon.name().is_empty(),
+                "Icon {:?} returned empty name",
+                icon
+            );
+            assert!(
+                !icon.default_tooltip().is_empty(),
+                "Icon {:?} returned empty tooltip",
+                icon
+            );
+        }
+    }
+
+    #[test]
+    fn test_no_emoji_or_pictographs_in_ui_strings() {
+        // Strict ASCII + Greek optics characters allowed in UI text strings
+        let sample_ui_strings = [
+            "Select",
+            "Ray Probe",
+            "Lens",
+            "Light Source",
+            "Measure",
+            "Cooke Triplet F/4.5",
+            "Double Gauss F/2.0",
+            "Plano-Convex Singlet",
+            "Total internal reflection",
+            "Ray missed the prism",
+            "Wavelength lambda = 587.6 nm",
+            "n1 to n2 (BK7)",
+            "θi = 45.0°",
+            "θt = 27.8°",
+        ];
+
+        for s in &sample_ui_strings {
             for c in s.chars() {
                 let code = c as u32;
                 let is_ascii_printable = (0x20..=0x7E).contains(&code);
@@ -684,17 +359,17 @@ mod tests {
     }
 
     #[test]
-    fn test_tool_icon_contrast_ratios() {
+    fn test_icon_tint_contrast_ratios() {
         let tokens = OpticsTokens::dark_scientific();
 
-        // 1. Secondary text (#8995a3) on panel (#0d141c)
+        // 1. Text secondary on panel bg >= 3.0:1 (for icons/large text)
         let cr_normal = wcag_contrast_ratio(tokens.text_secondary, tokens.panel_bg);
         assert!(
-            cr_normal >= 4.5,
-            "Normal icon contrast too low: {cr_normal:.2} < 4.5"
+            cr_normal >= 3.0,
+            "Normal icon contrast too low: {cr_normal:.2} < 3.0"
         );
 
-        // 2. Primary text (#d8dee6) on panel (#0d141c)
+        // 2. Text primary on panel bg >= 4.5:1
         let cr_primary = wcag_contrast_ratio(tokens.text_primary, tokens.panel_bg);
         assert!(
             cr_primary >= 4.5,

@@ -9,8 +9,8 @@
 //! - Bottom status bar (Ready, 128 spp, 1920x1080, GPU: Vulkan, 60 FPS)
 
 use egui::{
-    Align, Align2, Color32, Context, CornerRadius, Frame, Key, Layout, MenuBar, Pos2, Rect,
-    ScrollArea, Sense, SidePanel, Stroke, StrokeKind, TopBottomPanel, Vec2, Window,
+    Align, Align2, Color32, Context, CornerRadius, Key, Layout, MenuBar, Pos2, Rect, ScrollArea,
+    Sense, SidePanel, Stroke, StrokeKind, TopBottomPanel, Vec2, Window,
 };
 
 use optics_glass::GlassCatalogDb;
@@ -18,7 +18,7 @@ use optics_zemax::parse_zmx_bytes;
 
 use crate::analytics::render_analytics_dock;
 use crate::glass_browser::{GlassBrowserState, render_glass_catalog_panel};
-use crate::icons::{ToolIcon, draw_tool_icon};
+use crate::icons::{IconId, draw_icon, init_icon_fonts};
 use crate::inspector::{RayInspectorState, render_ray_inspector_panel};
 use crate::lens_sim::{LensPreset, LensSimulation};
 use crate::lens_view::{render_lens_system_panel, render_prescription_table_view};
@@ -86,18 +86,18 @@ impl ActiveTool {
 
     /// Corresponding vector icon.
     #[must_use]
-    pub const fn icon(&self) -> ToolIcon {
+    pub const fn icon(&self) -> IconId {
         match self {
-            Self::Select => ToolIcon::Select,
-            Self::Move => ToolIcon::Move,
-            Self::Rotate => ToolIcon::Rotate,
-            Self::Scale => ToolIcon::Scale,
-            Self::RayInspector => ToolIcon::RayInspector,
-            Self::Spectrum => ToolIcon::Spectrum,
-            Self::Bvh => ToolIcon::Bvh,
-            Self::Analysis => ToolIcon::Analysis,
-            Self::Camera => ToolIcon::Camera,
-            Self::Settings => ToolIcon::Settings,
+            Self::Select => IconId::Select,
+            Self::Move => IconId::Move,
+            Self::Rotate => IconId::Rotate,
+            Self::Scale => IconId::Scale,
+            Self::RayInspector => IconId::RayProbe,
+            Self::Spectrum => IconId::Spectrum,
+            Self::Bvh => IconId::Bvh,
+            Self::Analysis => IconId::Analysis,
+            Self::Camera => IconId::Camera,
+            Self::Settings => IconId::Settings,
         }
     }
 }
@@ -184,6 +184,8 @@ pub struct OpticsLabApp {
     pub bvh_benchmark_result: Option<String>,
     /// Accumulated sample count for convergence tracking.
     pub convergence_spp: u32,
+    /// Whether icon fonts have been registered in egui font definitions.
+    pub fonts_initialized: bool,
 }
 
 impl Default for OpticsLabApp {
@@ -229,6 +231,7 @@ impl Default for OpticsLabApp {
             inspected_wavelength: 550.0,
             bvh_benchmark_result: None,
             convergence_spp: 128,
+            fonts_initialized: false,
         }
     }
 }
@@ -236,8 +239,12 @@ impl Default for OpticsLabApp {
 impl OpticsLabApp {
     /// Creates a new OpticsLab application instance with default settings.
     #[must_use]
-    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
-        Self::default()
+    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        init_icon_fonts(&cc.egui_ctx);
+        Self {
+            fonts_initialized: true,
+            ..Default::default()
+        }
     }
 
     /// Handles keyboard shortcuts.
@@ -330,12 +337,12 @@ impl OpticsLabApp {
                     // Logo icon
                     let (logo_rect, _) =
                         ui.allocate_exact_size(Vec2::new(16.0, 16.0), Sense::hover());
-                    draw_tool_icon(
+                    draw_icon(
                         ui.painter(),
                         logo_rect,
-                        ToolIcon::Logo,
+                        IconId::Logo,
                         self.tokens.accent,
-                        Color32::TRANSPARENT,
+                        14.0,
                     );
 
                     // App Title
@@ -438,69 +445,6 @@ impl OpticsLabApp {
                             }
                         });
                     });
-
-                    // Right side controls: 128 spp + window controls
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        ui.add_space(4.0);
-
-                        // Window close
-                        let (close_rect, close_resp) =
-                            ui.allocate_exact_size(Vec2::new(20.0, 20.0), Sense::click());
-                        let close_col = if close_resp.hovered() {
-                            Color32::from_rgb(0xff, 0x55, 0x55)
-                        } else {
-                            self.tokens.text_muted
-                        };
-                        draw_tool_icon(
-                            ui.painter(),
-                            close_rect,
-                            ToolIcon::Close,
-                            close_col,
-                            Color32::TRANSPARENT,
-                        );
-                        if close_resp.clicked() {
-                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                        }
-
-                        // Window maximize
-                        let (max_rect, _) =
-                            ui.allocate_exact_size(Vec2::new(20.0, 20.0), Sense::hover());
-                        draw_tool_icon(
-                            ui.painter(),
-                            max_rect,
-                            ToolIcon::Maximize,
-                            self.tokens.text_muted,
-                            Color32::TRANSPARENT,
-                        );
-
-                        // Window minimize
-                        let (min_rect, _) =
-                            ui.allocate_exact_size(Vec2::new(20.0, 20.0), Sense::hover());
-                        draw_tool_icon(
-                            ui.painter(),
-                            min_rect,
-                            ToolIcon::Minimize,
-                            self.tokens.text_muted,
-                            Color32::TRANSPARENT,
-                        );
-
-                        ui.add_space(10.0);
-
-                        // Sample counter indicator (128 spp)
-                        let spp_frame = Frame::NONE
-                            .fill(self.tokens.panel_secondary)
-                            .stroke(Stroke::new(1.0, self.tokens.border))
-                            .corner_radius(CornerRadius::same(2))
-                            .inner_margin(egui::Margin::symmetric(6, 2));
-
-                        spp_frame.show(ui, |ui| {
-                            ui.label(
-                                egui::RichText::new("128 spp")
-                                    .size(11.0)
-                                    .color(self.tokens.text_secondary),
-                            );
-                        });
-                    });
                 });
             });
     }
@@ -564,13 +508,7 @@ impl OpticsLabApp {
                             rect.min + Vec2::new(8.0, 4.0),
                             Vec2::new(18.0, 18.0),
                         );
-                        draw_tool_icon(
-                            &painter,
-                            icon_rect,
-                            tool.icon(),
-                            fg_col,
-                            Color32::TRANSPARENT,
-                        );
+                        draw_icon(&painter, icon_rect, tool.icon(), fg_col, 14.0);
 
                         // Label
                         painter.text(
@@ -666,7 +604,7 @@ impl OpticsLabApp {
                         }
                     });
 
-                    if ui.button("↺ Reset Defaults").clicked() {
+                    if ui.button("Reset Defaults").clicked() {
                         self.sim.incidence_deg = 45.0;
                         self.sim.apex_deg = 60.0;
                         self.sim.sample_count = 32;
@@ -686,12 +624,12 @@ impl OpticsLabApp {
                     ui.horizontal(|ui| {
                         let (icon_rect, _) =
                             ui.allocate_exact_size(Vec2::new(14.0, 14.0), Sense::hover());
-                        draw_tool_icon(
+                        draw_icon(
                             ui.painter(),
                             icon_rect,
-                            ToolIcon::Scene,
+                            IconId::Scene,
                             self.tokens.text_muted,
-                            Color32::TRANSPARENT,
+                            12.0,
                         );
                         ui.label(
                             egui::RichText::new("Scene")
@@ -704,14 +642,14 @@ impl OpticsLabApp {
 
                     // Tree item: Scene
                     let scene_glyph = if self.scene_tree_scene_open {
-                        "▼"
+                        IconId::CaretDown.glyph()
                     } else {
-                        "▶"
+                        IconId::CaretRight.glyph()
                     };
                     if ui
                         .selectable_label(
                             self.selected_scene_object.as_deref() == Some("Scene"),
-                            format!("{scene_glyph} ⛶ Scene"),
+                            format!("{scene_glyph} Scene"),
                         )
                         .clicked()
                     {
@@ -725,7 +663,7 @@ impl OpticsLabApp {
                             if ui
                                 .selectable_label(
                                     self.selected_scene_object.as_deref() == Some("Camera"),
-                                    "📷 Camera",
+                                    format!("{} Camera", IconId::Camera.glyph()),
                                 )
                                 .clicked()
                             {
@@ -734,14 +672,14 @@ impl OpticsLabApp {
 
                             // Prism (expandable)
                             let prism_glyph = if self.scene_tree_prism_open {
-                                "▼"
+                                IconId::CaretDown.glyph()
                             } else {
-                                "▶"
+                                IconId::CaretRight.glyph()
                             };
                             if ui
                                 .selectable_label(
                                     self.selected_scene_object.as_deref() == Some("Prism"),
-                                    format!("{prism_glyph} ▲ Prism"),
+                                    format!("{prism_glyph} Prism"),
                                 )
                                 .clicked()
                             {
@@ -755,7 +693,7 @@ impl OpticsLabApp {
                                         .selectable_label(
                                             self.selected_scene_object.as_deref()
                                                 == Some("Glass (BK7)"),
-                                            "● Glass (BK7)",
+                                            "Glass (BK7)",
                                         )
                                         .clicked()
                                     {
@@ -765,7 +703,7 @@ impl OpticsLabApp {
                                         .selectable_label(
                                             self.selected_scene_object.as_deref()
                                                 == Some("Material"),
-                                            "❖ Material",
+                                            "Material",
                                         )
                                         .clicked()
                                     {
@@ -778,7 +716,7 @@ impl OpticsLabApp {
                             if ui
                                 .selectable_label(
                                     self.selected_scene_object.as_deref() == Some("Light"),
-                                    "☼ Light",
+                                    format!("{} Light", IconId::LightSource.glyph()),
                                 )
                                 .clicked()
                             {
@@ -787,14 +725,14 @@ impl OpticsLabApp {
 
                             // Ground (expandable)
                             let ground_glyph = if self.scene_tree_ground_open {
-                                "▼"
+                                IconId::CaretDown.glyph()
                             } else {
-                                "▶"
+                                IconId::CaretRight.glyph()
                             };
                             if ui
                                 .selectable_label(
                                     self.selected_scene_object.as_deref() == Some("Ground"),
-                                    format!("{ground_glyph} ▤ Ground"),
+                                    format!("{ground_glyph} Ground"),
                                 )
                                 .clicked()
                             {
@@ -868,9 +806,9 @@ impl OpticsLabApp {
                     ui.spacing_mut().item_spacing = Vec2::new(4.0, 0.0);
 
                     let tabs = [
-                        (RightPanelTab::RayInspector, "🔍 Inspector"),
-                        (RightPanelTab::Prescription, "⌖ Prescription"),
-                        (RightPanelTab::GlassCatalog, "📖 Catalog"),
+                        (RightPanelTab::RayInspector, "Inspector"),
+                        (RightPanelTab::Prescription, "Prescription"),
+                        (RightPanelTab::GlassCatalog, "Catalog"),
                     ];
 
                     for (tab, label) in tabs {
@@ -910,7 +848,7 @@ impl OpticsLabApp {
                             });
                             ui.add_space(4.0);
                             if ui
-                                .button("⛶ Open 2D Layout & Aberrations in Center")
+                                .button("Open 2D Layout & Aberrations in Center")
                                 .clicked()
                             {
                                 self.viewport_mode = ViewportMode::View2D;
@@ -992,16 +930,16 @@ impl OpticsLabApp {
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     let (fs_rect, fs_resp) =
                         ui.allocate_exact_size(Vec2::new(24.0, 24.0), Sense::click());
-                    draw_tool_icon(
+                    draw_icon(
                         ui.painter(),
                         fs_rect,
-                        ToolIcon::Fullscreen,
+                        IconId::Fullscreen,
                         if fs_resp.hovered() {
                             self.tokens.accent
                         } else {
                             self.tokens.text_muted
                         },
-                        Color32::TRANSPARENT,
+                        14.0,
                     );
                     if fs_resp.clicked() {
                         ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
@@ -1009,16 +947,16 @@ impl OpticsLabApp {
 
                     let (frame_rect, frame_resp) =
                         ui.allocate_exact_size(Vec2::new(24.0, 24.0), Sense::click());
-                    draw_tool_icon(
+                    draw_icon(
                         ui.painter(),
                         frame_rect,
-                        ToolIcon::Frame,
+                        IconId::ZoomFit,
                         if frame_resp.hovered() {
                             self.tokens.accent
                         } else {
                             self.tokens.text_muted
                         },
-                        Color32::TRANSPARENT,
+                        14.0,
                     );
                     if frame_resp.clicked() {
                         self.needs_fit = true;
@@ -1026,16 +964,16 @@ impl OpticsLabApp {
 
                     let (cam_rect, cam_resp) =
                         ui.allocate_exact_size(Vec2::new(24.0, 24.0), Sense::click());
-                    draw_tool_icon(
+                    draw_icon(
                         ui.painter(),
                         cam_rect,
-                        ToolIcon::Screenshot,
+                        IconId::ExportImage,
                         if cam_resp.hovered() {
                             self.tokens.accent
                         } else {
                             self.tokens.text_muted
                         },
-                        Color32::TRANSPARENT,
+                        14.0,
                     );
                     if cam_resp.clicked() {
                         self.copy_status = Some("Screenshot captured".into());
@@ -1049,7 +987,7 @@ impl OpticsLabApp {
             if ctx.input(|i| !i.raw.hovered_files.is_empty()) {
                 ui.horizontal(|ui| {
                     ui.label(
-                        egui::RichText::new("📂 Drop .zmx file to load optical prescription")
+                        egui::RichText::new("Drop .zmx file to load optical prescription")
                             .size(11.5)
                             .color(self.tokens.accent),
                     );
@@ -1165,7 +1103,7 @@ impl OpticsLabApp {
                 });
 
                 ui.add_space(6.0);
-                if ui.button("🔍 Trace in 3D Prism Viewport").clicked() {
+                if ui.button("Trace in 3D Prism Viewport").clicked() {
                     self.viewport_mode = ViewportMode::View3D;
                 }
             });
@@ -1276,7 +1214,7 @@ impl OpticsLabApp {
                 );
                 ui.add_space(6.0);
 
-                if ui.button("▶ Run 100,000 Ray Traversal Benchmark").clicked() {
+                if ui.button("Run 100,000 Ray Traversal Benchmark").clicked() {
                     let start = std::time::Instant::now();
                     let mut hits = 0usize;
                     let ray_res = optics_core::Ray::new(
@@ -1371,12 +1309,12 @@ impl OpticsLabApp {
                     ui.add_space(8.0);
                     let (logo_rect, _) =
                         ui.allocate_exact_size(Vec2::new(32.0, 32.0), Sense::hover());
-                    draw_tool_icon(
+                    draw_icon(
                         ui.painter(),
                         logo_rect,
-                        ToolIcon::Logo,
+                        IconId::Logo,
                         self.tokens.accent,
-                        Color32::TRANSPARENT,
+                        24.0,
                     );
                     ui.add_space(4.0);
                     ui.heading("OpticsLab");
@@ -1456,6 +1394,10 @@ impl OpticsLabApp {
 
 impl eframe::App for OpticsLabApp {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
+        if !self.fonts_initialized {
+            init_icon_fonts(ctx);
+            self.fonts_initialized = true;
+        }
         apply_tokens(ctx, &self.tokens);
         self.handle_shortcuts(ctx);
         self.handle_file_drag_and_drop(ctx);
