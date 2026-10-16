@@ -46,4 +46,8 @@ pub use theme::{
     ray_color_for_background, resolve_theme, wcag_contrast_ratio, wcag_relative_luminance,
 };
 pub use view_transform::ViewTransform;
-pub use widgets::{abbe_diagram, dispersion_curve_plot, scrub_field};
+pub use widgets::{
+    BannerLevel, ClassicSliderConfig, abbe_diagram, classic_banner, classic_group_box,
+    classic_slider, classic_table, classic_tabs, dispersion_curve_plot, icon_text_button,
+    scrub_field, status_bar_item, toggle_tool_button,
+};

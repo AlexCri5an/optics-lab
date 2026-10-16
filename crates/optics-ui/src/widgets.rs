@@ -1,7 +1,8 @@
 //! Technical UI widgets: drag-to-edit scrub fields, dispersion curve plots, and Abbe diagrams.
 
 use egui::{
-    Align2, Color32, CornerRadius, FontId, Pos2, Response, Sense, Stroke, StrokeKind, Ui, Vec2,
+    Align2, Color32, CornerRadius, FontId, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui,
+    Vec2,
 };
 use optics_glass::{GlassCatalogDb, GlassMaterial};
 use optics_spectral::{LAMBDA_C_NM, LAMBDA_D_NM, LAMBDA_F_NM};
@@ -304,6 +305,406 @@ pub fn abbe_diagram(
     response
 }
 
+/// Renders a classic button combining an icon and a text label.
+pub fn icon_text_button(
+    ui: &mut Ui,
+    icon: crate::icons::IconId,
+    text: &str,
+    tokens: &OpticsTokens,
+    is_selected: bool,
+) -> Response {
+    let padding = Vec2::new(8.0, 4.0);
+    let icon_size = 14.0;
+    let font_id = FontId::proportional(12.0);
+    let galley = ui
+        .painter()
+        .layout_no_wrap(text.into(), font_id, tokens.text_primary);
+    let desired_width = padding.x * 2.0 + icon_size + 6.0 + galley.rect.width();
+    let desired_height = 24.0;
+
+    let (rect, resp) =
+        ui.allocate_exact_size(Vec2::new(desired_width, desired_height), Sense::click());
+    if ui.is_rect_visible(rect) {
+        let (bg, border, fg) = if resp.is_pointer_button_down_on() {
+            (tokens.active_bg, tokens.border_strong, tokens.text_primary)
+        } else if is_selected {
+            (tokens.selected, tokens.border_strong, tokens.text_primary)
+        } else if resp.hovered() {
+            (tokens.hover_bg, tokens.border, tokens.text_primary)
+        } else {
+            (tokens.panel_bg, tokens.border, tokens.text_secondary)
+        };
+
+        let painter = ui.painter();
+        painter.rect_filled(rect, CornerRadius::same(2), bg);
+        painter.rect_stroke(
+            rect,
+            CornerRadius::same(2),
+            Stroke::new(1.0, border),
+            StrokeKind::Inside,
+        );
+
+        let icon_rect = Rect::from_min_size(
+            Pos2::new(rect.left() + padding.x, rect.center().y - icon_size * 0.5),
+            Vec2::splat(icon_size),
+        );
+        crate::icons::draw_icon(painter, icon_rect, icon, fg, icon_size);
+
+        let text_pos = Pos2::new(icon_rect.right() + 6.0, rect.center().y);
+        painter.text(
+            text_pos,
+            Align2::LEFT_CENTER,
+            text,
+            FontId::proportional(12.0),
+            fg,
+        );
+    }
+
+    resp
+}
+
+/// Renders a classic toggle tool button with active indicator state.
+pub fn toggle_tool_button(
+    ui: &mut Ui,
+    icon: crate::icons::IconId,
+    tokens: &OpticsTokens,
+    is_active: bool,
+    tooltip: &str,
+) -> Response {
+    crate::icons::toolbar_button(ui, icon, tokens, is_active, tooltip)
+}
+
+/// Configuration parameters for a classic numeric slider widget.
+#[derive(Debug, Clone, Copy)]
+pub struct ClassicSliderConfig<'a> {
+    /// Slider label text.
+    pub label: &'a str,
+    /// Minimum allowed value.
+    pub min: f64,
+    /// Maximum allowed value.
+    pub max: f64,
+    /// Default reset value (triggered by double-clicking).
+    pub default_val: f64,
+    /// Numeric step increment.
+    pub step: f64,
+    /// Unit suffix appended to readout (e.g. "°", " mm", " nm").
+    pub unit_suffix: &'a str,
+}
+
+/// Renders a classic slider with numeric value box and unit suffix.
+///
+/// Supports:
+/// - Double-click on slider or value box resets to `default_val`
+/// - Keyboard arrow Left/Right steps by `step`
+/// - Shift key modifies step to `step * 0.1` for fine precision adjustment
+pub fn classic_slider(
+    ui: &mut Ui,
+    config: ClassicSliderConfig<'_>,
+    value: &mut f64,
+    tokens: &OpticsTokens,
+) -> bool {
+    let mut changed = false;
+
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new(config.label).color(tokens.text_secondary));
+
+        let slider_resp = ui.add(
+            egui::Slider::new(value, config.min..=config.max)
+                .step_by(config.step)
+                .suffix(config.unit_suffix)
+                .show_value(true),
+        );
+
+        if slider_resp.changed() {
+            changed = true;
+        }
+
+        // Double-click resets to default
+        if slider_resp.double_clicked() {
+            *value = config.default_val;
+            changed = true;
+        }
+
+        // Keyboard fine control when focused
+        if slider_resp.has_focus() {
+            let fine_step = if ui.input(|i| i.modifiers.shift) {
+                config.step * 0.1
+            } else {
+                config.step
+            };
+
+            if ui.input(|i| i.key_pressed(egui::Key::ArrowLeft)) {
+                *value = (*value - fine_step).clamp(config.min, config.max);
+                changed = true;
+            }
+            if ui.input(|i| i.key_pressed(egui::Key::ArrowRight)) {
+                *value = (*value + fine_step).clamp(config.min, config.max);
+                changed = true;
+            }
+        }
+    });
+
+    changed
+}
+
+/// Classic rectangular tabs component with 1px border and crisp state feedback.
+pub fn classic_tabs<T: PartialEq + Copy>(
+    ui: &mut Ui,
+    current: &mut T,
+    tabs: &[(T, &str)],
+    tokens: &OpticsTokens,
+) -> bool {
+    let mut changed = false;
+
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing = Vec2::new(2.0, 0.0);
+
+        for &(val, label) in tabs {
+            let is_selected = *current == val;
+            let (rect, resp) = ui.allocate_exact_size(Vec2::new(80.0, 24.0), Sense::click());
+
+            if ui.is_rect_visible(rect) {
+                let painter = ui.painter();
+                let (bg, border, text_col) = if is_selected {
+                    (tokens.selected, tokens.border_strong, tokens.text_primary)
+                } else if resp.hovered() {
+                    (tokens.hover_bg, tokens.border, tokens.text_primary)
+                } else {
+                    (tokens.panel_bg, tokens.border, tokens.text_muted)
+                };
+
+                painter.rect_filled(rect, CornerRadius::ZERO, bg);
+                painter.rect_stroke(
+                    rect,
+                    CornerRadius::ZERO,
+                    Stroke::new(1.0, border),
+                    StrokeKind::Inside,
+                );
+
+                // Accent top stripe for active tab
+                if is_selected {
+                    let stripe = Rect::from_min_size(rect.min, Vec2::new(rect.width(), 2.0));
+                    painter.rect_filled(stripe, CornerRadius::ZERO, tokens.accent);
+                }
+
+                painter.text(
+                    rect.center(),
+                    Align2::CENTER_CENTER,
+                    label,
+                    FontId::proportional(11.5),
+                    text_col,
+                );
+            }
+
+            if resp.clicked() && !is_selected {
+                *current = val;
+                changed = true;
+            }
+        }
+    });
+
+    changed
+}
+
+/// Classic CAD/scientific fieldset group box with embedded title header.
+pub fn classic_group_box<R>(
+    ui: &mut Ui,
+    title: &str,
+    tokens: &OpticsTokens,
+    add_contents: impl FnOnce(&mut Ui) -> R,
+) -> R {
+    let margin = Vec2::new(8.0, 10.0);
+    let title_font = FontId::proportional(11.0);
+    let galley = ui
+        .painter()
+        .layout_no_wrap(title.into(), title_font, tokens.text_secondary);
+
+    let start_pos = ui.cursor().min;
+    let initial_width = ui.available_width();
+
+    let response = egui::Frame::NONE
+        .inner_margin(egui::Margin::symmetric(margin.x as i8, margin.y as i8))
+        .show(ui, |ui| {
+            ui.add_space(6.0);
+            add_contents(ui)
+        });
+
+    let frame_rect = Rect::from_min_size(
+        start_pos,
+        Vec2::new(initial_width, response.response.rect.height()),
+    );
+    let painter = ui.painter();
+
+    // 1px fieldset border
+    painter.rect_stroke(
+        frame_rect,
+        CornerRadius::same(2),
+        Stroke::new(1.0, tokens.border),
+        StrokeKind::Inside,
+    );
+
+    // Title cutout background & text
+    let title_rect = Rect::from_min_size(
+        Pos2::new(
+            frame_rect.left() + 10.0,
+            frame_rect.top() - galley.rect.height() * 0.5,
+        ),
+        galley.rect.size() + Vec2::new(6.0, 0.0),
+    );
+    painter.rect_filled(title_rect, CornerRadius::ZERO, tokens.panel_bg);
+    painter.text(
+        title_rect.center(),
+        Align2::CENTER_CENTER,
+        title,
+        FontId::proportional(11.0),
+        tokens.text_secondary,
+    );
+
+    response.inner
+}
+
+/// Message severity level for classic banners.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BannerLevel {
+    /// Informational notice.
+    Info,
+    /// Warning of edge states or parameter limits.
+    Warning,
+    /// Numerical or physical error.
+    Error,
+}
+
+/// Renders a flat classic banner notice with 1px border and sentence case text.
+pub fn classic_banner(
+    ui: &mut Ui,
+    level: BannerLevel,
+    message: &str,
+    tokens: &OpticsTokens,
+) -> Response {
+    let (icon, col) = match level {
+        BannerLevel::Info => (crate::icons::IconId::Info, tokens.accent),
+        BannerLevel::Warning => (crate::icons::IconId::Warning, tokens.status_warning),
+        BannerLevel::Error => (crate::icons::IconId::Error, tokens.status_error),
+    };
+
+    let desired_height = 28.0;
+    let (rect, resp) = ui.allocate_exact_size(
+        Vec2::new(ui.available_width(), desired_height),
+        Sense::hover(),
+    );
+
+    if ui.is_rect_visible(rect) {
+        let painter = ui.painter();
+        let bg = match level {
+            BannerLevel::Info => tokens.hover_bg,
+            BannerLevel::Warning => Color32::from_rgba_unmultiplied(220, 150, 40, 20),
+            BannerLevel::Error => Color32::from_rgba_unmultiplied(220, 50, 50, 20),
+        };
+
+        painter.rect_filled(rect, CornerRadius::same(2), bg);
+        painter.rect_stroke(
+            rect,
+            CornerRadius::same(2),
+            Stroke::new(1.0, col),
+            StrokeKind::Inside,
+        );
+
+        let icon_rect = Rect::from_min_size(
+            Pos2::new(rect.left() + 8.0, rect.center().y - 7.0),
+            Vec2::splat(14.0),
+        );
+        crate::icons::draw_icon(painter, icon_rect, icon, col, 14.0);
+
+        painter.text(
+            Pos2::new(icon_rect.right() + 8.0, rect.center().y),
+            Align2::LEFT_CENTER,
+            message,
+            FontId::proportional(12.0),
+            tokens.text_primary,
+        );
+    }
+
+    resp
+}
+
+/// Renders a table with a fixed header bar and striped data rows.
+pub fn classic_table<R>(
+    ui: &mut Ui,
+    headers: &[&str],
+    tokens: &OpticsTokens,
+    add_rows: impl FnOnce(&mut Ui) -> R,
+) -> R {
+    ui.vertical(|ui| {
+        // Fixed header row
+        let header_height = 22.0;
+        let (rect, _) = ui.allocate_exact_size(
+            Vec2::new(ui.available_width(), header_height),
+            Sense::hover(),
+        );
+        let painter = ui.painter();
+        painter.rect_filled(rect, CornerRadius::ZERO, tokens.panel_bg);
+        painter.line_segment(
+            [rect.left_bottom(), rect.right_bottom()],
+            Stroke::new(1.0, tokens.border_strong),
+        );
+
+        let col_w = rect.width() / headers.len() as f32;
+        for (i, &h) in headers.iter().enumerate() {
+            let col_x = rect.left() + i as f32 * col_w + 6.0;
+            painter.text(
+                Pos2::new(col_x, rect.center().y),
+                Align2::LEFT_CENTER,
+                h,
+                FontId::proportional(11.0),
+                tokens.text_primary,
+            );
+        }
+
+        // Data rows
+        add_rows(ui)
+    })
+    .inner
+}
+
+/// Renders an item in the status bar with optional hover hint and tooltip.
+pub fn status_bar_item(
+    ui: &mut Ui,
+    text: &str,
+    tokens: &OpticsTokens,
+    tooltip: Option<&str>,
+) -> Response {
+    let font_id = FontId::proportional(11.0);
+    let galley = ui
+        .painter()
+        .layout_no_wrap(text.into(), font_id, tokens.text_secondary);
+    let size = Vec2::new(galley.rect.width() + 10.0, 20.0);
+
+    let (rect, resp) = ui.allocate_exact_size(size, Sense::hover());
+    if ui.is_rect_visible(rect) {
+        let painter = ui.painter();
+        if resp.hovered() {
+            painter.rect_filled(rect, CornerRadius::same(2), tokens.hover_bg);
+        }
+        painter.text(
+            rect.center(),
+            Align2::CENTER_CENTER,
+            text,
+            FontId::proportional(11.0),
+            if resp.hovered() {
+                tokens.text_primary
+            } else {
+                tokens.text_secondary
+            },
+        );
+    }
+
+    if let Some(tt) = tooltip {
+        resp.on_hover_text(tt)
+    } else {
+        resp
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -320,5 +721,26 @@ mod tests {
             "Normal dispersion requires n(blue) > n(red), got n_blue={n_blue}, n_red={n_red}"
         );
         Ok(())
+    }
+
+    #[test]
+    fn test_banner_level_properties() {
+        assert_ne!(BannerLevel::Info, BannerLevel::Error);
+        assert_ne!(BannerLevel::Warning, BannerLevel::Error);
+    }
+
+    #[test]
+    fn test_tabs_selection() {
+        let ctx = egui::Context::default();
+        let tokens =
+            crate::theme::resolve_theme(crate::theme::ThemePreference::ClassicLight, false);
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                let mut current = 1;
+                let tabs = [(1, "Tab 1"), (2, "Tab 2")];
+                classic_tabs(ui, &mut current, &tabs, &tokens);
+                assert_eq!(current, 1);
+            });
+        });
     }
 }
