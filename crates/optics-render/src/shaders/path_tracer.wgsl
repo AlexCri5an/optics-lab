@@ -29,6 +29,14 @@ struct RenderParams {
     sample_count: u32,
     max_bounces: u32,
     render_mode: u32, // 0: Standard, 1: Traversal Heatmap, 2: Surface Normals
+    b1: f32,
+    c1: f32,
+    b2: f32,
+    c2: f32,
+    b3: f32,
+    c3: f32,
+    _pad0: f32,
+    _pad1: f32,
 };
 
 @group(0) @binding(0) var<uniform> camera: CameraUniform;
@@ -205,14 +213,14 @@ fn evaluate_dielectric(
     return vec3<f32>(1.0, 1.0, 1.0);
 }
 
-// Evaluates refractive index n for N-BK7 using Sellmeier equation (lambda in nm)
-fn sellmeier_nbk7(lambda_nm: f32) -> f32 {
+// Evaluates refractive index n using Sellmeier equation with dynamic coefficients (lambda in nm)
+fn sellmeier_glass(lambda_nm: f32) -> f32 {
     let l_um = clamp(lambda_nm, 350.0, 850.0) * 0.001;
     let l2 = l_um * l_um;
     let n2 = 1.0 
-        + (1.03961212 * l2) / (l2 - 0.00600069867)
-        + (0.231792344 * l2) / (l2 - 0.0200179144)
-        + (1.01046945 * l2) / (l2 - 103.560653);
+        + (params.b1 * l2) / (l2 - params.c1)
+        + (params.b2 * l2) / (l2 - params.c2)
+        + (params.b3 * l2) / (l2 - params.c3);
     return sqrt(max(1.0, n2));
 }
 
@@ -299,7 +307,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     // Sample hero wavelength for dispersion
     let hero_wl = 380.0 + pcg32(&rng) * 400.0;
-    let glass_n = sellmeier_nbk7(hero_wl);
+    let glass_n = sellmeier_glass(hero_wl);
     let spectral_weight = wavelength_to_rgb(hero_wl);
 
     var radiance = vec3<f32>(0.0, 0.0, 0.0);

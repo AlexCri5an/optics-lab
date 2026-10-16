@@ -367,6 +367,20 @@ pub fn render_viewport_3d(
         if !gpu_state.is_paused && gpu_state.sample_count < gpu_state.target_spp as u64 {
             let start = std::time::Instant::now();
             if let Ok(mut r) = renderer_arc.lock() {
+                let material = match sim.glass_name.as_str() {
+                    "SF11" => optics_glass::GlassMaterial::sf11(),
+                    "F2" => optics_glass::GlassMaterial::f2(),
+                    "Fused Silica" => optics_glass::GlassMaterial::fused_silica(),
+                    _ => optics_glass::GlassMaterial::n_bk7(),
+                };
+                if let optics_glass::material::DispersionModel::Sellmeier1 { b, c } =
+                    material.dispersion
+                {
+                    r.set_material_sellmeier(
+                        [b[0] as f32, b[1] as f32, b[2] as f32],
+                        [c[0] as f32, c[1] as f32, c[2] as f32],
+                    );
+                }
                 r.render_mode = gpu_state.render_mode;
                 r.resize(target_pixel_w, target_pixel_h);
                 r.render_frame();

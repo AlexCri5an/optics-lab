@@ -36,6 +36,20 @@ pub struct RenderParams {
     pub max_bounces: u32,
     /// Active render diagnostic mode ([`RenderMode`]).
     pub render_mode: u32,
+    /// Sellmeier B1 coefficient.
+    pub b1: f32,
+    /// Sellmeier C1 coefficient.
+    pub c1: f32,
+    /// Sellmeier B2 coefficient.
+    pub b2: f32,
+    /// Sellmeier C2 coefficient.
+    pub c2: f32,
+    /// Sellmeier B3 coefficient.
+    pub b3: f32,
+    /// Sellmeier C3 coefficient.
+    pub c3: f32,
+    /// Uniform alignment padding.
+    pub _pad: [f32; 2],
 }
 
 /// Orchestrates GPU path tracing passes, accumulation, and presentation.
@@ -77,6 +91,10 @@ pub struct PathTracingRenderer {
     pub render_mode: RenderMode,
     /// Maximum ray bounces per path.
     pub max_bounces: u32,
+    /// Active Sellmeier dispersion B coefficients [B1, B2, B3].
+    pub sellmeier_b: [f32; 3],
+    /// Active Sellmeier dispersion C coefficients [C1, C2, C3].
+    pub sellmeier_c: [f32; 3],
 }
 
 impl PathTracingRenderer {
@@ -107,11 +125,22 @@ impl PathTracingRenderer {
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
 
+        // Default Schott N-BK7 Sellmeier coefficients
+        let default_b = [1.03961212_f32, 0.231792344, 1.01046945];
+        let default_c = [0.00600069867_f32, 0.0200179144, 103.560653];
+
         let initial_params = RenderParams {
             frame_index: 0,
             sample_count: 0,
             max_bounces: 6,
             render_mode: RenderMode::Standard as u32,
+            b1: default_b[0],
+            c1: default_c[0],
+            b2: default_b[1],
+            c2: default_c[1],
+            b3: default_b[2],
+            c3: default_c[2],
+            _pad: [0.0; 2],
         };
 
         let params_buffer = context
@@ -358,7 +387,18 @@ impl PathTracingRenderer {
             frame_counter: 0,
             render_mode: RenderMode::Standard,
             max_bounces: 6,
+            sellmeier_b: default_b,
+            sellmeier_c: default_c,
         })
+    }
+
+    /// Updates the Sellmeier dispersion coefficients used for real glass spectral path tracing.
+    pub fn set_material_sellmeier(&mut self, b: [f32; 3], c: [f32; 3]) {
+        if self.sellmeier_b != b || self.sellmeier_c != c {
+            self.sellmeier_b = b;
+            self.sellmeier_c = c;
+            self.reset_accumulation();
+        }
     }
 
     /// Resets the progressive sample accumulation count.
@@ -477,6 +517,13 @@ impl PathTracingRenderer {
             sample_count: self.sample_count as u32,
             max_bounces: self.max_bounces,
             render_mode: self.render_mode as u32,
+            b1: self.sellmeier_b[0],
+            c1: self.sellmeier_c[0],
+            b2: self.sellmeier_b[1],
+            c2: self.sellmeier_c[1],
+            b3: self.sellmeier_b[2],
+            c3: self.sellmeier_c[2],
+            _pad: [0.0; 2],
         };
 
         self.context
@@ -547,8 +594,8 @@ mod tests {
         );
         assert_eq!(
             std::mem::size_of::<RenderParams>(),
-            16,
-            "RenderParams must be 16 bytes"
+            48,
+            "RenderParams must be 48 bytes (3x 16-byte aligned blocks)"
         );
         Ok(())
     }
