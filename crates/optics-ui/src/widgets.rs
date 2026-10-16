@@ -344,6 +344,15 @@ pub fn icon_text_button(
             StrokeKind::Inside,
         );
 
+        if resp.has_focus() {
+            painter.rect_stroke(
+                rect,
+                CornerRadius::same(2),
+                Stroke::new(1.0, tokens.focus_ring),
+                StrokeKind::Inside,
+            );
+        }
+
         let icon_rect = Rect::from_min_size(
             Pos2::new(rect.left() + padding.x, rect.center().y - icon_size * 0.5),
             Vec2::splat(icon_size),
@@ -359,6 +368,10 @@ pub fn icon_text_button(
             fg,
         );
     }
+
+    resp.widget_info(|| {
+        egui::WidgetInfo::selected(egui::WidgetType::Button, ui.is_enabled(), is_selected, text)
+    });
 
     resp
 }
@@ -455,11 +468,12 @@ pub fn classic_tabs<T: PartialEq + Copy>(
     tokens: &OpticsTokens,
 ) -> bool {
     let mut changed = false;
+    let mut next_val = None;
 
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing = Vec2::new(2.0, 0.0);
 
-        for &(val, label) in tabs {
+        for (idx, &(val, label)) in tabs.iter().enumerate() {
             let is_selected = *current == val;
             let (rect, resp) = ui.allocate_exact_size(Vec2::new(80.0, 24.0), Sense::click());
 
@@ -481,6 +495,15 @@ pub fn classic_tabs<T: PartialEq + Copy>(
                     StrokeKind::Inside,
                 );
 
+                if resp.has_focus() {
+                    painter.rect_stroke(
+                        rect,
+                        CornerRadius::ZERO,
+                        Stroke::new(1.0, tokens.focus_ring),
+                        StrokeKind::Inside,
+                    );
+                }
+
                 // Accent top stripe for active tab
                 if is_selected {
                     let stripe = Rect::from_min_size(rect.min, Vec2::new(rect.width(), 2.0));
@@ -496,12 +519,47 @@ pub fn classic_tabs<T: PartialEq + Copy>(
                 );
             }
 
-            if resp.clicked() && !is_selected {
-                *current = val;
-                changed = true;
+            resp.widget_info(|| {
+                egui::WidgetInfo::selected(
+                    egui::WidgetType::SelectableLabel,
+                    ui.is_enabled(),
+                    is_selected,
+                    label,
+                )
+            });
+
+            // Keyboard navigation between tabs
+            if resp.has_focus() {
+                if ui.input(|i| {
+                    i.key_pressed(egui::Key::ArrowLeft) || i.key_pressed(egui::Key::ArrowUp)
+                }) && idx > 0
+                {
+                    next_val = Some(tabs[idx - 1].0);
+                }
+                if ui.input(|i| {
+                    i.key_pressed(egui::Key::ArrowRight) || i.key_pressed(egui::Key::ArrowDown)
+                }) && idx + 1 < tabs.len()
+                {
+                    next_val = Some(tabs[idx + 1].0);
+                }
+            }
+
+            if (resp.clicked()
+                || (resp.has_focus()
+                    && ui.input(|i| {
+                        i.key_pressed(egui::Key::Enter) || i.key_pressed(egui::Key::Space)
+                    })))
+                && !is_selected
+            {
+                next_val = Some(val);
             }
         }
     });
+
+    if let Some(nv) = next_val {
+        *current = nv;
+        changed = true;
+    }
 
     changed
 }

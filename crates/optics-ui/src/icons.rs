@@ -296,8 +296,24 @@ pub fn toolbar_button(
                 egui::StrokeKind::Inside,
             );
         }
+        if resp.has_focus() {
+            painter.rect_stroke(
+                rect,
+                egui::CornerRadius::same(2),
+                Stroke::new(1.0, tokens.focus_ring),
+                egui::StrokeKind::Inside,
+            );
+        }
         draw_icon(painter, rect, icon, fg, 16.0);
     }
+    resp.widget_info(|| {
+        egui::WidgetInfo::selected(
+            egui::WidgetType::Button,
+            ui.is_enabled(),
+            is_selected,
+            tooltip,
+        )
+    });
     resp.on_hover_text(tooltip)
 }
 
