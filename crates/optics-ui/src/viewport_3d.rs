@@ -394,4 +394,104 @@ pub fn render_viewport_3d(
         egui::FontId::proportional(11.0),
         Color32::from_rgb(0x44, 0x8a, 0xff),
     );
+
+    // 7. Classic CAD Scale Bar in lower-right corner
+    let scale_len_px = 75.0;
+    let scale_origin = Pos2::new(rect.right() - scale_len_px - 28.0, rect.bottom() - 32.0);
+    let scale_end = Pos2::new(scale_origin.x + scale_len_px, scale_origin.y);
+    let scale_stroke = Stroke::new(1.0, tokens.text_secondary);
+
+    painter.line_segment([scale_origin, scale_end], scale_stroke);
+    painter.line_segment(
+        [
+            Pos2::new(scale_origin.x, scale_origin.y - 3.5),
+            Pos2::new(scale_origin.x, scale_origin.y + 3.5),
+        ],
+        scale_stroke,
+    );
+    painter.line_segment(
+        [
+            Pos2::new(scale_end.x, scale_end.y - 3.5),
+            Pos2::new(scale_end.x, scale_end.y + 3.5),
+        ],
+        scale_stroke,
+    );
+    painter.text(
+        Pos2::new(scale_origin.x + scale_len_px * 0.5, scale_origin.y - 6.0),
+        egui::Align2::CENTER_BOTTOM,
+        "50 mm",
+        egui::FontId::monospace(10.0),
+        tokens.text_secondary,
+    );
+
+    // 8. Classic Wavelength Legend Bar centered near bottom
+    let legend_width = (rect.width() * 0.42).clamp(220.0, 440.0);
+    let legend_rect = Rect::from_center_size(
+        Pos2::new(rect.center().x, rect.bottom() - 28.0),
+        Vec2::new(legend_width, 24.0),
+    );
+    if legend_rect.width() > 120.0 && legend_rect.top() > rect.top() + 80.0 {
+        crate::legend::draw_wavelength_legend(
+            &painter,
+            legend_rect,
+            &sim.rays,
+            *selected_ray,
+            tokens,
+        );
+
+        if ui.input(|i| i.pointer.primary_clicked()) {
+            if let Some(pos) = mouse_pos {
+                if legend_rect.contains(pos) {
+                    let clicked = crate::legend::find_closest_ray_by_x(
+                        pos.x,
+                        legend_rect.min.x,
+                        legend_rect.max.x,
+                        &sim.rays,
+                    );
+                    if clicked.is_some() {
+                        *selected_ray = clicked;
+                    }
+                }
+            }
+        }
+    }
+
+    // 9. Edge-State Notice Banner near top of canvas
+    let edge_state = sim.detect_edge_state();
+    if edge_state != crate::sim::EdgeState::Normal {
+        let banner_text = match edge_state {
+            crate::sim::EdgeState::AllTotalInternalReflection => {
+                "Total internal reflection: rays reflect internally and cannot escape exit face"
+            }
+            crate::sim::EdgeState::NoRaysTransmitted => {
+                "No rays transmitted through prism exit face"
+            }
+            crate::sim::EdgeState::RayMissedPrism => {
+                "Incoming ray does not intersect prism surface"
+            }
+            crate::sim::EdgeState::Normal => "",
+        };
+        let banner_rect = Rect::from_center_size(
+            Pos2::new(rect.center().x, rect.top() + 24.0),
+            Vec2::new((rect.width() - 80.0).clamp(200.0, 560.0), 24.0),
+        );
+        painter.rect_filled(
+            banner_rect,
+            egui::CornerRadius::same(2),
+            Color32::from_rgba_unmultiplied(220, 150, 40, 25),
+        );
+        painter.rect_stroke(
+            banner_rect,
+            egui::CornerRadius::same(2),
+            Stroke::new(1.0, tokens.status_warning),
+            egui::StrokeKind::Inside,
+        );
+        painter.text(
+            banner_rect.center(),
+            egui::Align2::CENTER_CENTER,
+            banner_text,
+            egui::FontId::proportional(11.0),
+            tokens.text_primary,
+        );
+    }
 }
