@@ -74,14 +74,22 @@ pub fn compute_wavefront_map(
         ));
     }
 
-    let paraxial = calculate_paraxial_properties(prescription, wavelength_nm)?;
+    let paraxial = calculate_paraxial_properties(prescription, wavelength_nm).ok();
     let lambda_mm = wavelength_nm * 1e-6; // nm to mm
 
     let z_first = prescription
         .surfaces
         .first()
         .map_or(0.0, |s| s.conic.vertex_z);
-    let z_enp = z_first + paraxial.entrance_pupil_pos_mm;
+    let enp_pos = paraxial.as_ref().map_or_else(
+        || {
+            let stop_idx = prescription.surfaces.iter().position(|s| s.is_stop).unwrap_or(0);
+            let z_stop = prescription.surfaces.get(stop_idx).map_or(0.0, |s| s.conic.vertex_z);
+            z_stop - z_first
+        },
+        |p| p.entrance_pupil_pos_mm,
+    );
+    let z_enp = z_first + enp_pos;
 
     // Trace reference chief ray (Px = 0, Py = 0)
     let chief_ray = launch_pupil_ray(
@@ -91,22 +99,47 @@ pub fn compute_wavefront_map(
         wavelength_nm,
         z_enp,
     )?;
-    let chief_record = trace_sequential(prescription, &chief_ray)?;
-    let chief_img_hit =
-        chief_record.hits.last().cloned().ok_or_else(|| {
-            OpticsError::RayMissedSurface("Chief ray produced no hits".to_string())
-        })?;
+    let chief_record = match trace_sequential(prescription, &chief_ray) {
+        Ok(rec) if !rec.hits.is_empty() && !rec.is_vignetted => rec,
+        _ => {
+            let aimed = (|| -> Result<crate::types::Ray, OpticsError> {
+                let p = crate::types::Pupil::new(0.0, 0.0)?;
+                let w = crate::types::Wavelength::from_nanometers(wavelength_nm)?;
+                crate::aiming::trace_aimed_ray(
+                    prescription,
+                    crate::types::Field::AngleDegrees { x: 0.0, y: field_angle_deg },
+                    p,
+                    w,
+                    crate::aiming::RayAimingMode::RealIterative,
+                )
+            })();
+            match aimed.and_then(|r| trace_sequential(prescription, &r)) {
+                Ok(rec) if !rec.hits.is_empty() && !rec.is_vignetted => rec,
+                _ => {
+                    return Err(OpticsError::RayMissedSurface(format!(
+                        "Chief ray at field {:.1}° is vignetted or missed aperture",
+                        field_angle_deg
+                    )));
+                }
+            }
+        }
+    };
+    let chief_img_hit = chief_record.hits.last().cloned().unwrap();
     let chief_img_pt = chief_img_hit.point;
 
     // Chief ray OPL from first surface to image plane
     let chief_opl = calculate_path_opl(&chief_record.points, prescription, wavelength_nm);
 
     // Exit pupil reference sphere center and radius
-    let r_ref = if paraxial.exit_pupil_pos_mm.abs() > 1e-3 {
-        paraxial.exit_pupil_pos_mm.abs()
-    } else {
-        paraxial.efl_mm.abs()
-    };
+    let r_ref = paraxial.as_ref().map_or(100.0, |p| {
+        if p.exit_pupil_pos_mm.is_finite() && p.exit_pupil_pos_mm.abs() > 1e-3 {
+            p.exit_pupil_pos_mm.abs()
+        } else if p.efl_mm.is_finite() && p.efl_mm.abs() > 1e-3 {
+            p.efl_mm.abs()
+        } else {
+            100.0
+        }
+    });
 
     let step = 2.0 / (grid_size as f64 - 1.0);
     let mut opd_grid = vec![None; grid_size * grid_size];

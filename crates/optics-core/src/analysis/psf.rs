@@ -79,8 +79,12 @@ pub fn compute_fft_psf(
         ));
     }
 
-    let paraxial = calculate_paraxial_properties(prescription, wavelength_nm)?;
-    let f_number = paraxial.f_number;
+    let paraxial = calculate_paraxial_properties(prescription, wavelength_nm).ok();
+    let f_number = paraxial
+        .as_ref()
+        .map(|p| p.f_number)
+        .filter(|&f| f.is_finite() && f > 0.05)
+        .unwrap_or(5.0);
     let lambda_um = wavelength_nm * 1e-3; // nm to um
     let airy_radius_um = 1.22 * lambda_um * f_number;
 

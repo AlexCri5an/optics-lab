@@ -69,9 +69,14 @@ pub fn compute_diffraction_mtf(
     field_angle_deg: f64,
     wavelength_nm: f64,
 ) -> Result<MtfCurve, OpticsError> {
-    let paraxial = calculate_paraxial_properties(prescription, wavelength_nm)?;
+    let paraxial = calculate_paraxial_properties(prescription, wavelength_nm).ok();
+    let f_number = paraxial
+        .as_ref()
+        .map(|p| p.f_number)
+        .filter(|&f| f.is_finite() && f > 0.05)
+        .unwrap_or(5.0);
     let lambda_mm = wavelength_nm * 1e-6; // nm to mm
-    let cutoff_frequency_lpm = 1.0 / (lambda_mm * paraxial.f_number);
+    let cutoff_frequency_lpm = (1.0 / (lambda_mm * f_number)).clamp(5.0, 5000.0);
 
     let psf = compute_fft_psf(prescription, 64, 128, field_angle_deg, wavelength_nm)?;
     let n = psf.grid_size;

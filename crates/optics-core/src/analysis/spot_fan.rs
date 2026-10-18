@@ -168,20 +168,23 @@ pub fn launch_pupil_ray(
     let px_mm = pupil.px * r_enp;
     let py_mm = pupil.py * r_enp;
 
-    // Collimated ray direction from field angle (light travels along +z)
-    let ux = field_angle_deg.0.to_radians().tan();
-    let uy = field_angle_deg.1.to_radians().tan();
-    let dir = Vec3::new(ux, uy, 1.0);
+    // Collimated ray direction from field angle using direction cosines (robust up to 89.9 deg)
+    let th_x = field_angle_deg.0.to_radians();
+    let th_y = field_angle_deg.1.to_radians();
+    let kx = th_x.sin() * th_y.cos();
+    let ky = th_y.sin();
+    let kz = (1.0 - kx * kx - ky * ky).max(1e-12).sqrt();
+    let norm_dir = Vec3::new(kx, ky, kz);
 
-    // Launch plane placed 10 mm in front of the first optical surface vertex
+    // Launch plane placed in front of the first optical surface vertex, scaled by pupil size
     let z_first = prescription
         .surfaces
         .first()
         .map_or(0.0, |s| s.conic.vertex_z);
-    let z_launch = z_first - 10.0;
+    let margin = (prescription.entrance_pupil_diameter_mm * 1.5).clamp(0.5, 10.0);
+    let z_launch = z_first - margin;
 
     // Intersect the pupil plane (x = px_mm, y = py_mm, z = z_enp_mm) backwards to z_launch
-    let norm_dir = dir.normalize();
     if norm_dir.z.abs() < 1e-12 {
         return Err(OpticsError::NumericalSingularity(
             "Ray direction has near-zero longitudinal component".to_string(),
@@ -337,12 +340,21 @@ pub fn trace_spot_diagram(
     wavelength_nm: f64,
     pattern: PupilPattern,
 ) -> Result<SpotDiagram, OpticsError> {
-    let parax = calculate_paraxial_properties(prescription, wavelength_nm)?;
+    let parax = calculate_paraxial_properties(prescription, wavelength_nm).ok();
+    let enp_pos = parax.as_ref().map_or_else(
+        || {
+            let stop_idx = prescription.surfaces.iter().position(|s| s.is_stop).unwrap_or(0);
+            let z_first = prescription.surfaces.first().map_or(0.0, |s| s.conic.vertex_z);
+            let z_stop = prescription.surfaces.get(stop_idx).map_or(0.0, |s| s.conic.vertex_z);
+            z_stop - z_first
+        },
+        |p| p.entrance_pupil_pos_mm,
+    );
     let z_first = prescription
         .surfaces
         .first()
         .map_or(0.0, |s| s.conic.vertex_z);
-    let z_enp = z_first + parax.entrance_pupil_pos_mm;
+    let z_enp = z_first + enp_pos;
 
     // Trace reference chief ray (Px = 0, Py = 0)
     let chief_ray = launch_pupil_ray(
@@ -411,7 +423,8 @@ pub fn trace_spot_diagram(
         }
     }
 
-    let metrics = spot_diagram_metrics(&points, wavelength_nm, parax.f_number, total_traced);
+    let f_number = parax.as_ref().map_or(f64::INFINITY, |p| p.f_number);
+    let metrics = spot_diagram_metrics(&points, wavelength_nm, f_number, total_traced);
 
     Ok(SpotDiagram {
         field_angle_deg,
@@ -464,12 +477,21 @@ pub fn trace_ray_fan(
     wavelength_nm: f64,
     num_points: usize,
 ) -> Result<RayFanData, OpticsError> {
-    let parax = calculate_paraxial_properties(prescription, wavelength_nm)?;
+    let parax = calculate_paraxial_properties(prescription, wavelength_nm).ok();
+    let enp_pos = parax.as_ref().map_or_else(
+        || {
+            let stop_idx = prescription.surfaces.iter().position(|s| s.is_stop).unwrap_or(0);
+            let z_first = prescription.surfaces.first().map_or(0.0, |s| s.conic.vertex_z);
+            let z_stop = prescription.surfaces.get(stop_idx).map_or(0.0, |s| s.conic.vertex_z);
+            z_stop - z_first
+        },
+        |p| p.entrance_pupil_pos_mm,
+    );
     let z_first = prescription
         .surfaces
         .first()
         .map_or(0.0, |s| s.conic.vertex_z);
-    let z_enp = z_first + parax.entrance_pupil_pos_mm;
+    let z_enp = z_first + enp_pos;
 
     // Trace reference chief ray (Px = 0, Py = 0)
     let chief_ray = launch_pupil_ray(

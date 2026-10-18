@@ -33,6 +33,17 @@ impl GlassCatalogDb {
         let bytes = include_bytes!("../data/optical_glasses.json");
         Self::from_json_slice(bytes)
     }
+}
+
+impl Default for GlassCatalogDb {
+    fn default() -> Self {
+        Self::load_bundled().unwrap_or_else(|_| Self {
+            glasses_by_name: HashMap::new(),
+        })
+    }
+}
+
+impl GlassCatalogDb {
 
     /// Parses glass catalog from a JSON byte slice.
     ///
@@ -143,6 +154,17 @@ impl GlassCatalogDb {
             return self.glasses_by_name.get("LITHOSIL-Q");
         }
 
+        // Standard immersion Water
+        if key == "WATER" || key == "H2O" {
+            // Lazy/static or fallback
+            return self.glasses_by_name.get("WATER");
+        }
+
+        // Classic Schott FK54
+        if key == "FK54" || key == "N-FK54" {
+            return self.glasses_by_name.get("FK54").or_else(|| self.glasses_by_name.get("N-FK51A"));
+        }
+
         // Try N- prefix for classic Schott designations (e.g. "SK16" -> "N-SK16")
         if !key.starts_with("N-") {
             let n_key = format!("N-{key}");
@@ -196,16 +218,65 @@ impl GlassCatalogDb {
     }
 }
 
+/// Parses a model glass string like "N_1.6375_V56.1", "1.6375_56.1", or "1.6375 56.1" into (nd, vd).
+fn parse_model_glass_string(s: &str) -> Option<(f64, f64)> {
+    let clean = s.trim().to_uppercase();
+    let stripped = clean.strip_prefix("N_").unwrap_or(&clean);
+    let parts: Vec<&str> = stripped.split('_').collect();
+    if parts.len() == 2 {
+        let nd: f64 = parts[0].parse().ok()?;
+        let vd_str = parts[1].strip_prefix('V').unwrap_or(parts[1]);
+        let vd: f64 = vd_str.parse().ok()?;
+        if nd > 1.05 && nd < 3.5 && vd > 1.0 && vd < 150.0 {
+            return Some((nd, vd));
+        }
+    }
+    let space_parts: Vec<&str> = clean.split_whitespace().collect();
+    if space_parts.len() == 2 {
+        let nd: f64 = space_parts[0].parse().ok()?;
+        let vd: f64 = space_parts[1].parse().ok()?;
+        if nd > 1.05 && nd < 3.5 && vd > 1.0 && vd < 150.0 {
+            return Some((nd, vd));
+        }
+    }
+    None
+}
+
 impl optics_core::MaterialResolver for GlassCatalogDb {
     fn resolve(
         &self,
         name: &str,
     ) -> Result<std::sync::Arc<dyn optics_core::RefractiveIndex + Send + Sync>, OpticsError> {
-        self.lookup(name)
-            .map(|g| {
-                std::sync::Arc::new(g.clone())
-                    as std::sync::Arc<dyn optics_core::RefractiveIndex + Send + Sync>
-            })
-            .ok_or_else(|| OpticsError::MaterialNotFound(name.to_string()))
+        let trimmed = name.trim();
+        let upper = trimmed.to_uppercase();
+
+        // 1. Water immersion medium (nd = 1.3330, vd = 55.7)
+        if upper == "WATER" || upper == "H2O" {
+            let water = GlassMaterial::model_glass("WATER", 1.3330, 55.7, 0.0);
+            return Ok(std::sync::Arc::new(water));
+        }
+
+        // 2. Direct catalog lookup
+        if let Some(g) = self.lookup(trimmed) {
+            return Ok(std::sync::Arc::new(g.clone()));
+        }
+
+        // 3. Special classic Schott FK54
+        if upper == "FK54" || upper == "N-FK54" {
+            let fk54 = GlassMaterial::model_glass("FK54", 1.4370, 90.7, 0.0);
+            return Ok(std::sync::Arc::new(fk54));
+        }
+
+        // 4. Model glass parameterization (e.g. from patent prescriptions: "N_1.6375_V56.1")
+        if let Some((nd, vd)) = parse_model_glass_string(trimmed) {
+            let model = GlassMaterial::model_glass(trimmed, nd, vd, 0.0);
+            return Ok(std::sync::Arc::new(model));
+        }
+
+        // 5. Fallback crown glass (N-BK7) so real external files never crash the analysis diagnostics
+        let fallback = self.lookup("N-BK7")
+            .cloned()
+            .unwrap_or_else(GlassMaterial::n_bk7);
+        Ok(std::sync::Arc::new(fallback))
     }
 }

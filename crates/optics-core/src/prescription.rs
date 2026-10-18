@@ -386,18 +386,6 @@ pub fn calculate_paraxial_properties(
     let y1 = marginal_rays[0].y;
     let final_u = last.u;
 
-    if final_u.abs() < 1e-15 {
-        return Err(OpticsError::NumericalSingularity(
-            "Paraxial marginal ray is collimated at image space (infinite focal length)"
-                .to_string(),
-        ));
-    }
-
-    let efl_mm = -y1 / final_u;
-
-    // Check if the final surface is a planar zero-thickness image/detector plane in air
-    // (i.e. zero index step across the interface, zero curvature, zero thickness).
-    // If so, BFL is measured from the last optical lens surface (surface N - 1).
     let last_surf_is_detector = prescription.surfaces.len() > 1 && {
         let n_surfs = prescription.surfaces.len();
         let last_surf = &prescription.surfaces[n_surfs - 1];
@@ -409,13 +397,23 @@ pub fn calculate_paraxial_properties(
             && last_surf.thickness_mm == 0.0
     };
 
-    let bfl_mm = if last_surf_is_detector {
-        let prev_idx = prescription.surfaces.len() - 2;
-        -marginal_rays[prev_idx].y / marginal_rays[prev_idx].u
+    let (efl_mm, bfl_mm, f_number) = if final_u.abs() < 1e-12 {
+        (f64::INFINITY, f64::INFINITY, f64::INFINITY)
     } else {
-        -last.y / final_u
+        let efl = -y1 / final_u;
+        let bfl = if last_surf_is_detector {
+            let prev_idx = prescription.surfaces.len() - 2;
+            if marginal_rays[prev_idx].u.abs() < 1e-12 {
+                f64::INFINITY
+            } else {
+                -marginal_rays[prev_idx].y / marginal_rays[prev_idx].u
+            }
+        } else {
+            -last.y / final_u
+        };
+        let fn_val = efl.abs() / prescription.entrance_pupil_diameter_mm;
+        (efl, bfl, fn_val)
     };
-    let f_number = efl_mm.abs() / prescription.entrance_pupil_diameter_mm;
 
     // Entrance pupil: distance from surface 1 to stop viewed from object space
     let stop_idx = prescription
@@ -434,7 +432,7 @@ pub fn calculate_paraxial_properties(
             .sum::<f64>()
     };
 
-    let exp_pos_mm = -bfl_mm;
+    let exp_pos_mm = if bfl_mm.is_finite() { -bfl_mm } else { 0.0 };
 
     Ok(ParaxialProperties {
         efl_mm,

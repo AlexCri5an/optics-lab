@@ -175,8 +175,16 @@ pub fn trace_aimed_ray(
         Field::AngleDegrees { x, y } => (x, y),
         Field::HeightMm { x, y } => {
             let efl = paraxial.efl_mm;
-            let tx = (x / efl).atan().to_degrees();
-            let ty = (y / efl).atan().to_degrees();
+            let tx = if efl.is_finite() && efl.abs() > 1e-6 {
+                (x / efl).atan().to_degrees()
+            } else {
+                0.0
+            };
+            let ty = if efl.is_finite() && efl.abs() > 1e-6 {
+                (y / efl).atan().to_degrees()
+            } else {
+                0.0
+            };
             (tx, ty)
         }
         Field::Normalized { x, y } => {
@@ -192,11 +200,15 @@ pub fn trace_aimed_ray(
         .surfaces
         .first()
         .map_or(0.0, |s| s.conic.vertex_z);
-    let z_launch = z_first - 10.0;
+    let margin = (prescription.entrance_pupil_diameter_mm * 1.5).clamp(0.5, 10.0);
+    let z_launch = z_first - margin;
 
-    let ux = theta_x_deg.to_radians().tan();
-    let uy = theta_y_deg.to_radians().tan();
-    let dir = Vec3::new(ux, uy, 1.0).normalize();
+    let th_x = theta_x_deg.to_radians();
+    let th_y = theta_y_deg.to_radians();
+    let kx = th_x.sin() * th_y.cos();
+    let ky = th_y.sin();
+    let kz = (1.0 - kx * kx - ky * ky).max(1e-12).sqrt();
+    let dir = Vec3::new(kx, ky, kz);
 
     match mode {
         RayAimingMode::Paraxial | RayAimingMode::Off => {
