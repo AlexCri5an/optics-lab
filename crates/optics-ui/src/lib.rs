@@ -5,6 +5,7 @@ pub mod app;
 pub mod icons;
 pub mod layout;
 pub mod lens_editor;
+pub mod optimization;
 pub mod theme;
 pub mod topbar;
 pub mod viewport;
@@ -17,6 +18,7 @@ pub use icons::{
 };
 pub use layout::{Breakpoint, LayoutMetrics};
 pub use lens_editor::{LensEditorState, render_lens_editor};
+pub use optimization::{DlsRunSummary, OptimizationModalState, render_optimization_modal};
 pub use theme::{OpticsTokens, ThemeMode};
 pub use topbar::{TopBarAction, TopBarState, render_topbar};
 pub use viewport::{ViewportState, render_optical_viewport};

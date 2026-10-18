@@ -61,6 +61,8 @@ pub enum TopBarAction {
     ToggleTheme,
     /// Open About modal dialog.
     OpenAbout,
+    /// Open DLS Optical Optimization dialog hub.
+    OpenOptimization,
 }
 
 /// State for the TopBar component.
@@ -239,6 +241,13 @@ pub fn render_topbar(
                     }
                 });
 
+                ui.menu_button("Optimize", |ui| {
+                    if ui.button("DLS Automatic Optimization Hub...").clicked() {
+                        triggered_action = Some(TopBarAction::OpenOptimization);
+                        ui.close();
+                    }
+                });
+
                 ui.menu_button("View", |ui| {
                     if ui.button("Reset View").clicked() {
                         triggered_action = Some(TopBarAction::ResetView);
@@ -331,9 +340,12 @@ pub fn render_topbar(
 
             draw_toolbar_separator(ui, tokens.border);
 
-            // Group 3: Simulation
+            // Group 3: Simulation & Optimization
             if lucide_toolbar_button(ui, LucideIcon::Play, "Run Sequential Raytrace (F5)", state.raytrace_running, tokens).clicked() {
                 triggered_action = Some(TopBarAction::RunRaytrace);
+            }
+            if lucide_toolbar_button(ui, LucideIcon::Wand2, "Automatic Optimization Engine (DLS)", false, tokens).clicked() {
+                triggered_action = Some(TopBarAction::OpenOptimization);
             }
 
             draw_toolbar_separator(ui, tokens.border);

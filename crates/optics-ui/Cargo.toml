@@ -15,6 +15,7 @@ egui_extras = { workspace = true }
 optics-core = { workspace = true }
 optics-engine = { workspace = true }
 optics-glass = { workspace = true }
+optics-optimize = { workspace = true }
 optics-zemax = { workspace = true }
 rfd = { workspace = true }
 serde = { workspace = true }

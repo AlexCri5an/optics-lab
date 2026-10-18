@@ -15,6 +15,7 @@ use crate::analysis::{AnalysisPanelState, render_analysis_panel};
 use crate::icons::{LucideIcon, lucide_small_icon_button, render_lucide_icon};
 use crate::layout::{Breakpoint, LayoutMetrics};
 use crate::lens_editor::{LensEditorState, render_lens_editor};
+use crate::optimization::{OptimizationModalState, render_optimization_modal};
 use crate::theme::OpticsTokens;
 use crate::topbar::{TopBarAction, TopBarState, render_topbar};
 use crate::viewport::{ViewportState, render_optical_viewport};
@@ -33,6 +34,8 @@ pub struct OpticsWorkbenchApp {
     pub viewport_state: ViewportState,
     /// State of the optical analysis and diagnostics panel.
     pub analysis_state: AnalysisPanelState,
+    /// State of the automatic DLS optimization dialog hub.
+    pub optimization_state: OptimizationModalState,
     /// Last action dispatched from the top bar.
     pub last_action_msg: String,
     /// Current ray count or optical status info.
@@ -78,6 +81,7 @@ impl Default for OpticsWorkbenchApp {
             },
             viewport_state: ViewportState::default(),
             analysis_state: AnalysisPanelState::default(),
+            optimization_state: OptimizationModalState::default(),
             last_action_msg: "Loaded preset: Cooke Triplet F/4.5".to_string(),
             status_text: format!("Surfaces: {} | EPD: {:.1} mm | Status: Ready", surf_count, epd),
             current_file_path: None,
@@ -375,6 +379,28 @@ impl eframe::App for OpticsWorkbenchApp {
                     &tokens,
                 );
             });
+
+        // -------------------------------------------------------------------
+        // 9. DLS Optical Optimization Modal Dialog
+        // -------------------------------------------------------------------
+        let opt_modified = render_optimization_modal(
+            ctx,
+            &mut self.prescription,
+            &self.lens_editor_state,
+            &mut self.optimization_state,
+            &self.catalog,
+            &tokens,
+        );
+        if opt_modified {
+            self.is_dirty = true;
+            self.topbar_state.is_dirty = true;
+            self.last_action_msg = format!("Prescription '{}' updated via DLS optimization.", self.prescription.name);
+            self.status_text = format!(
+                "Surfaces: {} | EPD: {:.1} mm | DLS Optimized",
+                self.prescription.surfaces.len(),
+                self.prescription.entrance_pupil_diameter_mm
+            );
+        }
     }
 }
 
@@ -850,6 +876,10 @@ impl OpticsWorkbenchApp {
             TopBarAction::OpenAbout => {
                 self.last_action_msg =
                     "OpticsLab v0.0.1 — Academic Optical Engineering Workbench".to_string();
+            }
+            TopBarAction::OpenOptimization => {
+                self.optimization_state.open_with_snapshot(&self.prescription, &self.catalog);
+                self.last_action_msg = "Opened DLS Optical Optimization Hub.".to_string();
             }
         }
     }
