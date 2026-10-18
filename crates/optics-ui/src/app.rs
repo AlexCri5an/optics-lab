@@ -274,7 +274,7 @@ impl eframe::App for OpticsWorkbenchApp {
         if self.topbar_state.left_panel_open {
             SidePanel::left("left_lens_data_editor")
                 .resizable(false)
-                .exact_width(320.0)
+                .exact_width(400.0)
                 .show_separator_line(true)
                 .frame(
                     egui::Frame::NONE

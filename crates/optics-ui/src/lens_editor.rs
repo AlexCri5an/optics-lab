@@ -7,6 +7,8 @@
 //! - Glass catalog dropdown supporting both classic and ISO designations.
 //! - Clean, neutral selection with zero permanent hover highlight.
 
+use std::collections::BTreeSet;
+
 use egui::{
     Align, Button, ComboBox, CornerRadius, DragValue, Frame, Id, Layout, Margin, RichText,
     ScrollArea, TextEdit, Ui, Vec2,
@@ -47,6 +49,10 @@ pub struct LensEditorState {
     pub new_field_buf: String,
     /// New wavelength input buffer (string for typing, e.g. "532.0").
     pub new_wav_buf: String,
+    /// Surface indices whose radius of curvature is marked as variable for optimization.
+    pub variable_radii: BTreeSet<usize>,
+    /// Surface indices whose axial thickness is marked as variable for optimization.
+    pub variable_thicknesses: BTreeSet<usize>,
 }
 
 impl Default for LensEditorState {
@@ -56,7 +62,23 @@ impl Default for LensEditorState {
             system_explorer_open: false,
             new_field_buf: "20.0".to_string(),
             new_wav_buf: "532.0".to_string(),
+            variable_radii: BTreeSet::new(),
+            variable_thicknesses: BTreeSet::new(),
         }
+    }
+}
+
+impl LensEditorState {
+    /// Count of total active variables (radii + thicknesses).
+    #[must_use]
+    pub fn total_variable_count(&self) -> usize {
+        self.variable_radii.len() + self.variable_thicknesses.len()
+    }
+
+    /// Clears all variable flags.
+    pub fn clear_all_variables(&mut self) {
+        self.variable_radii.clear();
+        self.variable_thicknesses.clear();
     }
 }
 
@@ -72,6 +94,7 @@ pub fn render_lens_editor(
     let mut modified = false;
 
     ui.vertical(|ui| {
+        ui.set_width(ui.available_width());
         // -------------------------------------------------------------------
         // 1. Technical System Specification Card & System Explorer
         // -------------------------------------------------------------------
@@ -113,12 +136,40 @@ pub fn render_lens_editor(
                     prescription.surfaces.push(new_surf);
                 }
                 reindex_surfaces(prescription);
+                // Shift variable indices after insert_at
+                state.variable_radii = state
+                    .variable_radii
+                    .iter()
+                    .map(|&i| if i >= insert_at { i + 1 } else { i })
+                    .collect();
+                state.variable_thicknesses = state
+                    .variable_thicknesses
+                    .iter()
+                    .map(|&i| if i >= insert_at { i + 1 } else { i })
+                    .collect();
                 state.selected_surface = None;
                 modified = true;
             }
 
-            // Surface counter
+            // Surface & Variable counters
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                let var_count = state.total_variable_count();
+                if var_count > 0 {
+                    ui.spacing_mut().item_spacing = Vec2::new(4.0, 0.0);
+                    if ui.small_button(RichText::new("Clear Var").size(9.5).color(tokens.text_muted)).on_hover_text("Reset all variable flags back to fixed").clicked() {
+                        state.clear_all_variables();
+                        modified = true;
+                    }
+                    ui.label(
+                        RichText::new(format!("{} Var", var_count))
+                            .monospace()
+                            .strong()
+                            .size(10.5)
+                            .color(tokens.accent),
+                    ).on_hover_text(format!("Active optimization variables: {} radii, {} thicknesses", state.variable_radii.len(), state.variable_thicknesses.len()));
+                    ui.separator();
+                }
+
                 ui.label(
                     RichText::new(format!("{} Surfaces", prescription.surfaces.len()))
                         .monospace()
@@ -156,6 +207,7 @@ pub fn render_lens_editor(
                         idx,
                         surf,
                         total_surfaces,
+                        state,
                         &mut surf_to_remove,
                         &mut surf_to_toggle_stop,
                         tokens,
@@ -171,6 +223,18 @@ pub fn render_lens_editor(
                     if prescription.surfaces.len() > 1 && del_idx < prescription.surfaces.len() {
                         prescription.surfaces.remove(del_idx);
                         reindex_surfaces(prescription);
+                        state.variable_radii.remove(&del_idx);
+                        state.variable_thicknesses.remove(&del_idx);
+                        state.variable_radii = state
+                            .variable_radii
+                            .iter()
+                            .map(|&i| if i > del_idx { i - 1 } else { i })
+                            .collect();
+                        state.variable_thicknesses = state
+                            .variable_thicknesses
+                            .iter()
+                            .map(|&i| if i > del_idx { i - 1 } else { i })
+                            .collect();
                         state.selected_surface = None;
                         modified = true;
                     }
@@ -195,6 +259,7 @@ fn render_surface_card(
     idx: usize,
     surf: &mut OpticalSurface,
     total_surfaces: usize,
+    state: &mut LensEditorState,
     surf_to_remove: &mut Option<usize>,
     surf_to_toggle_stop: &mut Option<usize>,
     tokens: &OpticsTokens,
@@ -212,6 +277,7 @@ fn render_surface_card(
         .inner_margin(Margin::symmetric(8, 6));
 
     frame.show(ui, |ui| {
+        ui.set_width(ui.available_width());
         // -------------------------------------------------------------------
         // Row 1: Identification, Stop designation, Delete button
         // -------------------------------------------------------------------
@@ -268,14 +334,23 @@ fn render_surface_card(
         ui.add_space(4.0);
 
         // -------------------------------------------------------------------
-        // Row 2A: Radius & Thickness (Strict Numerical TextEdit Inputs)
+        // Row 2A: Radius & Thickness (Strict Numerical TextEdit Inputs + Variable Toggles)
         // -------------------------------------------------------------------
         ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing = Vec2::new(10.0, 0.0);
+            ui.spacing_mut().item_spacing = Vec2::new(8.0, 0.0);
 
-            // Radius input
+            // Radius input + Variable badge
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing = Vec2::new(3.0, 0.0);
+                let is_r_var = state.variable_radii.contains(&idx);
+                if render_variable_badge(ui, is_r_var, "Radius", tokens) {
+                    if is_r_var {
+                        state.variable_radii.remove(&idx);
+                    } else {
+                        state.variable_radii.insert(idx);
+                    }
+                    modified = true;
+                }
                 ui.label(RichText::new("Radius:").size(10.5).color(tokens.text_muted));
 
                 let is_flat = surf.radius_mm.is_infinite() || surf.radius_mm.abs() > 1e12;
@@ -291,14 +366,24 @@ fn render_surface_card(
                     }
                     if ui.small_button("Flat").on_hover_text("Make planar (Infinity)").clicked() {
                         surf.radius_mm = f64::INFINITY;
+                        state.variable_radii.remove(&idx);
                         modified = true;
                     }
                 }
             });
 
-            // Thickness input (strictly 4 digits + point width)
+            // Thickness input + Variable badge
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing = Vec2::new(3.0, 0.0);
+                let is_t_var = state.variable_thicknesses.contains(&idx);
+                if render_variable_badge(ui, is_t_var, "Thickness", tokens) {
+                    if is_t_var {
+                        state.variable_thicknesses.remove(&idx);
+                    } else {
+                        state.variable_thicknesses.insert(idx);
+                    }
+                    modified = true;
+                }
                 ui.label(RichText::new("Thick:").size(10.5).color(tokens.text_muted));
                 if float_input(ui, Id::new(("surf_thick", idx)), &mut surf.thickness_mm, 42.0) {
                     modified = true;
@@ -395,6 +480,40 @@ fn float_input(ui: &mut Ui, id: Id, value: &mut f64, width: f32) -> bool {
     changed
 }
 
+/// Renders an academic variable toggle badge ('V' for Variable, 'F' for Fixed).
+fn render_variable_badge(
+    ui: &mut Ui,
+    is_variable: bool,
+    param_name: &str,
+    tokens: &OpticsTokens,
+) -> bool {
+    let (bg, stroke, text_color, text, tooltip) = if is_variable {
+        (
+            tokens.bg_control_active,
+            egui::Stroke::new(1.0, tokens.accent),
+            tokens.accent,
+            "V",
+            format!("{} is Variable for optimization (DLS will adjust this value). Click to set Fixed.", param_name),
+        )
+    } else {
+        (
+            tokens.bg_control,
+            tokens.border,
+            tokens.text_muted.gamma_multiply(0.65),
+            "F",
+            format!("{} is Fixed. Click to mark as Variable (V) for optimization.", param_name),
+        )
+    };
+
+    let btn = Button::new(RichText::new(text).size(9.0).monospace().strong().color(text_color))
+        .fill(bg)
+        .stroke(stroke)
+        .corner_radius(CornerRadius::same(2))
+        .min_size(Vec2::new(15.0, 16.0));
+
+    ui.add(btn).on_hover_text(tooltip).clicked()
+}
+
 /// Renders the technical specification card and Zemax System Explorer.
 fn render_specification_card(
     ui: &mut Ui,
@@ -411,6 +530,7 @@ fn render_specification_card(
         .inner_margin(Margin::symmetric(10, 8));
 
     frame.show(ui, |ui| {
+        ui.set_width(ui.available_width());
         ui.vertical(|ui| {
             // Header: Prescription Title & System Setup Button (Typed Lucide icon, NO ASCII)
             ui.horizontal(|ui| {
@@ -747,5 +867,23 @@ mod tests {
         reindex_surfaces(&mut rx);
         assert_eq!(rx.surfaces[0].surface_index, 0);
         assert_eq!(rx.surfaces[1].surface_index, 1);
+    }
+
+    #[test]
+    fn test_variable_flags_tracking() {
+        let mut state = LensEditorState::default();
+        assert_eq!(state.total_variable_count(), 0);
+
+        state.variable_radii.insert(1);
+        state.variable_radii.insert(2);
+        state.variable_thicknesses.insert(1);
+
+        assert_eq!(state.total_variable_count(), 3);
+        assert!(state.variable_radii.contains(&1));
+        assert!(state.variable_thicknesses.contains(&1));
+        assert!(!state.variable_radii.contains(&3));
+
+        state.clear_all_variables();
+        assert_eq!(state.total_variable_count(), 0);
     }
 }
