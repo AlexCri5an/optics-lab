@@ -1,0 +1,18 @@
+[package]
+name = "optics-desktop"
+description = "OpticsLab — native academic optical engineering desktop workbench"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+eframe = { workspace = true }
+egui = { workspace = true }
+egui_extras = { workspace = true }
+optics-ui = { workspace = true }
+
+[lints]
+workspace = true

@@ -13,8 +13,10 @@ members = [
     "crates/optics-nonseq",
     "crates/optics-engine",
     "crates/optics-ffi",
+    "crates/optics-ui",
     # Application targets
     "apps/optics-cli",
+    "apps/optics-desktop",
 ]
 
 [workspace.package]
@@ -58,6 +60,12 @@ thiserror  = "2"
 # CLI
 clap       = { version = "4", features = ["derive"] }
 
+# GUI / Desktop (VectorCraft & academic standard)
+egui        = "0.32"
+eframe      = "0.32.3"
+egui_extras = { version = "0.32.3", features = ["svg"] }
+rfd         = "0.15"
+
 # GPU / rendering
 wgpu       = { version = "25", features = ["fragile-send-sync-non-atomic-wasm"] }      # Locked to match eframe 0.32.3 (egui-wgpu 0.32.3 → wgpu 25.0.2)
 bytemuck   = { version = "1", features = ["derive"] }
@@ -75,4 +83,6 @@ optics-tolerance = { path = "crates/optics-tolerance" }
 optics-nonseq    = { path = "crates/optics-nonseq" }
 optics-engine    = { path = "crates/optics-engine" }
 optics-ffi       = { path = "crates/optics-ffi" }
+optics-ui       = { path = "crates/optics-ui" }
+
 

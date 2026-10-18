@@ -1,0 +1,24 @@
+[package]
+name = "optics-ui"
+description = "VectorCraft-standard academic desktop UI, design tokens, Lucide icons, and responsive layout"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+eframe = { workspace = true }
+egui = { workspace = true }
+egui_extras = { workspace = true }
+optics-core = { workspace = true }
+optics-engine = { workspace = true }
+optics-glass = { workspace = true }
+optics-zemax = { workspace = true }
+rfd = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true
