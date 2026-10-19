@@ -277,8 +277,9 @@ impl eframe::App for OpticsWorkbenchApp {
         // -------------------------------------------------------------------
         if self.topbar_state.left_panel_open {
             SidePanel::left("left_lens_data_editor")
-                .resizable(false)
-                .exact_width(400.0)
+                .resizable(true)
+                .default_width(330.0)
+                .width_range(280.0..=450.0)
                 .show_separator_line(true)
                 .frame(
                     egui::Frame::NONE
@@ -381,8 +382,9 @@ impl eframe::App for OpticsWorkbenchApp {
         // -------------------------------------------------------------------
         if self.topbar_state.right_panel_open {
             SidePanel::right("right_diagnostics_panel")
-                .resizable(false)
-                .exact_width(400.0)
+                .resizable(true)
+                .default_width(340.0)
+                .width_range(280.0..=450.0)
                 .show_separator_line(true)
                 .frame(
                     egui::Frame::NONE

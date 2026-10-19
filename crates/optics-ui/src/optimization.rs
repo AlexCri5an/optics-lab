@@ -604,9 +604,14 @@ pub fn render_optimization_panel(
 
                 err_frame.show(ui, |ui| {
                     ui.set_width(ui.available_width());
-                    ui.horizontal(|ui| {
+                    ui.horizontal_top(|ui| {
                         render_lucide_icon(ui, LucideIcon::X, 12.0, tokens.warning);
-                        ui.label(RichText::new(err).size(10.5).color(tokens.warning));
+                        ui.add(
+                            egui::Label::new(
+                                RichText::new(err).size(10.5).color(tokens.warning),
+                            )
+                            .wrap(),
+                        );
                     });
                 });
             }
@@ -616,7 +621,24 @@ pub fn render_optimization_panel(
             // -------------------------------------------------------------------
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
-                let can_run = var_count > 0;
+                let has_targets = opt_state.min_rms_spot || opt_state.target_efl_enabled;
+                let can_run = var_count > 0 && has_targets;
+
+                let run_tooltip = if var_count == 0 {
+                    "Cannot run: select variables with [V] in LENS DATA tab first"
+                } else if !has_targets {
+                    "Cannot run: check at least one target operand above (RMS Spot or Target EFL)"
+                } else {
+                    "Execute full DLS optimization cycles"
+                };
+
+                let step_tooltip = if var_count == 0 {
+                    "Cannot step: select variables with [V] in LENS DATA tab first"
+                } else if !has_targets {
+                    "Cannot step: check at least one target operand above (RMS Spot or Target EFL)"
+                } else {
+                    "Execute a single DLS step for incremental analysis"
+                };
 
                 // Run DLS Button (Primary Action)
                 let (run_bg, run_fg, run_stroke) = if can_run {
@@ -638,7 +660,7 @@ pub fn render_optimization_panel(
 
                 let run_resp = ui.add(run_btn);
                 if can_run {
-                    if run_resp.on_hover_text("Execute full DLS optimization cycles").clicked() {
+                    if run_resp.on_hover_text(run_tooltip).clicked() {
                         if opt_state.original_prescription.is_none() {
                             opt_state.original_prescription = Some(prescription.clone());
                         }
@@ -654,7 +676,7 @@ pub fn render_optimization_panel(
                         }
                     }
                 } else {
-                    run_resp.on_hover_text("Cannot run: select variables with [V] in LENS DATA tab first");
+                    run_resp.on_hover_text(run_tooltip);
                 }
 
                 // Step 1 Cycle
@@ -677,7 +699,7 @@ pub fn render_optimization_panel(
 
                 let step_resp = ui.add(step_btn);
                 if can_run {
-                    if step_resp.on_hover_text("Execute a single DLS step for incremental analysis").clicked() {
+                    if step_resp.on_hover_text(step_tooltip).clicked() {
                         if opt_state.original_prescription.is_none() {
                             opt_state.original_prescription = Some(prescription.clone());
                         }
@@ -693,7 +715,7 @@ pub fn render_optimization_panel(
                         }
                     }
                 } else {
-                    step_resp.on_hover_text("Cannot step: select variables with [V] in LENS DATA tab first");
+                    step_resp.on_hover_text(step_tooltip);
                 }
 
                 // Revert button

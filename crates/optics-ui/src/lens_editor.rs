@@ -171,7 +171,6 @@ pub fn render_lens_editor(
                     ui.spacing_mut().item_spacing = Vec2::new(4.0, 0.0);
                     if ui.small_button(RichText::new("Clear Var").size(9.5).color(tokens.text_muted)).on_hover_text("Reset all variable flags back to fixed").clicked() {
                         state.clear_all_variables();
-                        modified = true;
                     }
                     ui.label(
                         RichText::new(format!("{} Var", var_count))
@@ -362,7 +361,6 @@ fn render_surface_card(
                     } else {
                         state.variable_radii.insert(idx);
                     }
-                    modified = true;
                 }
                 ui.label(RichText::new("Radius:").size(10.5).color(tokens.text_muted));
 
@@ -395,7 +393,6 @@ fn render_surface_card(
                     } else {
                         state.variable_thicknesses.insert(idx);
                     }
-                    modified = true;
                 }
                 ui.label(RichText::new("Thick:").size(10.5).color(tokens.text_muted));
                 if float_input(ui, Id::new(("surf_thick", idx)), &mut surf.thickness_mm, 42.0) {
