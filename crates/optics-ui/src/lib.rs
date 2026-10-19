@@ -2,6 +2,7 @@
 
 pub mod analysis;
 pub mod app;
+pub mod glass_browser;
 pub mod icons;
 pub mod layout;
 pub mod lens_editor;
@@ -12,6 +13,9 @@ pub mod viewport;
 
 pub use analysis::{AnalysisPanelState, AnalysisTab, render_analysis_panel};
 pub use app::OpticsWorkbenchApp;
+pub use glass_browser::{
+    CatalogFilter, GlassBrowserAction, GlassBrowserState, render_glass_browser_modal,
+};
 pub use icons::{
     LucideIcon, lucide_small_icon_button, lucide_text_button, lucide_toolbar_button,
     render_lucide_icon,

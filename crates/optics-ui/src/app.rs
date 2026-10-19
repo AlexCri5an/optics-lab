@@ -12,6 +12,7 @@ use optics_core::OpticalPrescription;
 use optics_glass::GlassCatalogDb;
 
 use crate::analysis::{AnalysisPanelState, render_analysis_panel};
+use crate::glass_browser::{GlassBrowserAction, GlassBrowserState, render_glass_browser_modal};
 use crate::icons::{LucideIcon, lucide_small_icon_button};
 use crate::layout::{Breakpoint, LayoutMetrics};
 use crate::lens_editor::{LeftPanelTab, LensEditorState, render_lens_editor};
@@ -49,6 +50,8 @@ pub struct OpticsWorkbenchApp {
     pub analysis_state: AnalysisPanelState,
     /// State of the automatic DLS optimization dialog hub.
     pub optimization_state: OptimizationModalState,
+    /// State of the dedicated Glass Catalog Browser modal dialog.
+    pub glass_browser_state: GlassBrowserState,
     /// Last action dispatched from the top bar.
     pub last_action_msg: String,
     /// Current ray count or optical status info.
@@ -99,6 +102,7 @@ impl Default for OpticsWorkbenchApp {
             viewport_state: ViewportState::default(),
             analysis_state: AnalysisPanelState::default(),
             optimization_state: OptimizationModalState::default(),
+            glass_browser_state: GlassBrowserState::default(),
             last_action_msg: "Loaded preset: Cooke Triplet F/4.5".to_string(),
             status_text: format!("Surfaces: {} | EPD: {:.1} mm | Status: Ready", surf_count, epd),
             current_file_path: None,
@@ -469,10 +473,69 @@ impl eframe::App for OpticsWorkbenchApp {
                     &tokens,
                 );
             });
+
+        // -------------------------------------------------------------------
+        // 9. Glass Catalog Browser Modal Dialog
+        // -------------------------------------------------------------------
+        if let Some(target_idx) = self.lens_editor_state.open_glass_browser_for.take() {
+            let current_mat = self
+                .prescription
+                .surfaces
+                .get(target_idx)
+                .map(|s| s.material_name.as_str())
+                .unwrap_or("AIR");
+            self.glass_browser_state.open_for_surface(target_idx, current_mat);
+        }
+
+        let glass_action = render_glass_browser_modal(
+            ctx,
+            &mut self.glass_browser_state,
+            &self.catalog,
+            &tokens,
+        );
+
+        if let GlassBrowserAction::Apply { surface_idx, material_name } = glass_action {
+            let needs_update = self
+                .prescription
+                .surfaces
+                .get(surface_idx)
+                .map(|s| s.material_name != material_name)
+                .unwrap_or(false);
+
+            if needs_update {
+                self.push_undo_snapshot();
+                if let Some(surf) = self.prescription.surfaces.get_mut(surface_idx) {
+                    surf.material_name = material_name.clone();
+                    self.is_dirty = true;
+                    self.topbar_state.is_dirty = true;
+                    self.last_action_msg = format!("Set surface {} material to {}", surface_idx, material_name);
+                    self.status_text = format!(
+                        "Surfaces: {} | EPD: {:.1} mm | Modified",
+                        self.prescription.surfaces.len(),
+                        self.prescription.entrance_pupil_diameter_mm
+                    );
+                }
+            }
+        }
     }
 }
 
 impl OpticsWorkbenchApp {
+    /// Pushes current application state to the undo stack.
+    pub fn push_undo_snapshot(&mut self) {
+        let snapshot = AppUndoSnapshot {
+            prescription: self.prescription.clone(),
+            opt_summary: self.optimization_state.last_summary.clone(),
+            opt_history: self.optimization_state.history.clone(),
+            opt_original_prescription: self.optimization_state.original_prescription.clone(),
+        };
+        self.undo_stack.push(snapshot);
+        if self.undo_stack.len() > 50 {
+            self.undo_stack.remove(0);
+        }
+        self.redo_stack.clear();
+    }
+
     /// Appends a file path to the recent files history list.
     fn add_recent_file(&mut self, path: PathBuf) {
         if let Some(pos) = self.recent_files.iter().position(|p| p == &path) {
