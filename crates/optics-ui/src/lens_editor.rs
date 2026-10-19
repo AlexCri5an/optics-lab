@@ -10,9 +10,10 @@
 use std::collections::BTreeSet;
 
 use egui::{
-    Align, Area, Button, CornerRadius, DragValue, Frame, Id, Layout, Margin, RichText,
+    Align, Area, Button, CornerRadius, DragValue, Frame, Id, Image, Layout, Margin, RichText,
     ScrollArea, TextEdit, Ui, Vec2,
 };
+use optics_core::surface::{CoordinateBreak, GrinProfile};
 use optics_core::{OpticalPrescription, OpticalSurface};
 use optics_glass::GlassCatalogDb;
 
@@ -128,7 +129,7 @@ pub fn render_lens_editor(
         // -------------------------------------------------------------------
         // 1. Technical System Specification Card
         // -------------------------------------------------------------------
-        if render_specification_card(ui, prescription, tokens) {
+        if render_specification_card(ui, prescription, state, tokens) {
             modified = true;
         }
 
@@ -158,6 +159,9 @@ pub fn render_lens_editor(
                     semi_diameter_mm: 10.0,
                     material_name: "SK16".to_string(),
                     is_stop: false,
+                    asphere_coefficients: Vec::new(),
+                    coordinate_break: None,
+                    grin_profile: None,
                 };
 
                 if insert_at < prescription.surfaces.len() {
@@ -447,6 +451,209 @@ fn render_surface_card(
                 ui.label(RichText::new("mm").size(10.0).color(tokens.text_muted));
             });
         });
+
+        // -------------------------------------------------------------------
+        // Row 3: Coordinate Break & GRIN Profile Badges and Editors
+        // -------------------------------------------------------------------
+        let mut toggle_cb = false;
+        let mut remove_cb = false;
+        let mut toggle_grin = false;
+        let mut remove_grin = false;
+        let has_asph = !surf.asphere_coefficients.is_empty() || surf.conic_constant.abs() > 1e-9;
+
+        ui.add_space(2.0);
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
+
+            // Asphere toggle / indicator
+            if has_asph {
+                ui.label(
+                    RichText::new("[Asph]")
+                        .strong()
+                        .monospace()
+                        .size(10.0)
+                        .color(tokens.plot_tangential),
+                );
+                if ui.small_button("Del Asph").on_hover_text("Reset to spherical surface").clicked() {
+                    surf.conic_constant = 0.0;
+                    surf.asphere_coefficients.clear();
+                    modified = true;
+                }
+            } else if ui.small_button("+ Asph").on_hover_text("Add Even Asphere (Conic k and higher-order polynomial coefficients)").clicked() {
+                surf.asphere_coefficients = vec![0.0, 0.0, 0.0];
+                modified = true;
+            }
+
+            // Coordinate Break toggle / indicator
+            if surf.coordinate_break.is_some() {
+                ui.label(
+                    RichText::new("[CB]")
+                        .strong()
+                        .monospace()
+                        .size(10.0)
+                        .color(tokens.accent),
+                );
+                if ui.small_button("Del CB").on_hover_text("Remove Coordinate Break").clicked() {
+                    remove_cb = true;
+                }
+            } else if ui.small_button("+ CB").on_hover_text("Add 3D Coordinate Break (Decenters & Euler Tilts)").clicked() {
+                toggle_cb = true;
+            }
+
+            // GRIN Profile toggle / indicator
+            if surf.grin_profile.is_some() {
+                ui.label(
+                    RichText::new("[GRIN]")
+                        .strong()
+                        .monospace()
+                        .size(10.0)
+                        .color(tokens.warning),
+                );
+                if ui.small_button("Del GRIN").on_hover_text("Remove Gradient-Index Profile").clicked() {
+                    remove_grin = true;
+                }
+            } else if ui.small_button("+ GRIN").on_hover_text("Add Gradient-Index Material (Radial Selfoc, Axial, Luneburg)").clicked() {
+                toggle_grin = true;
+            }
+        });
+
+        // Expanded Asphere fields
+        if has_asph {
+            ui.add_space(2.0);
+            ui.group(|ui| {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing = Vec2::new(3.0, 0.0);
+                    ui.label(RichText::new("k:").size(10.0).color(tokens.plot_tangential));
+                    if float_input(ui, Id::new(("surf_conic_k", idx)), &mut surf.conic_constant, 38.0) {
+                        modified = true;
+                    }
+                    if !surf.asphere_coefficients.is_empty() {
+                        ui.label(RichText::new("A4:").size(10.0).color(tokens.text_muted));
+                        if float_input(ui, Id::new(("surf_asph_a4", idx)), &mut surf.asphere_coefficients[0], 48.0) {
+                            modified = true;
+                        }
+                    }
+                    if surf.asphere_coefficients.len() > 1 {
+                        ui.label(RichText::new("A6:").size(10.0).color(tokens.text_muted));
+                        if float_input(ui, Id::new(("surf_asph_a6", idx)), &mut surf.asphere_coefficients[1], 48.0) {
+                            modified = true;
+                        }
+                    }
+                });
+            });
+        }
+
+        if toggle_cb {
+            surf.coordinate_break = Some(CoordinateBreak::default());
+            modified = true;
+        }
+        if remove_cb {
+            surf.coordinate_break = None;
+            modified = true;
+        }
+        if toggle_grin {
+            surf.grin_profile = Some(GrinProfile::Radial { n0: 1.6, a: 0.01 });
+            modified = true;
+        }
+        if remove_grin {
+            surf.grin_profile = None;
+            modified = true;
+        }
+
+        // Expanded Coordinate Break fields
+        if let Some(cb) = &mut surf.coordinate_break {
+            ui.add_space(2.0);
+            ui.group(|ui| {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing = Vec2::new(3.0, 0.0);
+                    ui.label(RichText::new("dx:").size(10.0).color(tokens.text_muted));
+                    if float_input(ui, Id::new(("surf_cb_dx", idx)), &mut cb.decenter_x_mm, 34.0) {
+                        modified = true;
+                    }
+                    ui.label(RichText::new("dy:").size(10.0).color(tokens.text_muted));
+                    if float_input(ui, Id::new(("surf_cb_dy", idx)), &mut cb.decenter_y_mm, 34.0) {
+                        modified = true;
+                    }
+                    ui.label(RichText::new("dz:").size(10.0).color(tokens.text_muted));
+                    if float_input(ui, Id::new(("surf_cb_dz", idx)), &mut cb.decenter_z_mm, 34.0) {
+                        modified = true;
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing = Vec2::new(3.0, 0.0);
+                    ui.label(RichText::new("tx°:").size(10.0).color(tokens.text_muted));
+                    if float_input(ui, Id::new(("surf_cb_tx", idx)), &mut cb.tilt_x_deg, 34.0) {
+                        modified = true;
+                    }
+                    ui.label(RichText::new("ty°:").size(10.0).color(tokens.text_muted));
+                    if float_input(ui, Id::new(("surf_cb_ty", idx)), &mut cb.tilt_y_deg, 34.0) {
+                        modified = true;
+                    }
+                    ui.label(RichText::new("tz°:").size(10.0).color(tokens.text_muted));
+                    if float_input(ui, Id::new(("surf_cb_tz", idx)), &mut cb.tilt_z_deg, 34.0) {
+                        modified = true;
+                    }
+                    if ui.checkbox(&mut cb.tilt_first, "Tilt First").changed() {
+                        modified = true;
+                    }
+                });
+            });
+        }
+
+        // Expanded GRIN Profile fields
+        if let Some(grin) = &mut surf.grin_profile {
+            ui.add_space(2.0);
+            ui.group(|ui| {
+                match grin {
+                    GrinProfile::Radial { n0, a } => {
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing = Vec2::new(3.0, 0.0);
+                            ui.label(RichText::new("Selfoc:").size(10.0).color(tokens.warning));
+                            ui.label(RichText::new("n0:").size(10.0).color(tokens.text_muted));
+                            if float_input(ui, Id::new(("surf_grin_n0", idx)), n0, 36.0) {
+                                modified = true;
+                            }
+                            ui.label(RichText::new("A:").size(10.0).color(tokens.text_muted));
+                            if float_input(ui, Id::new(("surf_grin_a", idx)), a, 44.0) {
+                                modified = true;
+                            }
+                        });
+                    }
+                    GrinProfile::Axial { n0, n1, n2 } => {
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing = Vec2::new(3.0, 0.0);
+                            ui.label(RichText::new("Axial:").size(10.0).color(tokens.warning));
+                            ui.label(RichText::new("n0:").size(10.0).color(tokens.text_muted));
+                            if float_input(ui, Id::new(("surf_grin_n0", idx)), n0, 34.0) {
+                                modified = true;
+                            }
+                            ui.label(RichText::new("n1:").size(10.0).color(tokens.text_muted));
+                            if float_input(ui, Id::new(("surf_grin_n1", idx)), n1, 34.0) {
+                                modified = true;
+                            }
+                            ui.label(RichText::new("n2:").size(10.0).color(tokens.text_muted));
+                            if float_input(ui, Id::new(("surf_grin_n2", idx)), n2, 34.0) {
+                                modified = true;
+                            }
+                        });
+                    }
+                    GrinProfile::Luneburg { n0, radius_mm } => {
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing = Vec2::new(3.0, 0.0);
+                            ui.label(RichText::new("Luneburg:").size(10.0).color(tokens.warning));
+                            ui.label(RichText::new("n0:").size(10.0).color(tokens.text_muted));
+                            if float_input(ui, Id::new(("surf_grin_n0", idx)), n0, 36.0) {
+                                modified = true;
+                            }
+                            ui.label(RichText::new("R:").size(10.0).color(tokens.text_muted));
+                            if float_input(ui, Id::new(("surf_grin_r", idx)), radius_mm, 40.0) {
+                                modified = true;
+                            }
+                        });
+                    }
+                }
+            });
+        }
     });
 
     modified
@@ -695,6 +902,7 @@ fn render_variable_badge(
 fn render_specification_card(
     ui: &mut Ui,
     prescription: &mut OpticalPrescription,
+    state: &mut LensEditorState,
     tokens: &OpticsTokens,
 ) -> bool {
     let mut modified = false;
@@ -708,7 +916,7 @@ fn render_specification_card(
     frame.show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.vertical(|ui| {
-            // Header: Prescription Title & Aperture Stop
+            // Header: Prescription Title, Settings Toggle & Aperture Stop
             let stop_label = prescription
                 .surfaces
                 .iter()
@@ -725,6 +933,39 @@ fn render_specification_card(
                 );
 
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    let tooltip = if state.system_explorer_open {
+                        "Close System Explorer: Hide Wavelengths and Field Angles drawer"
+                    } else {
+                        "Open System Explorer: Configure Wavelengths and Field Angles"
+                    };
+
+                    let btn_resp = if state.system_explorer_open {
+                        let icon_size = 14.0;
+                        let img = Image::from_bytes(
+                            LucideIcon::SlidersHorizontal.uri(),
+                            LucideIcon::SlidersHorizontal.svg_content().as_bytes(),
+                        )
+                        .tint(tokens.accent)
+                        .fit_to_exact_size(Vec2::splat(icon_size));
+
+                        let btn = egui::Button::image_and_text(
+                            img,
+                            egui::RichText::new("Settings").size(11.0).strong().color(tokens.accent),
+                        )
+                        .fill(tokens.bg_control_active)
+                        .stroke(tokens.border_hovered)
+                        .corner_radius(CornerRadius::ZERO);
+
+                        ui.add(btn).on_hover_text(tooltip)
+                    } else {
+                        lucide_text_button(ui, LucideIcon::SlidersHorizontal, "Settings", tokens)
+                            .on_hover_text(tooltip)
+                    };
+
+                    if btn_resp.clicked() {
+                        state.system_explorer_open = !state.system_explorer_open;
+                    }
+
                     ui.label(
                         RichText::new(stop_label)
                             .monospace()
@@ -783,6 +1024,168 @@ fn render_specification_card(
                     }
                 });
             });
+
+            // -------------------------------------------------------------------
+            // System Explorer Drawer: Wavelengths & Field Angles
+            // -------------------------------------------------------------------
+            if state.system_explorer_open {
+                ui.add_space(4.0);
+                ui.separator();
+                ui.add_space(2.0);
+
+                // --- Section A: Wavelengths ---
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("WAVELENGTHS (nm):").strong().size(10.5).color(tokens.text_primary));
+                });
+
+                let mut wav_to_remove: Option<usize> = None;
+                for (w_idx, &wav) in prescription.wavelengths_nm.iter().enumerate() {
+                    let is_primary = w_idx == prescription.primary_wavelength_index;
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = Vec2::new(4.0, 0.0);
+
+                        if ui.radio(is_primary, "").on_hover_text("Set as primary design wavelength").clicked() {
+                            prescription.primary_wavelength_index = w_idx;
+                            modified = true;
+                        }
+
+                        ui.label(
+                            RichText::new(format!("{:.2} nm", wav))
+                                .monospace()
+                                .size(10.5)
+                                .color(if is_primary { tokens.accent } else { tokens.text_primary }),
+                        );
+
+                        if is_primary {
+                            ui.label(RichText::new("[Primary]").size(9.5).color(tokens.accent));
+                        }
+
+                        if prescription.wavelengths_nm.len() > 1 {
+                            if lucide_small_icon_button(ui, LucideIcon::X, "Delete Wavelength", tokens).clicked() {
+                                wav_to_remove = Some(w_idx);
+                            }
+                        }
+                    });
+                }
+
+                if let Some(del_idx) = wav_to_remove {
+                    prescription.wavelengths_nm.remove(del_idx);
+                    if prescription.primary_wavelength_index >= prescription.wavelengths_nm.len() {
+                        prescription.primary_wavelength_index = prescription.wavelengths_nm.len().saturating_sub(1);
+                    }
+                    modified = true;
+                }
+
+                // Add Wavelength row
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing = Vec2::new(4.0, 0.0);
+                    ui.add(TextEdit::singleline(&mut state.new_wav_buf).desired_width(50.0).font(egui::TextStyle::Monospace));
+                    if lucide_text_button(ui, LucideIcon::Plus, "Add", tokens).clicked() {
+                        if let Ok(val) = state.new_wav_buf.trim().parse::<f64>() {
+                            if val >= 300.0 && val <= 15000.0 && !prescription.wavelengths_nm.iter().any(|&w| (w - val).abs() < 0.1) {
+                                prescription.wavelengths_nm.push(val);
+                                modified = true;
+                            }
+                        }
+                    }
+                    // Presets
+                    if ui.small_button("d (587.6)").clicked() {
+                        if !prescription.wavelengths_nm.iter().any(|&w| (w - 587.56).abs() < 0.1) {
+                            prescription.wavelengths_nm.push(587.56);
+                            modified = true;
+                        }
+                    }
+                    if ui.small_button("F (486.1)").clicked() {
+                        if !prescription.wavelengths_nm.iter().any(|&w| (w - 486.13).abs() < 0.1) {
+                            prescription.wavelengths_nm.push(486.13);
+                            modified = true;
+                        }
+                    }
+                    if ui.small_button("C (656.3)").clicked() {
+                        if !prescription.wavelengths_nm.iter().any(|&w| (w - 656.27).abs() < 0.1) {
+                            prescription.wavelengths_nm.push(656.27);
+                            modified = true;
+                        }
+                    }
+                });
+
+                ui.add_space(4.0);
+
+                // --- Section B: Field Angles (Grade) ---
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("FIELD ANGLES (°):").strong().size(10.5).color(tokens.text_primary));
+                });
+
+                if prescription.field_angles_deg.is_empty() {
+                    prescription.field_angles_deg.push(0.0);
+                }
+
+                let mut field_to_remove: Option<usize> = None;
+                for (f_idx, &field_deg) in prescription.field_angles_deg.iter().enumerate() {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = Vec2::new(4.0, 0.0);
+                        let label = if field_deg == 0.0 {
+                            format!("Field {}: 0.00° (On-Axis)", f_idx)
+                        } else {
+                            format!("Field {}: {:.2}°", f_idx, field_deg)
+                        };
+
+                        ui.label(
+                            RichText::new(label)
+                                .monospace()
+                                .size(10.5)
+                                .color(tokens.text_primary),
+                        );
+
+                        if prescription.field_angles_deg.len() > 1 && field_deg != 0.0 {
+                            if lucide_small_icon_button(ui, LucideIcon::X, "Delete Field Angle", tokens).clicked() {
+                                field_to_remove = Some(f_idx);
+                            }
+                        }
+                    });
+                }
+
+                if let Some(del_idx) = field_to_remove {
+                    prescription.field_angles_deg.remove(del_idx);
+                    modified = true;
+                }
+
+                // Add Field row
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing = Vec2::new(4.0, 0.0);
+                    ui.add(TextEdit::singleline(&mut state.new_field_buf).desired_width(50.0).font(egui::TextStyle::Monospace));
+                    if lucide_text_button(ui, LucideIcon::Plus, "Add", tokens).clicked() {
+                        if let Ok(val) = state.new_field_buf.trim().parse::<f64>() {
+                            if (0.0..=89.0).contains(&val) && !prescription.field_angles_deg.iter().any(|&f| (f - val).abs() < 0.01) {
+                                prescription.field_angles_deg.push(val);
+                                prescription.field_angles_deg.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                                modified = true;
+                            }
+                        }
+                    }
+                    if ui.small_button("+ 10°").clicked() {
+                        if !prescription.field_angles_deg.iter().any(|&f| (f - 10.0).abs() < 0.01) {
+                            prescription.field_angles_deg.push(10.0);
+                            prescription.field_angles_deg.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                            modified = true;
+                        }
+                    }
+                    if ui.small_button("+ 14°").clicked() {
+                        if !prescription.field_angles_deg.iter().any(|&f| (f - 14.0).abs() < 0.01) {
+                            prescription.field_angles_deg.push(14.0);
+                            prescription.field_angles_deg.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                            modified = true;
+                        }
+                    }
+                    if ui.small_button("+ 20°").clicked() {
+                        if !prescription.field_angles_deg.iter().any(|&f| (f - 20.0).abs() < 0.01) {
+                            prescription.field_angles_deg.push(20.0);
+                            prescription.field_angles_deg.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                            modified = true;
+                        }
+                    }
+                });
+            }
         });
     });
 

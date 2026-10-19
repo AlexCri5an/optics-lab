@@ -15,6 +15,7 @@ use egui::{
 use optics_core::OpticalPrescription;
 use optics_glass::{GlassCatalog, GlassCatalogDb, GlassMaterial};
 
+use crate::icons::{LucideIcon, lucide_small_icon_button};
 use crate::lens_editor::{COMMON_OPTICAL_GLASSES, LensEditorState};
 use crate::theme::OpticsTokens;
 
@@ -92,7 +93,9 @@ pub fn render_materials_panel(
 
             ui.add(search_edit);
 
-            if !editor_state.glass_search_query.is_empty() && ui.button("x").on_hover_text("Clear search").clicked() {
+            if !editor_state.glass_search_query.is_empty()
+                && lucide_small_icon_button(ui, LucideIcon::X, "Clear search", tokens).clicked()
+            {
                 editor_state.glass_search_query.clear();
             }
         });
@@ -187,11 +190,11 @@ pub fn render_materials_panel(
             let usable_w = (avail_w - scroll_margin).max(340.0);
             let spacing = 6.0;
 
-            let col_action_w = 46.0;
-            let col_vd_w = 52.0;
-            let col_nd_w = 60.0;
-            let col_vendor_w = 70.0;
-            let col_name_w = (usable_w - (col_vendor_w + col_nd_w + col_vd_w + col_action_w + spacing * 4.0)).max(100.0);
+            let col_action_w = 60.0;
+            let col_vd_w = 48.0;
+            let col_nd_w = 56.0;
+            let col_vendor_w = 64.0;
+            let col_name_w = (usable_w - (col_vendor_w + col_nd_w + col_vd_w + col_action_w + spacing * 4.0)).max(90.0);
 
             // Pinned Table Header (Always visible, strictly fixed columns)
             ui.horizontal(|ui| {
@@ -309,10 +312,11 @@ pub fn render_materials_panel(
                                         let (rect, _) = ui.allocate_exact_size(Vec2::new(col_action_w, 20.0), Sense::hover());
                                         let btn = Button::new(
                                             RichText::new(if is_current { "Active" } else { "Set" })
-                                                .size(11.0)
+                                                .size(10.5)
                                                 .strong()
                                                 .color(if is_current { tokens.accent } else { tokens.text_primary }),
                                         )
+                                        .wrap_mode(egui::TextWrapMode::Extend)
                                         .fill(if is_current { tokens.bg_control_active } else { tokens.bg_control })
                                         .stroke(tokens.border)
                                         .corner_radius(CornerRadius::ZERO);
@@ -396,10 +400,11 @@ pub fn render_materials_panel(
                                         let btn_text = if is_current { "Active" } else { "Set" };
                                         let btn = Button::new(
                                             RichText::new(btn_text)
-                                                .size(11.0)
+                                                .size(10.5)
                                                 .strong()
                                                 .color(if is_current { tokens.accent } else { tokens.text_primary }),
                                         )
+                                        .wrap_mode(egui::TextWrapMode::Extend)
                                         .fill(if is_current { tokens.bg_control_active } else { tokens.bg_control })
                                         .stroke(tokens.border)
                                         .corner_radius(CornerRadius::ZERO);

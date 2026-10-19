@@ -6,11 +6,17 @@
 //! - Automatic Zoom-Fit calculation for arbitrary optical prescriptions.
 //! - Engineering scale indicator (metric scale bar).
 
+use std::sync::LazyLock;
+
 use egui::{
     Color32, CornerRadius, Frame, Margin, Painter, Pos2, Rect, Response, RichText, Sense, Stroke,
     Ui, Vec2,
 };
-use optics_core::{OpticalPrescription, OpticalSurface};
+use optics_core::prescription::trace_sequential;
+use optics_core::{OpticalPrescription, OpticalSurface, Ray, Vec3};
+use optics_glass::GlassCatalogDb;
+
+static BUNDLED_CATALOG: LazyLock<GlassCatalogDb> = LazyLock::new(GlassCatalogDb::default);
 
 use crate::theme::OpticsTokens;
 
@@ -638,11 +644,38 @@ fn draw_sequential_rays(
     let margin = (semi_epd * 2.5).clamp(0.5, 12.0);
     let start_z = z0 - margin;
 
-    // Helper closure to trace a single paraxial ray across the optical system
+    let resolved_opt = prescription.resolve(&*BUNDLED_CATALOG).ok();
+
+    // Helper closure to trace a single ray across the optical system
     let trace_ray = |y_pupil: f64, u_in: f64, wav_nm: f64, color: Color32, stroke_width: f32| {
+        let y_start = y_pupil - (z0 - start_z) * u_in;
+
+        // 1. Try real sequential 3D ray tracing (accurately tracks GRIN RK4 arcs, Coordinate Breaks, and Aspheres)
+        if let Some(resolved) = &resolved_opt {
+            let u_cos = (1.0 - u_in * u_in).max(0.0).sqrt();
+            let dir = Vec3::new(0.0, u_in, u_cos).normalize();
+            if let Ok(ray) = Ray::new(
+                Vec3::new(0.0, y_start, start_z),
+                dir,
+                wav_nm,
+                1.0,
+            ) {
+                if let Ok(path_rec) = trace_sequential(resolved, &ray) {
+                    if path_rec.points.len() >= 2 {
+                        for window in path_rec.points.windows(2) {
+                            let p1 = to_screen(window[0].z, window[0].y);
+                            let p2 = to_screen(window[1].z, window[1].y);
+                            painter.line_segment([p1, p2], Stroke::new(stroke_width, color));
+                        }
+                        return;
+                    }
+                }
+            }
+        }
+
+        // 2. Paraxial fallback
         let mut y = y_pupil;
         let mut u = u_in;
-        let y_start = y_pupil - (z0 - start_z) * u_in;
         let mut prev_pt = to_screen(start_z, y_start);
 
         for (i, (&z_surf, surf)) in z_vertices.iter().zip(&prescription.surfaces).enumerate() {
