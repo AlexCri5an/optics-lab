@@ -122,6 +122,81 @@ impl SurfaceProfile {
         }
     }
 
+    /// Intersects a ray with the surface profile at given vertex $z$-coordinate.
+    ///
+    /// # Errors
+    /// Returns [`OpticsError::RayMissedSurface`] if ray fails to intersect the profile within tolerances.
+    pub fn intersect_ray(
+        &self,
+        ray: &crate::types::Ray,
+        vertex_z: f64,
+    ) -> Result<(f64, Vec3), OpticsError> {
+        match self {
+            Self::EvenAsphere(asph) => asph.intersect_ray(ray, vertex_z),
+            Self::Biconic(biconic) => biconic.intersect_ray(ray, vertex_z),
+            Self::Toroidal(toroid) => toroid.intersect_ray(ray, vertex_z),
+            Self::Conic(conic) => {
+                let local_conic = conic.with_vertex_z(vertex_z);
+                let hit = crate::conic::intersect_conic(ray, &local_conic, 0)?;
+                Ok((hit.t, hit.point))
+            }
+            Self::Planar | Self::Dummy | Self::Mirror | Self::Paraxial { .. } | Self::Diffractive(_) => {
+                if ray.direction.z.abs() < 1e-15 {
+                    return Err(OpticsError::RayMissedSurface(
+                        "Ray parallel to plane".to_string(),
+                    ));
+                }
+                let t = (vertex_z - ray.origin.z) / ray.direction.z;
+                if t < 0.0 {
+                    return Err(OpticsError::RayMissedSurface(
+                        "Intersection behind ray origin".to_string(),
+                    ));
+                }
+                Ok((t, ray.at(t)))
+            }
+            _ => {
+                if ray.direction.z.abs() < 1e-15 {
+                    return Err(OpticsError::RayMissedSurface(
+                        "Ray parallel to vertex plane".to_string(),
+                    ));
+                }
+                let mut t = (vertex_z - ray.origin.z) / ray.direction.z;
+                if t < 0.0 {
+                    t = 0.0;
+                }
+                for _ in 0..35 {
+                    let p = ray.at(t);
+                    let sag = self.sag(p.x, p.y).map_err(|_| {
+                        OpticsError::RayMissedSurface("Outside sag domain".to_string())
+                    })?;
+                    let f = (p.z - vertex_z) - sag;
+                    if f.abs() < 1e-11 {
+                        return Ok((t, p));
+                    }
+                    let norm = self.normal(p.x, p.y).map_err(|_| {
+                        OpticsError::RayMissedSurface("Singular normal".to_string())
+                    })?;
+                    let dz_dx = -norm.x / norm.z;
+                    let dz_dy = -norm.y / norm.z;
+                    let f_prime = ray.direction.z - (dz_dx * ray.direction.x + dz_dy * ray.direction.y);
+                    if f_prime.abs() < 1e-15 {
+                        return Err(OpticsError::NumericalSingularity(
+                            "Newton-Raphson zero gradient".to_string(),
+                        ));
+                    }
+                    let delta_t = f / f_prime;
+                    t -= delta_t;
+                    if delta_t.abs() < 1e-12 {
+                        return Ok((t, ray.at(t)));
+                    }
+                }
+                Err(OpticsError::RayMissedSurface(
+                    "Newton-Raphson failed to converge on surface profile".to_string(),
+                ))
+            }
+        }
+    }
+
     /// Evaluates paraxial curvature contribution at vertex $(0, 0)$.
     #[must_use]
     pub fn paraxial_curvature(&self) -> f64 {

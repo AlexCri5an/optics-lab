@@ -38,6 +38,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 asphere_coefficients: Vec::new(),
                 coordinate_break: None,
                 grin_profile: None,
+                profile: None,
             },
             OpticalSurface {
                 surface_index: 1,
@@ -50,6 +51,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 asphere_coefficients: Vec::new(),
                 coordinate_break: None,
                 grin_profile: None,
+                profile: None,
             },
             OpticalSurface {
                 surface_index: 2,
@@ -62,6 +64,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 asphere_coefficients: Vec::new(),
                 coordinate_break: None,
                 grin_profile: None,
+                profile: None,
             },
         ],
     };

@@ -13,7 +13,9 @@ use egui::{
     Align, Area, Button, CornerRadius, DragValue, Frame, Id, Image, Layout, Margin, RichText,
     ScrollArea, TextEdit, Ui, Vec2,
 };
-use optics_core::surface::{CoordinateBreak, GrinProfile};
+use optics_core::surface::{
+    BiconicSurface, CoordinateBreak, GrinProfile, SurfaceProfile, ToroidalSurface,
+};
 use optics_core::{OpticalPrescription, OpticalSurface};
 use optics_glass::GlassCatalogDb;
 
@@ -162,6 +164,7 @@ pub fn render_lens_editor(
                     asphere_coefficients: Vec::new(),
                     coordinate_break: None,
                     grin_profile: None,
+                    profile: None,
                 };
 
                 if insert_at < prescription.surfaces.len() {
@@ -459,11 +462,18 @@ fn render_surface_card(
         let mut remove_cb = false;
         let mut toggle_grin = false;
         let mut remove_grin = false;
+        let mut toggle_biconic = false;
+        let mut remove_biconic = false;
+        let mut toggle_toroidal = false;
+        let mut remove_toroidal = false;
+
         let has_asph = !surf.asphere_coefficients.is_empty() || surf.conic_constant.abs() > 1e-9;
+        let is_biconic = matches!(surf.profile, Some(SurfaceProfile::Biconic(_)));
+        let is_toroidal = matches!(surf.profile, Some(SurfaceProfile::Toroidal(_)));
 
         ui.add_space(2.0);
         ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
+            ui.spacing_mut().item_spacing = Vec2::new(5.0, 0.0);
 
             // Asphere toggle / indicator
             if has_asph {
@@ -482,6 +492,38 @@ fn render_surface_card(
             } else if ui.small_button("+ Asph").on_hover_text("Add Even Asphere (Conic k and higher-order polynomial coefficients)").clicked() {
                 surf.asphere_coefficients = vec![0.0, 0.0, 0.0];
                 modified = true;
+            }
+
+            // Biconic toggle / indicator
+            if is_biconic {
+                ui.label(
+                    RichText::new("[Bic]")
+                        .strong()
+                        .monospace()
+                        .size(10.0)
+                        .color(tokens.plot_sagittal),
+                );
+                if ui.small_button("Del Bic").on_hover_text("Remove Biconic surface profile").clicked() {
+                    remove_biconic = true;
+                }
+            } else if !is_toroidal && ui.small_button("+ Bic").on_hover_text("Add Biconic Surface (independent Rx, kx, Ry, ky)").clicked() {
+                toggle_biconic = true;
+            }
+
+            // Toroidal toggle / indicator
+            if is_toroidal {
+                ui.label(
+                    RichText::new("[Tor]")
+                        .strong()
+                        .monospace()
+                        .size(10.0)
+                        .color(tokens.accent),
+                );
+                if ui.small_button("Del Tor").on_hover_text("Remove Toroidal surface profile").clicked() {
+                    remove_toroidal = true;
+                }
+            } else if !is_biconic && ui.small_button("+ Tor").on_hover_text("Add Toroidal Surface of revolution (Rx, Ry, ky)").clicked() {
+                toggle_toroidal = true;
             }
 
             // Coordinate Break toggle / indicator
@@ -557,6 +599,22 @@ fn render_surface_card(
         }
         if remove_grin {
             surf.grin_profile = None;
+            modified = true;
+        }
+        if toggle_biconic {
+            surf.profile = Some(SurfaceProfile::Biconic(BiconicSurface::default()));
+            modified = true;
+        }
+        if remove_biconic {
+            surf.profile = None;
+            modified = true;
+        }
+        if toggle_toroidal {
+            surf.profile = Some(SurfaceProfile::Toroidal(ToroidalSurface::default()));
+            modified = true;
+        }
+        if remove_toroidal {
+            surf.profile = None;
             modified = true;
         }
 
@@ -652,6 +710,69 @@ fn render_surface_card(
                         });
                     }
                 }
+            });
+        }
+
+        // Expanded Biconic fields
+        if let Some(SurfaceProfile::Biconic(biconic)) = &mut surf.profile {
+            ui.add_space(2.0);
+            ui.group(|ui| {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing = Vec2::new(3.0, 0.0);
+                    ui.label(RichText::new("Biconic:").size(10.0).color(tokens.plot_sagittal));
+
+                    ui.label(RichText::new("Rx:").size(10.0).color(tokens.text_muted));
+                    let mut rx = biconic.rx_mm();
+                    if float_input(ui, Id::new(("surf_bic_rx", idx)), &mut rx, 40.0) {
+                        biconic.cx = if rx.abs() < 1e-15 || rx.is_infinite() { 0.0 } else { 1.0 / rx };
+                        modified = true;
+                    }
+
+                    ui.label(RichText::new("kx:").size(10.0).color(tokens.text_muted));
+                    if float_input(ui, Id::new(("surf_bic_kx", idx)), &mut biconic.kx, 34.0) {
+                        modified = true;
+                    }
+
+                    ui.label(RichText::new("Ry:").size(10.0).color(tokens.text_muted));
+                    let mut ry = biconic.ry_mm();
+                    if float_input(ui, Id::new(("surf_bic_ry", idx)), &mut ry, 40.0) {
+                        biconic.cy = if ry.abs() < 1e-15 || ry.is_infinite() { 0.0 } else { 1.0 / ry };
+                        modified = true;
+                    }
+
+                    ui.label(RichText::new("ky:").size(10.0).color(tokens.text_muted));
+                    if float_input(ui, Id::new(("surf_bic_ky", idx)), &mut biconic.ky, 34.0) {
+                        modified = true;
+                    }
+                });
+            });
+        }
+
+        // Expanded Toroidal fields
+        if let Some(SurfaceProfile::Toroidal(toroid)) = &mut surf.profile {
+            ui.add_space(2.0);
+            ui.group(|ui| {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing = Vec2::new(3.0, 0.0);
+                    ui.label(RichText::new("Toroid:").size(10.0).color(tokens.accent));
+
+                    ui.label(RichText::new("Rx:").size(10.0).color(tokens.text_muted));
+                    if float_input(ui, Id::new(("surf_tor_rx", idx)), &mut toroid.rx_mm, 40.0) {
+                        modified = true;
+                    }
+
+                    ui.label(RichText::new("Ry:").size(10.0).color(tokens.text_muted));
+                    let mut ry = toroid.ry_mm();
+                    if float_input(ui, Id::new(("surf_tor_ry", idx)), &mut ry, 40.0) {
+                        toroid.cy = if ry.abs() < 1e-15 || ry.is_infinite() { 0.0 } else { 1.0 / ry };
+                        modified = true;
+                    }
+
+                    ui.label(RichText::new("ky:").size(10.0).color(tokens.text_muted));
+                    if float_input(ui, Id::new(("surf_tor_ky", idx)), &mut toroid.ky, 34.0) {
+                        modified = true;
+                    }
+                });
             });
         }
     });

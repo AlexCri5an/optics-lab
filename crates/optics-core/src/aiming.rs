@@ -369,6 +369,7 @@ mod tests {
                     asphere_coefficients: Vec::new(),
                     coordinate_break: None,
                     grin_profile: None,
+                    profile: None,
                 },
                 OpticalSurface {
                     surface_index: 2,
@@ -381,6 +382,7 @@ mod tests {
                     asphere_coefficients: Vec::new(),
                     coordinate_break: None,
                     grin_profile: None,
+                    profile: None,
                 },
             ],
         };

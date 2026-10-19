@@ -54,6 +54,7 @@ mod tests {
                     asphere_coefficients: Vec::new(),
                     coordinate_break: None,
                     grin_profile: None,
+                    profile: None,
                 },
                 OpticalSurface {
                     surface_index: 1,
@@ -66,6 +67,7 @@ mod tests {
                     asphere_coefficients: Vec::new(),
                     coordinate_break: None,
                     grin_profile: None,
+                    profile: None,
                 },
             ],
         }
@@ -264,6 +266,7 @@ mod tests {
                     asphere_coefficients: Vec::new(),
                     coordinate_break: None,
                     grin_profile: None,
+                    profile: None,
                 },
                 // Cemented interface (F2 flint)
                 OpticalSurface {
@@ -277,6 +280,7 @@ mod tests {
                     asphere_coefficients: Vec::new(),
                     coordinate_break: None,
                     grin_profile: None,
+                    profile: None,
                 },
                 // Back surface to air
                 OpticalSurface {
@@ -290,6 +294,7 @@ mod tests {
                     asphere_coefficients: Vec::new(),
                     coordinate_break: None,
                     grin_profile: None,
+                    profile: None,
                 },
             ],
         };

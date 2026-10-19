@@ -182,6 +182,7 @@ fn test_sweep_extreme_thicknesses() -> TestResult {
                     asphere_coefficients: Vec::new(),
                     coordinate_break: None,
                     grin_profile: None,
+                    profile: None,
                 },
                 OpticalSurface {
                     surface_index: 1,
@@ -194,6 +195,7 @@ fn test_sweep_extreme_thicknesses() -> TestResult {
                     asphere_coefficients: Vec::new(),
                     coordinate_break: None,
                     grin_profile: None,
+                    profile: None,
                 },
             ],
         };

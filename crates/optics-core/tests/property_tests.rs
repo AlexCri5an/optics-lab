@@ -336,6 +336,7 @@ fn test_prop_lagrange_invariant_conservation() -> TestResult {
                     asphere_coefficients: Vec::new(),
                     coordinate_break: None,
                     grin_profile: None,
+                    profile: None,
                 },
                 OpticalSurface {
                     surface_index: 1,
@@ -348,6 +349,7 @@ fn test_prop_lagrange_invariant_conservation() -> TestResult {
                     asphere_coefficients: Vec::new(),
                     coordinate_break: None,
                     grin_profile: None,
+                    profile: None,
                 },
             ],
         };
@@ -430,6 +432,7 @@ fn test_prop_project_workspace_serialization_roundtrip() -> TestResult {
                 asphere_coefficients: Vec::new(),
                 coordinate_break: None,
                 grin_profile: None,
+                profile: None,
             });
         }
 

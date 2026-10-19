@@ -20,7 +20,10 @@ use crate::error::OpticsError;
 use crate::fresnel::fresnel_unpolarized;
 use crate::geometry::{Air, RefractiveIndex};
 use crate::snell::snell_refract;
-use crate::surface::{CoordinateBreak, EvenAsphere, GrinProfile, SurfaceTransform};
+use crate::surface::{
+    BiconicSurface, CoordinateBreak, EvenAsphere, GrinProfile, SurfaceProfile, SurfaceTransform,
+    ToroidalSurface,
+};
 use crate::types::{BounceEvent, HitRecord, Ray, RayBounce, Vec3};
 
 /// Custom serde helper to losslessly serialize/deserialize `f64::INFINITY` in JSON.
@@ -93,6 +96,9 @@ pub struct OpticalSurface {
     /// Optional gradient-index (GRIN) inhomogeneous refractive index profile.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub grin_profile: Option<GrinProfile>,
+    /// Optional surface profile override (Biconic, Toroidal, Freeform, etc.).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<SurfaceProfile>,
 }
 
 impl Default for OpticalSurface {
@@ -108,6 +114,7 @@ impl Default for OpticalSurface {
             asphere_coefficients: Vec::new(),
             coordinate_break: None,
             grin_profile: None,
+            profile: None,
         }
     }
 }
@@ -115,6 +122,9 @@ impl Default for OpticalSurface {
 impl OpticalSurface {
     /// Evaluates the surface sag $z(r)$ at radial distance $r \ge 0$.
     pub fn sag(&self, r: f64) -> Result<f64, OpticsError> {
+        if let Some(profile) = &self.profile {
+            return profile.sag(0.0, r);
+        }
         let c = if self.radius_mm.is_infinite() || self.radius_mm.abs() < 1e-15 {
             0.0
         } else {
@@ -132,6 +142,49 @@ impl OpticalSurface {
                 r_pow *= r2;
             }
             Ok(conic_s + poly)
+        }
+    }
+
+    /// Evaluates the surface sag $z(x, y)$ at point $(x, y)$.
+    pub fn sag_xy(&self, x: f64, y: f64) -> Result<f64, OpticsError> {
+        if let Some(profile) = &self.profile {
+            return profile.sag(x, y);
+        }
+        let r = (x * x + y * y).sqrt();
+        self.sag(r)
+    }
+
+    /// Returns a reference to the biconic surface if set.
+    #[must_use]
+    pub fn biconic(&self) -> Option<&BiconicSurface> {
+        match &self.profile {
+            Some(SurfaceProfile::Biconic(b)) => Some(b),
+            _ => None,
+        }
+    }
+
+    /// Returns a mutable reference to the biconic surface if set.
+    pub fn biconic_mut(&mut self) -> Option<&mut BiconicSurface> {
+        match &mut self.profile {
+            Some(SurfaceProfile::Biconic(b)) => Some(b),
+            _ => None,
+        }
+    }
+
+    /// Returns a reference to the toroidal surface if set.
+    #[must_use]
+    pub fn toroidal(&self) -> Option<&ToroidalSurface> {
+        match &self.profile {
+            Some(SurfaceProfile::Toroidal(t)) => Some(t),
+            _ => None,
+        }
+    }
+
+    /// Returns a mutable reference to the toroidal surface if set.
+    pub fn toroidal_mut(&mut self) -> Option<&mut ToroidalSurface> {
+        match &mut self.profile {
+            Some(SurfaceProfile::Toroidal(t)) => Some(t),
+            _ => None,
         }
     }
 }
@@ -190,6 +243,8 @@ pub struct ResolvedSurface {
     pub conic: ConicSurface,
     /// Even asphere geometry if polynomial deformation coefficients are present.
     pub asphere: Option<EvenAsphere>,
+    /// Optional surface profile override (Biconic, Toroidal, Freeform, etc.).
+    pub profile: Option<SurfaceProfile>,
     /// Optional 3D coordinate break defining spatial decenters and Euler tilts.
     pub coordinate_break: Option<CoordinateBreak>,
     /// Global 3D rigid transform (origin vertex position and orientation relative to global scene).
@@ -209,9 +264,23 @@ pub struct ResolvedSurface {
 impl ResolvedSurface {
     /// Evaluates surface sag $z(r)$ at radial distance $r \ge 0$.
     pub fn sag(&self, r: f64) -> Result<f64, OpticsError> {
-        if let Some(asph) = &self.asphere {
+        if let Some(profile) = &self.profile {
+            profile.sag(0.0, r)
+        } else if let Some(asph) = &self.asphere {
             asph.sag(r)
         } else {
+            crate::conic::conic_sag(r, self.conic.curvature, self.conic.conic_constant)
+        }
+    }
+
+    /// Evaluates surface sag $z(x, y)$ at coordinates $(x, y)$.
+    pub fn sag_xy(&self, x: f64, y: f64) -> Result<f64, OpticsError> {
+        if let Some(profile) = &self.profile {
+            profile.sag(x, y)
+        } else if let Some(asph) = &self.asphere {
+            asph.sag((x * x + y * y).sqrt())
+        } else {
+            let r = (x * x + y * y).sqrt();
             crate::conic::conic_sag(r, self.conic.curvature, self.conic.conic_constant)
         }
     }
@@ -339,6 +408,7 @@ impl OpticalPrescription {
                 surface_index: surf.surface_index,
                 conic,
                 asphere,
+                profile: surf.profile.clone(),
                 coordinate_break: surf.coordinate_break.clone(),
                 global_transform,
                 grin_profile,
@@ -699,7 +769,7 @@ pub fn trace_sequential(
         // Transform ray to local frame where surface vertex is at z = 0
         let local_ray = trans.to_local_ray(&current_ray)?;
 
-        // Intersect local ray with conic or aspheric surface
+        // Intersect local ray with conic, aspheric, or advanced profile
         let local_hit = if let Some(asph) = &surf.asphere {
             let (t, pt) = asph.intersect_ray(&local_ray, 0.0)?;
             let r = (pt.x * pt.x + pt.y * pt.y).sqrt();
@@ -711,6 +781,25 @@ pub fn trace_sequential(
                 });
             }
             let normal = asph.normal(pt.x, pt.y)?;
+            let is_front_face = local_ray.direction.dot(&normal) < 0.0;
+            HitRecord {
+                t,
+                point: pt,
+                normal,
+                is_front_face,
+                surface_index: surf.surface_index,
+            }
+        } else if let Some(profile) = &surf.profile {
+            let (t, pt) = profile.intersect_ray(&local_ray, 0.0)?;
+            let r = (pt.x * pt.x + pt.y * pt.y).sqrt();
+            if r > surf.conic.semi_diam_mm {
+                return Err(OpticsError::RayVignetted {
+                    surface_index: surf.surface_index,
+                    r,
+                    max_r: surf.conic.semi_diam_mm,
+                });
+            }
+            let normal = profile.normal(pt.x, pt.y)?;
             let is_front_face = local_ray.direction.dot(&normal) < 0.0;
             HitRecord {
                 t,
@@ -876,6 +965,7 @@ mod tests {
                     coordinate_break: None,
                     global_transform: None,
                     grin_profile: None,
+                    profile: None,
                     thickness_mm: 1e-6, // Tiny thickness approaching thin-lens limit
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -888,6 +978,7 @@ mod tests {
                     coordinate_break: None,
                     global_transform: None,
                     grin_profile: None,
+                    profile: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -931,6 +1022,7 @@ mod tests {
                     coordinate_break: None,
                     global_transform: None,
                     grin_profile: None,
+                    profile: None,
                     thickness_mm: d,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -943,6 +1035,7 @@ mod tests {
                     coordinate_break: None,
                     global_transform: None,
                     grin_profile: None,
+                    profile: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -988,6 +1081,7 @@ mod tests {
                     coordinate_break: None,
                     global_transform: None,
                     grin_profile: None,
+                    profile: None,
                     thickness_mm: d,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -1000,6 +1094,7 @@ mod tests {
                     coordinate_break: None,
                     global_transform: None,
                     grin_profile: None,
+                    profile: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1032,6 +1127,7 @@ mod tests {
                     coordinate_break: None,
                     global_transform: None,
                     grin_profile: None,
+                    profile: None,
                     thickness_mm: 4.0,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass1".to_string(),
@@ -1046,6 +1142,7 @@ mod tests {
                     coordinate_break: None,
                     global_transform: None,
                     grin_profile: None,
+                    profile: None,
                     thickness_mm: 2.0,
                     material: Arc::new(MockIndex(1.52)),
                     material_name: "Glass2".to_string(),
@@ -1060,6 +1157,7 @@ mod tests {
                     coordinate_break: None,
                     global_transform: None,
                     grin_profile: None,
+                    profile: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1116,6 +1214,7 @@ mod tests {
                     coordinate_break: None,
                     global_transform: None,
                     grin_profile: None,
+                    profile: None,
                     thickness_mm: d,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -1128,6 +1227,7 @@ mod tests {
                     coordinate_break: None,
                     global_transform: None,
                     grin_profile: None,
+                    profile: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1150,6 +1250,7 @@ mod tests {
                     coordinate_break: None,
                     global_transform: None,
                     grin_profile: None,
+                    profile: None,
                     thickness_mm: d,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -1162,6 +1263,7 @@ mod tests {
                     coordinate_break: None,
                     global_transform: None,
                     grin_profile: None,
+                    profile: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1198,6 +1300,7 @@ mod tests {
                     coordinate_break: None,
                     global_transform: None,
                     grin_profile: None,
+                    profile: None,
                     thickness_mm: d,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -1210,6 +1313,7 @@ mod tests {
                     coordinate_break: None,
                     global_transform: None,
                     grin_profile: None,
+                    profile: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1275,6 +1379,7 @@ mod tests {
                     coordinate_break: None,
                     global_transform: None,
                     grin_profile: None,
+                    profile: None,
                     thickness_mm: d,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -1287,6 +1392,7 @@ mod tests {
                     coordinate_break: None,
                     global_transform: None,
                     grin_profile: None,
+                    profile: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1362,6 +1468,7 @@ mod tests {
                     coordinate_break: None,
                     global_transform: None,
                     grin_profile: None,
+                    profile: None,
                     thickness_mm: d,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -1376,6 +1483,7 @@ mod tests {
                     coordinate_break: None,
                     global_transform: None,
                     grin_profile: None,
+                    profile: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1437,6 +1545,7 @@ mod tests {
                     coordinate_break: None,
                     global_transform: None,
                     grin_profile: None,
+                    profile: None,
                     thickness_mm: d,
                     material: Arc::new(MockDispersiveIndex),
                     material_name: "DispersiveGlass".to_string(),
@@ -1449,6 +1558,7 @@ mod tests {
                     coordinate_break: None,
                     global_transform: None,
                     grin_profile: None,
+                    profile: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1507,6 +1617,7 @@ mod tests {
                     coordinate_break: None,
                     global_transform: None,
                     grin_profile: None,
+                    profile: None,
                     thickness_mm: 5.0,
                     material: Arc::new(MockIndex(1.5)),
                     material_name: "Glass".to_string(),
@@ -1521,6 +1632,7 @@ mod tests {
                     coordinate_break: None,
                     global_transform: None,
                     grin_profile: None,
+                    profile: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1577,6 +1689,7 @@ mod tests {
                     coordinate_break: None,
                     global_transform: None,
                     grin_profile: None,
+                    profile: None,
                     thickness_mm: d,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -1589,6 +1702,7 @@ mod tests {
                     coordinate_break: None,
                     global_transform: None,
                     grin_profile: None,
+                    profile: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1624,6 +1738,7 @@ mod tests {
                     coordinate_break: None,
                     global_transform: None,
                     grin_profile: None,
+                    profile: None,
                     thickness_mm: d,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -1636,6 +1751,7 @@ mod tests {
                     coordinate_break: None,
                     global_transform: None,
                     grin_profile: None,
+                    profile: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1710,6 +1826,7 @@ mod tests {
                     asphere_coefficients: Vec::new(),
                     coordinate_break: None,
                     grin_profile: None,
+                    profile: None,
                 },
                 OpticalSurface {
                     surface_index: 2,
@@ -1722,6 +1839,7 @@ mod tests {
                     asphere_coefficients: Vec::new(),
                     coordinate_break: None,
                     grin_profile: None,
+                    profile: None,
                 },
             ],
         };
@@ -1748,6 +1866,7 @@ mod tests {
                     asphere_coefficients: vec![0.0, -5.8e-7],
                     coordinate_break: None,
                     grin_profile: None,
+                    profile: None,
                 },
                 OpticalSurface {
                     surface_index: 2,
@@ -1760,6 +1879,7 @@ mod tests {
                     asphere_coefficients: Vec::new(),
                     coordinate_break: None,
                     grin_profile: None,
+                    profile: None,
                 },
             ],
         };
@@ -1846,6 +1966,7 @@ mod tests {
                         tilt_first: false,
                     }),
                     grin_profile: None,
+                    profile: None,
                 },
                 OpticalSurface {
                     surface_index: 2,
@@ -1858,6 +1979,7 @@ mod tests {
                     asphere_coefficients: Vec::new(),
                     coordinate_break: None,
                     grin_profile: None,
+                    profile: None,
                 },
             ],
         };
@@ -1925,6 +2047,7 @@ mod tests {
                     asphere_coefficients: Vec::new(),
                     coordinate_break: None,
                     grin_profile: Some(GrinProfile::Radial { n0: 1.6, a: 0.01 }),
+                    profile: None,
                 },
                 // Surface 2: Exit flat face into air
                 OpticalSurface {
@@ -1938,6 +2061,7 @@ mod tests {
                     asphere_coefficients: Vec::new(),
                     coordinate_break: None,
                     grin_profile: None,
+                    profile: None,
                 },
             ],
         };
@@ -1977,5 +2101,106 @@ mod tests {
 
         // 3. Ray exits directed toward the axis (negative y-direction)
         assert!(path.final_ray.direction.y < -0.05, "Exit ray must deflect toward axis: got dy = {}", path.final_ray.direction.y);
+    }
+
+    #[test]
+    fn test_sequential_biconic_anamorphic_astigmatism() {
+        // Anamorphic singlet: Biconic front surface with Rx = 50 mm, Ry = 100 mm, planar back surface.
+        // Material with n = 1.5.
+        // Thin-lens paraxial focal lengths: fx ~= 50 / (1.5 - 1) = 100 mm, fy ~= 100 / (1.5 - 1) = 200 mm.
+        let rx = OpticalPrescription {
+            name: "Anamorphic Biconic Astigmatic Singlet".to_string(),
+            entrance_pupil_diameter_mm: 10.0,
+            field_angles_deg: vec![0.0],
+            wavelengths_nm: vec![587.56],
+            primary_wavelength_index: 0,
+            surfaces: vec![
+                OpticalSurface {
+                    surface_index: 1,
+                    radius_mm: 50.0,
+                    conic_constant: 0.0,
+                    thickness_mm: 5.0,
+                    semi_diameter_mm: 12.0,
+                    material_name: "GLASS15".to_string(),
+                    is_stop: true,
+                    asphere_coefficients: Vec::new(),
+                    coordinate_break: None,
+                    grin_profile: None,
+                    profile: Some(SurfaceProfile::Biconic(
+                        BiconicSurface::from_radii(50.0, 0.0, 100.0, 0.0, 12.0).unwrap(),
+                    )),
+                },
+                OpticalSurface {
+                    surface_index: 2,
+                    radius_mm: f64::INFINITY,
+                    conic_constant: 0.0,
+                    thickness_mm: 0.0,
+                    semi_diameter_mm: 12.0,
+                    material_name: "AIR".to_string(),
+                    is_stop: false,
+                    asphere_coefficients: Vec::new(),
+                    coordinate_break: None,
+                    grin_profile: None,
+                    profile: None,
+                },
+            ],
+        };
+
+        struct ConstantIndex(f64);
+        impl RefractiveIndex for ConstantIndex {
+            fn n(&self, _wavelength_nm: f64) -> f64 {
+                self.0
+            }
+        }
+
+        let resolver = |mat: &str| -> Result<Arc<dyn RefractiveIndex + Send + Sync>, OpticsError> {
+            if mat == "GLASS15" {
+                Ok(Arc::new(ConstantIndex(1.5)))
+            } else {
+                Ok(Arc::new(Air))
+            }
+        };
+
+        let resolved = rx.resolve(&resolver).unwrap();
+
+        // 1. Trace marginal ray in X-Z meridian at x = 4.0 mm, y = 0.0 mm
+        let ray_x = Ray::new(
+            Vec3::new(4.0, 0.0, -10.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            587.56,
+            1.0,
+        )
+        .unwrap();
+        let path_x = trace_sequential(&resolved, &ray_x).unwrap();
+
+        // 2. Trace marginal ray in Y-Z meridian at x = 0.0 mm, y = 4.0 mm
+        let ray_y = Ray::new(
+            Vec3::new(0.0, 4.0, -10.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            587.56,
+            1.0,
+        )
+        .unwrap();
+        let path_y = trace_sequential(&resolved, &ray_y).unwrap();
+
+        // Both rays hit surface 1 and emerge from back surface
+        let exit_ray_x = &path_x.final_ray;
+        let exit_ray_y = &path_y.final_ray;
+
+        // X marginal ray must deflect toward optical axis in X: dx < 0
+        assert!(exit_ray_x.direction.x < -0.01, "X-marginal ray must converge: dx = {}", exit_ray_x.direction.x);
+        assert!(exit_ray_x.direction.y.abs() < 1e-12);
+
+        // Y marginal ray must deflect toward optical axis in Y: dy < 0
+        assert!(exit_ray_y.direction.y < -0.01, "Y-marginal ray must converge: dy = {}", exit_ray_y.direction.y);
+        assert!(exit_ray_y.direction.x.abs() < 1e-12);
+
+        // Stronger curvature along X (Rx = 50 vs Ry = 100) causes greater angular deviation in X than in Y!
+        assert!(
+            exit_ray_x.direction.x.abs() > exit_ray_y.direction.y.abs() * 1.8,
+            "X meridian (Rx=50) must refract roughly 2x stronger than Y meridian (Ry=100): dx={}, dy={}",
+            exit_ray_x.direction.x,
+            exit_ray_y.direction.y
+        );
     }
 }
