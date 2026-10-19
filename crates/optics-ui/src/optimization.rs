@@ -17,7 +17,7 @@ use optics_optimize::{
     DlsConfig, DlsOptimizer, MeritFunction, MeritOperand, OperandType, VariableSet, VariableType,
 };
 
-use crate::icons::{LucideIcon, render_lucide_icon};
+use crate::icons::LucideIcon;
 use crate::lens_editor::LensEditorState;
 use crate::theme::OpticsTokens;
 
@@ -57,6 +57,8 @@ pub struct OptimizationModalState {
     pub target_efl_weight: f64,
     /// Snapshot of the prescription before optimization started (for Revert).
     pub original_prescription: Option<OpticalPrescription>,
+    /// History stack of (prescription, summary) before each optimization run for multi-level synchronized undo.
+    pub history: Vec<(OpticalPrescription, Option<DlsRunSummary>)>,
     /// Summary of the last completed run.
     pub last_summary: Option<DlsRunSummary>,
     /// Status or error message from the last operation.
@@ -75,6 +77,7 @@ impl Default for OptimizationModalState {
             target_efl_value: 50.0,
             target_efl_weight: 100.0,
             original_prescription: None,
+            history: Vec::new(),
             last_summary: None,
             status_message: None,
         }
@@ -82,6 +85,14 @@ impl Default for OptimizationModalState {
 }
 
 impl OptimizationModalState {
+    /// Resets all history and baseline snapshots (e.g. when loading a new file or preset).
+    pub fn reset_history(&mut self) {
+        self.original_prescription = None;
+        self.history.clear();
+        self.last_summary = None;
+        self.status_message = None;
+    }
+
     /// Opens the dialog and captures the baseline prescription for potential revert.
     pub fn open_with_snapshot(&mut self, prescription: &OpticalPrescription, catalog: &GlassCatalogDb) {
         self.open = true;
@@ -92,20 +103,20 @@ impl OptimizationModalState {
     pub fn init_if_needed(&mut self, prescription: &OpticalPrescription, catalog: &GlassCatalogDb) {
         if self.original_prescription.is_none() {
             self.original_prescription = Some(prescription.clone());
-        }
-        self.last_summary = None;
-        self.status_message = None;
+            self.last_summary = None;
+            self.status_message = None;
 
-        // Auto-detect current EFL as the default target EFL if valid
-        let prim_wl = prescription
-            .wavelengths_nm
-            .get(prescription.primary_wavelength_index)
-            .copied()
-            .unwrap_or(587.56);
-        if let Ok(resolved) = prescription.resolve(catalog) {
-            if let Ok(parax) = calculate_paraxial_properties(&resolved, prim_wl) {
-                if parax.efl_mm.is_finite() && parax.efl_mm.abs() > 0.1 {
-                    self.target_efl_value = parax.efl_mm;
+            // Auto-detect current EFL as the default target EFL if valid
+            let prim_wl = prescription
+                .wavelengths_nm
+                .get(prescription.primary_wavelength_index)
+                .copied()
+                .unwrap_or(587.56);
+            if let Ok(resolved) = prescription.resolve(catalog) {
+                if let Ok(parax) = calculate_paraxial_properties(&resolved, prim_wl) {
+                    if parax.efl_mm.is_finite() && parax.efl_mm.abs() > 0.1 {
+                        self.target_efl_value = parax.efl_mm;
+                    }
                 }
             }
         }
@@ -529,24 +540,21 @@ pub fn render_optimization_panel(
                 res_frame.show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     ui.vertical(|ui| {
-                        ui.horizontal(|ui| {
-                            render_lucide_icon(ui, LucideIcon::Check, 13.0, tokens.accent);
-                            ui.label(
-                                RichText::new(format!(
-                                    "Completed {} cycles ({})",
-                                    summary.iterations_run,
-                                    if summary.converged { "Converged" } else { "Step limit reached" }
-                                ))
-                                .strong()
-                                .monospace()
-                                .size(10.5)
-                                .color(tokens.accent),
-                            );
-                        });
+                        ui.label(
+                            RichText::new(format!(
+                                "Completed {} cycles ({})",
+                                summary.iterations_run,
+                                if summary.converged { "Converged" } else { "Step limit reached" }
+                            ))
+                            .strong()
+                            .monospace()
+                            .size(10.5)
+                            .color(tokens.accent),
+                        );
 
                         ui.add_space(4.0);
 
-                        // Merit progression row with LucideIcon::ArrowRight
+                        // Merit progression row
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing = Vec2::new(5.0, 0.0);
                             ui.label(RichText::new("Merit:").size(10.5).color(tokens.text_muted));
@@ -566,7 +574,12 @@ pub fn render_optimization_panel(
                                     .size(11.0)
                                     .color(tokens.text_primary),
                             );
-                            render_lucide_icon(ui, LucideIcon::ArrowRight, 11.0, tokens.text_muted);
+                            ui.label(
+                                RichText::new("->")
+                                    .monospace()
+                                    .size(11.0)
+                                    .color(tokens.text_muted),
+                            );
                             ui.label(
                                 RichText::new(final_str)
                                     .monospace()
@@ -578,51 +591,42 @@ pub fn render_optimization_panel(
 
                         ui.add_space(3.0);
 
-                        // Improvement row with LucideIcon::TrendingDown / LucideIcon::TrendingUp
-                        ui.horizontal(|ui| {
-                            ui.spacing_mut().item_spacing = Vec2::new(5.0, 0.0);
-                            let (icon, color, text) = if summary.percent_improvement >= 0.0 {
-                                (
-                                    LucideIcon::TrendingDown,
-                                    tokens.accent,
-                                    format!("Reduction: -{:.1}%", summary.percent_improvement),
-                                )
-                            } else {
-                                (
-                                    LucideIcon::TrendingUp,
-                                    tokens.warning,
-                                    format!("Increased: +{:.1}%", -summary.percent_improvement),
-                                )
-                            };
-                            render_lucide_icon(ui, icon, 12.0, color);
-                            ui.label(
-                                RichText::new(text)
-                                    .monospace()
-                                    .strong()
-                                    .size(10.5)
-                                    .color(color),
-                            );
-                        });
+                        // Improvement row
+                        let (color, text) = if summary.percent_improvement >= 0.0 {
+                            (
+                                tokens.accent,
+                                format!("Reduction: -{:.1}%", summary.percent_improvement),
+                            )
+                        } else {
+                            (
+                                tokens.warning,
+                                format!("Increased: +{:.1}%", -summary.percent_improvement),
+                            )
+                        };
+                        ui.label(
+                            RichText::new(text)
+                                .monospace()
+                                .strong()
+                                .size(10.5)
+                                .color(color),
+                        );
                     });
                 });
-            } else if let Some(ref err) = opt_state.status_message {
-                let err_frame = Frame::NONE
+            } else if let Some(ref msg) = opt_state.status_message {
+                let msg_frame = Frame::NONE
                     .fill(tokens.bg_control)
-                    .stroke(Stroke::new(1.0, tokens.warning))
+                    .stroke(tokens.border)
                     .corner_radius(CornerRadius::ZERO)
                     .inner_margin(Margin::same(8));
 
-                err_frame.show(ui, |ui| {
+                msg_frame.show(ui, |ui| {
                     ui.set_width(ui.available_width());
-                    ui.horizontal_top(|ui| {
-                        render_lucide_icon(ui, LucideIcon::X, 12.0, tokens.warning);
-                        ui.add(
-                            egui::Label::new(
-                                RichText::new(err).size(10.5).color(tokens.warning),
-                            )
-                            .wrap(),
-                        );
-                    });
+                    ui.add(
+                        egui::Label::new(
+                            RichText::new(msg).size(10.5).color(tokens.text_primary),
+                        )
+                        .wrap(),
+                    );
                 });
             }
 
@@ -674,6 +678,7 @@ pub fn render_optimization_panel(
                         if opt_state.original_prescription.is_none() {
                             opt_state.original_prescription = Some(prescription.clone());
                         }
+                        opt_state.history.push((prescription.clone(), opt_state.last_summary.clone()));
                         match execute_dls_cycle(opt_state.iterations, prescription, editor_state, opt_state, catalog) {
                             Ok(summary) => {
                                 opt_state.last_summary = Some(summary);
@@ -682,6 +687,9 @@ pub fn render_optimization_panel(
                             }
                             Err(e) => {
                                 opt_state.status_message = Some(e);
+                                if let Some((_, prev_sum)) = opt_state.history.pop() {
+                                    opt_state.last_summary = prev_sum;
+                                }
                             }
                         }
                     }
@@ -713,6 +721,7 @@ pub fn render_optimization_panel(
                         if opt_state.original_prescription.is_none() {
                             opt_state.original_prescription = Some(prescription.clone());
                         }
+                        opt_state.history.push((prescription.clone(), opt_state.last_summary.clone()));
                         match execute_dls_cycle(1, prescription, editor_state, opt_state, catalog) {
                             Ok(summary) => {
                                 opt_state.last_summary = Some(summary);
@@ -721,6 +730,9 @@ pub fn render_optimization_panel(
                             }
                             Err(e) => {
                                 opt_state.status_message = Some(e);
+                                if let Some((_, prev_sum)) = opt_state.history.pop() {
+                                    opt_state.last_summary = prev_sum;
+                                }
                             }
                         }
                     }
@@ -728,8 +740,8 @@ pub fn render_optimization_panel(
                     step_resp.on_hover_text(step_tooltip);
                 }
 
-                // Revert button
-                let can_revert = opt_state.original_prescription.is_some() && opt_state.last_summary.is_some();
+                // Revert button (supports multi-step history undo)
+                let can_revert = !opt_state.history.is_empty();
                 let revert_icon_color = if can_revert {
                     tokens.accent
                 } else {
@@ -748,9 +760,15 @@ pub fn render_optimization_panel(
                 .tint(revert_icon_color)
                 .fit_to_exact_size(Vec2::splat(13.0));
 
+                let revert_label = if opt_state.history.len() > 1 {
+                    format!("Revert ({})", opt_state.history.len())
+                } else {
+                    "Revert".to_string()
+                };
+
                 let revert_btn = Button::image_and_text(
                     revert_img,
-                    RichText::new("Revert")
+                    RichText::new(revert_label)
                         .size(11.0)
                         .color(revert_text_color),
                 )
@@ -760,16 +778,59 @@ pub fn render_optimization_panel(
 
                 let revert_resp = ui.add(revert_btn);
                 if can_revert {
-                    if revert_resp.on_hover_text("Restore baseline system prior to optimization").clicked() {
-                        if let Some(ref orig) = opt_state.original_prescription {
-                            *prescription = orig.clone();
-                            opt_state.last_summary = None;
-                            opt_state.status_message = Some("Reverted to original prescription.".to_string());
+                    let tooltip = if opt_state.history.len() > 1 {
+                        format!("Undo last run step ({} steps saved in history)", opt_state.history.len())
+                    } else {
+                        "Restore baseline system prior to optimization".to_string()
+                    };
+                    if revert_resp.on_hover_text(tooltip).clicked() {
+                        if let Some((prev_presc, prev_summary)) = opt_state.history.pop() {
+                            *prescription = prev_presc;
+                            opt_state.last_summary = prev_summary;
                             modified = true;
+                            if opt_state.history.is_empty() {
+                                opt_state.last_summary = None;
+                                opt_state.original_prescription = None;
+                                opt_state.status_message =
+                                    Some("Reverted to original baseline prescription.".to_string());
+                            } else {
+                                opt_state.status_message = Some(format!(
+                                    "Reverted 1 run step ({} remaining in history).",
+                                    opt_state.history.len()
+                                ));
+                            }
                         }
                     }
                 } else {
                     revert_resp.on_hover_text("No optimization changes to revert");
+                }
+
+                // If multiple runs exist in history, provide a direct "Reset All" button to jump to baseline in 1 click
+                if opt_state.history.len() > 1 {
+                    let reset_btn = Button::new(
+                        RichText::new("Reset All")
+                            .size(11.0)
+                            .color(tokens.text_primary),
+                    )
+                    .fill(tokens.bg_control)
+                    .stroke(tokens.border)
+                    .corner_radius(CornerRadius::ZERO);
+
+                    if ui
+                        .add(reset_btn)
+                        .on_hover_text("Discard all runs and restore baseline in 1 click")
+                        .clicked()
+                    {
+                        if let Some((first_presc, _)) = opt_state.history.first().cloned() {
+                            *prescription = first_presc;
+                            opt_state.history.clear();
+                            opt_state.original_prescription = None;
+                            opt_state.last_summary = None;
+                            opt_state.status_message =
+                                Some("Reset all optimization runs back to baseline.".to_string());
+                            modified = true;
+                        }
+                    }
                 }
             });
         });
@@ -868,4 +929,49 @@ mod tests {
         assert_eq!(summary.iterations_run, 3);
         assert!(summary.final_merit.is_finite());
     }
+
+    #[test]
+    fn test_optimization_history_stack_and_revert() {
+        let catalog = GlassCatalogDb::load_bundled().expect("bundled catalog");
+        let mut presc = make_test_singlet();
+        let initial_r0 = presc.surfaces[0].radius_mm;
+        let mut editor_state = LensEditorState::default();
+        editor_state.variable_radii.insert(0);
+        editor_state.variable_radii.insert(1);
+
+        let mut opt_state = OptimizationModalState::default();
+        assert!(opt_state.history.is_empty());
+
+        // Run 1
+        opt_state.history.push((presc.clone(), None));
+        let summary1 = execute_dls_cycle(2, &mut presc, &editor_state, &opt_state, &catalog).unwrap();
+        opt_state.last_summary = Some(summary1);
+        let r0_run1 = presc.surfaces[0].radius_mm;
+        assert_eq!(opt_state.history.len(), 1);
+
+        // Run 2
+        opt_state.history.push((presc.clone(), opt_state.last_summary.clone()));
+        let summary2 = execute_dls_cycle(2, &mut presc, &editor_state, &opt_state, &catalog).unwrap();
+        opt_state.last_summary = Some(summary2);
+        let r0_run2 = presc.surfaces[0].radius_mm;
+        assert_ne!(r0_run2, r0_run1);
+        assert_eq!(opt_state.history.len(), 2);
+
+        // Revert 1 step: should restore Run 1 state and Run 1 summary
+        let (prev, prev_sum) = opt_state.history.pop().expect("pop run 2");
+        presc = prev;
+        opt_state.last_summary = prev_sum;
+        assert_eq!(presc.surfaces[0].radius_mm, r0_run1);
+        assert!(opt_state.last_summary.is_some());
+        assert_eq!(opt_state.history.len(), 1);
+
+        // Revert 2nd step: should restore initial state and None summary
+        let (prev2, prev_sum2) = opt_state.history.pop().expect("pop run 1");
+        presc = prev2;
+        opt_state.last_summary = prev_sum2;
+        assert_eq!(presc.surfaces[0].radius_mm, initial_r0);
+        assert!(opt_state.last_summary.is_none());
+        assert!(opt_state.history.is_empty());
+    }
 }
+
