@@ -515,10 +515,9 @@ fn render_glass_picker(
                     .collect();
 
                 matches.sort_by_key(|g| (!g.name.to_uppercase().starts_with(&query), g.name.len(), g.name.clone()));
-                let suggestions: Vec<&optics_glass::GlassMaterial> = matches.into_iter().take(6).collect();
                 let air_matches = "AIR".contains(&query) && query != "AIR";
 
-                if !suggestions.is_empty() || air_matches {
+                if !matches.is_empty() || air_matches {
                     let popup_pos = resp.rect.left_bottom() + Vec2::new(0.0, 2.0);
                     let area = Area::new(Id::new(("glass_ac_dropdown", idx)))
                         .order(egui::Order::Foreground)
@@ -531,30 +530,36 @@ fn render_glass_picker(
                             .corner_radius(CornerRadius::ZERO)
                             .inner_margin(Margin::same(4))
                             .show(ui, |ui| {
-                                ui.set_max_width(220.0);
-                                ui.vertical(|ui| {
-                                    if air_matches {
-                                        let air_btn = Button::new(RichText::new("AIR (nd=1.0000)").monospace().size(11.0).color(tokens.accent))
-                                            .fill(tokens.bg_control)
-                                            .corner_radius(CornerRadius::ZERO);
-                                        if ui.add(air_btn).clicked() {
-                                            surf.material_name = "AIR".to_string();
-                                            state.autocomplete_surface = None;
-                                            modified = true;
-                                        }
-                                    }
-                                    for g in suggestions {
-                                        let label = format!("{} (nd={:.4}, Vd={:.1})", g.name, g.nd, g.vd);
-                                        let btn = Button::new(RichText::new(label).monospace().size(11.0).color(tokens.text_primary))
-                                            .fill(tokens.bg_control)
-                                            .corner_radius(CornerRadius::ZERO);
-                                        if ui.add(btn).clicked() {
-                                            surf.material_name = g.name.clone();
-                                            state.autocomplete_surface = None;
-                                            modified = true;
-                                        }
-                                    }
-                                });
+                                ui.set_width(260.0);
+                                ScrollArea::vertical()
+                                    .max_height(200.0)
+                                    .auto_shrink([false, false])
+                                    .show(ui, |ui| {
+                                        ui.vertical(|ui| {
+                                            ui.spacing_mut().item_spacing = Vec2::new(0.0, 2.0);
+                                            if air_matches {
+                                                let air_btn = Button::new(RichText::new("AIR (nd=1.0000)").monospace().size(11.0).color(tokens.accent))
+                                                    .fill(tokens.bg_control)
+                                                    .corner_radius(CornerRadius::ZERO);
+                                                if ui.add_sized([ui.available_width(), 20.0], air_btn).clicked() {
+                                                    surf.material_name = "AIR".to_string();
+                                                    state.autocomplete_surface = None;
+                                                    modified = true;
+                                                }
+                                            }
+                                            for g in matches {
+                                                let label = format!("{} (nd={:.4}, Vd={:.1})", g.name, g.nd, g.vd);
+                                                let btn = Button::new(RichText::new(label).monospace().size(11.0).color(tokens.text_primary))
+                                                    .fill(tokens.bg_control)
+                                                    .corner_radius(CornerRadius::ZERO);
+                                                if ui.add_sized([ui.available_width(), 20.0], btn).clicked() {
+                                                    surf.material_name = g.name.clone();
+                                                    state.autocomplete_surface = None;
+                                                    modified = true;
+                                                }
+                                            }
+                                        });
+                                    });
                             });
                     });
 

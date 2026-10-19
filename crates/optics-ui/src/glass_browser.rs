@@ -2,14 +2,14 @@
 //!
 //! Docked directly inside the Left Panel (adjacent to Lens Data & Optimizer):
 //! - Zero floating modals in the center of the screen — the central viewport remains 100% visible.
-//! - Clean surface switcher ComboBox with integrated "Set AIR" quick button.
-//! - Larger, high-legibility typography (11.5–12px) making full use of panel space.
-//! - Strict pixel-aligned engineering grid (`egui::Grid`) with generous spacing.
+//! - Clean, fixed-width engineering grid with rigid pixel dimensions that never jump or wiggle.
+//! - Larger, high-legibility typography (11.5–12.5px) making full use of panel space.
+//! - Top section begins immediately with Search & Manufacturer filter pills.
+//! - Bottom section unifies Target Surface selection ComboBox, "Set to AIR", active glass details, and dispersion formula in one cohesive panel without overlap.
 //! - Exact vendor totals from database: CDGM (259), OHARA (222), SCHOTT (158), INFRARED (7), Total: 646.
-//! - Instant 1-click [Set] assignment with live raytrace feedback.
 
 use egui::{
-    Align, Button, Color32, ComboBox, CornerRadius, Frame, Grid, Layout, Margin, RichText,
+    Align, Button, Color32, ComboBox, CornerRadius, Frame, Layout, Margin, RichText,
     ScrollArea, TextEdit, Ui, Vec2,
 };
 use optics_core::OpticalPrescription;
@@ -35,6 +35,13 @@ pub enum MaterialVendorFilter {
     /// Infrared crystals & other vendors (Vitron 5, AMI 2 = 7 glasses).
     InfraredOther,
 }
+
+// Rigid fixed column widths for the table so columns NEVER wiggle or resize
+const COL_NAME_W: f32 = 110.0;
+const COL_VENDOR_W: f32 = 62.0;
+const COL_ND_W: f32 = 54.0;
+const COL_VD_W: f32 = 46.0;
+const COL_ACTION_W: f32 = 44.0;
 
 /// Renders the docked Materials Catalog panel inside the left sidebar.
 ///
@@ -77,79 +84,7 @@ pub fn render_materials_panel(
         ui.spacing_mut().item_spacing = Vec2::new(0.0, 8.0);
 
         // -------------------------------------------------------------------
-        // 1. Target Surface Switcher Card & Integrated Set AIR Button
-        // -------------------------------------------------------------------
-        let card_frame = Frame::NONE
-            .fill(tokens.bg_control)
-            .stroke(tokens.border)
-            .corner_radius(CornerRadius::ZERO)
-            .inner_margin(Margin::symmetric(12, 10));
-
-        card_frame.show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
-
-                ui.label(
-                    RichText::new("Target:")
-                        .strong()
-                        .size(12.0)
-                        .color(tokens.text_muted),
-                );
-
-                // Clean Surface Dropdown ComboBox (replaces clumsy < and > buttons)
-                let selected_text = format!("Surface {} ({})", target_idx, surf_role);
-                ComboBox::from_id_salt("materials_target_surf_cb")
-                    .selected_text(RichText::new(selected_text).strong().size(12.0).color(tokens.text_primary))
-                    .width(160.0)
-                    .show_ui(ui, |ui| {
-                        for (idx, surf) in prescription.surfaces.iter().enumerate() {
-                            let role = if idx == 0 {
-                                "Object"
-                            } else if idx == total_surfs - 1 {
-                                "Image"
-                            } else if surf.is_stop {
-                                "Stop"
-                            } else {
-                                "Standard"
-                            };
-                            let label = format!("Surface {} ({}) : {}", idx, role, surf.material_name);
-                            ui.selectable_value(&mut editor_state.materials_target_surface, idx, label);
-                        }
-                    });
-
-                // Right aligned current material and Set AIR button
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    let air_btn = Button::new(
-                        RichText::new("Set AIR")
-                            .size(11.5)
-                            .strong()
-                            .color(if current_material == "AIR" { tokens.accent } else { tokens.text_primary }),
-                    )
-                    .fill(tokens.bg_canvas)
-                    .stroke(tokens.border)
-                    .corner_radius(CornerRadius::ZERO);
-
-                    if ui.add(air_btn).on_hover_text("Assign AIR (Vacuum) medium to selected surface").clicked() {
-                        if current_material != "AIR" {
-                            prescription.surfaces[target_idx].material_name = "AIR".to_string();
-                            modified = true;
-                        }
-                    }
-
-                    ui.label(
-                        RichText::new(format!("Current: {}", current_material))
-                            .monospace()
-                            .strong()
-                            .size(12.0)
-                            .color(tokens.accent),
-                    );
-                });
-            });
-        });
-
-        // -------------------------------------------------------------------
-        // 2. Search Filter Box (Larger font, comfortable width)
+        // 1. Search Filter Box (Top of panel - clean & immediate)
         // -------------------------------------------------------------------
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing = Vec2::new(8.0, 0.0);
@@ -168,7 +103,7 @@ pub fn render_materials_panel(
         });
 
         // -------------------------------------------------------------------
-        // 3. Exact Vendor Filter Buttons (CDGM: 259, OHARA: 222, SCHOTT: 158, INFRARED: 7)
+        // 2. Exact Vendor Filter Buttons (CDGM: 259, OHARA: 222, SCHOTT: 158, INFRARED: 7)
         // -------------------------------------------------------------------
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = Vec2::new(4.0, 4.0);
@@ -201,7 +136,7 @@ pub fn render_materials_panel(
         });
 
         // -------------------------------------------------------------------
-        // 4. Filter Catalog Glasses
+        // 3. Filter Catalog Glasses
         // -------------------------------------------------------------------
         let query = editor_state.glass_search_query.trim().to_uppercase();
 
@@ -238,7 +173,7 @@ pub fn render_materials_panel(
         });
 
         // -------------------------------------------------------------------
-        // 5. Pixel-Perfect Engineering Grid Table (Guaranteed Header & Row Alignment, Larger Font)
+        // 4. Pixel-Perfect Table with Strictly FIXED Column Widths
         // -------------------------------------------------------------------
         let table_frame = Frame::NONE
             .fill(tokens.bg_canvas)
@@ -251,139 +186,324 @@ pub fn render_materials_panel(
         table_frame.show(ui, |ui| {
             ui.set_width(ui.available_width());
 
+            // Pinned Table Header (Always visible, strictly fixed columns)
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
+
+                ui.allocate_ui_with_layout(
+                    Vec2::new(COL_NAME_W, 18.0),
+                    Layout::left_to_right(Align::Center),
+                    |ui| {
+                        ui.label(RichText::new("NAME").monospace().strong().size(11.5).color(tokens.text_muted));
+                    },
+                );
+
+                ui.allocate_ui_with_layout(
+                    Vec2::new(COL_VENDOR_W, 18.0),
+                    Layout::left_to_right(Align::Center),
+                    |ui| {
+                        ui.label(RichText::new("VENDOR").monospace().strong().size(11.5).color(tokens.text_muted));
+                    },
+                );
+
+                ui.allocate_ui_with_layout(
+                    Vec2::new(COL_ND_W, 18.0),
+                    Layout::left_to_right(Align::Center),
+                    |ui| {
+                        ui.label(RichText::new("nd").monospace().strong().size(11.5).color(tokens.text_muted));
+                    },
+                );
+
+                ui.allocate_ui_with_layout(
+                    Vec2::new(COL_VD_W, 18.0),
+                    Layout::left_to_right(Align::Center),
+                    |ui| {
+                        ui.label(RichText::new("Vd").monospace().strong().size(11.5).color(tokens.text_muted));
+                    },
+                );
+
+                ui.allocate_ui_with_layout(
+                    Vec2::new(COL_ACTION_W, 18.0),
+                    Layout::centered_and_justified(egui::Direction::LeftToRight),
+                    |ui| {
+                        ui.label(RichText::new("ACT").monospace().strong().size(11.5).color(tokens.text_muted));
+                    },
+                );
+            });
+
+            ui.separator();
+
             ScrollArea::vertical()
                 .auto_shrink([false, false])
-                .max_height(380.0)
+                .max_height(330.0)
                 .show(ui, |ui| {
-                    Grid::new("materials_catalog_grid")
-                        .num_columns(5)
-                        .striped(true)
-                        .spacing([12.0, 6.0])
-                        .show(ui, |ui| {
-                            // Header Row (Larger font, high contrast)
-                            ui.label(RichText::new("NAME").monospace().strong().size(11.5).color(tokens.text_muted));
-                            ui.label(RichText::new("VENDOR").monospace().strong().size(11.5).color(tokens.text_muted));
-                            ui.label(RichText::new("nd").monospace().strong().size(11.5).color(tokens.text_muted));
-                            ui.label(RichText::new("Vd").monospace().strong().size(11.5).color(tokens.text_muted));
-                            ui.label(RichText::new("ACTION").monospace().strong().size(11.5).color(tokens.text_muted));
-                            ui.end_row();
+                    ui.vertical(|ui| {
+                        ui.spacing_mut().item_spacing = Vec2::new(0.0, 2.0);
 
-                            // Quick AIR row if search matches
-                            if query.is_empty() || "AIR".contains(&query) {
-                                let is_current = current_material == "AIR";
-                                let name_color = if is_current { tokens.accent } else { tokens.text_primary };
+                        // Quick AIR row if query matches or is empty
+                        if query.is_empty() || "AIR".contains(&query) {
+                            let is_current = current_material == "AIR";
+                            let row_bg = if is_current {
+                                tokens.bg_control_active
+                            } else {
+                                tokens.bg_canvas
+                            };
 
-                                ui.label(RichText::new("AIR").monospace().strong().size(12.0).color(name_color));
-                                ui.label(RichText::new("Vacuum").size(11.5).color(tokens.text_muted));
-                                ui.label(RichText::new("1.0000").monospace().size(11.5).color(tokens.text_primary));
-                                ui.label(RichText::new("—").monospace().size(11.5).color(tokens.text_muted));
+                            Frame::NONE
+                                .fill(row_bg)
+                                .stroke(if is_current { tokens.border_hovered } else { egui::Stroke::NONE })
+                                .inner_margin(Margin::symmetric(2, 2))
+                                .show(ui, |ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
 
-                                let btn = Button::new(
-                                    RichText::new(if is_current { "Active" } else { "Set" })
-                                        .size(11.0)
-                                        .strong()
-                                        .color(if is_current { tokens.accent } else { tokens.text_primary }),
-                                )
-                                .min_size(Vec2::new(42.0, 20.0))
-                                .fill(if is_current { tokens.bg_control_active } else { tokens.bg_control })
-                                .stroke(tokens.border)
-                                .corner_radius(CornerRadius::ZERO);
+                                        ui.allocate_ui_with_layout(
+                                            Vec2::new(COL_NAME_W, 20.0),
+                                            Layout::left_to_right(Align::Center),
+                                            |ui| {
+                                                let name_color = if is_current { tokens.accent } else { tokens.text_primary };
+                                                ui.add(egui::Label::new(RichText::new("AIR").monospace().strong().size(12.0).color(name_color)).truncate());
+                                            },
+                                        );
 
-                                if ui.add(btn).clicked() {
-                                    glass_to_apply = Some("AIR".to_string());
+                                        ui.allocate_ui_with_layout(
+                                            Vec2::new(COL_VENDOR_W, 20.0),
+                                            Layout::left_to_right(Align::Center),
+                                            |ui| {
+                                                ui.add(egui::Label::new(RichText::new("Vacuum").size(11.5).color(tokens.text_muted)).truncate());
+                                            },
+                                        );
+
+                                        ui.allocate_ui_with_layout(
+                                            Vec2::new(COL_ND_W, 20.0),
+                                            Layout::left_to_right(Align::Center),
+                                            |ui| {
+                                                ui.add(egui::Label::new(RichText::new("1.0000").monospace().size(11.5).color(tokens.text_primary)).truncate());
+                                            },
+                                        );
+
+                                        ui.allocate_ui_with_layout(
+                                            Vec2::new(COL_VD_W, 20.0),
+                                            Layout::left_to_right(Align::Center),
+                                            |ui| {
+                                                ui.add(egui::Label::new(RichText::new("—").monospace().size(11.5).color(tokens.text_muted)).truncate());
+                                            },
+                                        );
+
+                                        ui.allocate_ui_with_layout(
+                                            Vec2::new(COL_ACTION_W, 20.0),
+                                            Layout::centered_and_justified(egui::Direction::LeftToRight),
+                                            |ui| {
+                                                let btn = Button::new(
+                                                    RichText::new(if is_current { "Active" } else { "Set" })
+                                                        .size(11.0)
+                                                        .strong()
+                                                        .color(if is_current { tokens.accent } else { tokens.text_primary }),
+                                                )
+                                                .fill(if is_current { tokens.bg_control_active } else { tokens.bg_control })
+                                                .stroke(tokens.border)
+                                                .corner_radius(CornerRadius::ZERO);
+
+                                                if ui.add_sized([COL_ACTION_W, 18.0], btn).clicked() {
+                                                    glass_to_apply = Some("AIR".to_string());
+                                                }
+                                            },
+                                        );
+                                    });
+                                });
+                        }
+
+                        // Render all matched glasses with zebra striping
+                        for (idx, g) in matches.iter().enumerate() {
+                            let is_current = current_material == g.name;
+                            let row_bg = if is_current {
+                                tokens.bg_control_active
+                            } else if idx % 2 == 1 {
+                                tokens.bg_control
+                            } else {
+                                tokens.bg_canvas
+                            };
+
+                            let vendor_name = match g.catalog {
+                                GlassCatalog::Cdgm => "CDGM",
+                                GlassCatalog::Ohara => "OHARA",
+                                GlassCatalog::Schott => "Schott",
+                                _ => "Infrared",
+                            };
+
+                            Frame::NONE
+                                .fill(row_bg)
+                                .stroke(if is_current { tokens.border_hovered } else { egui::Stroke::NONE })
+                                .inner_margin(Margin::symmetric(2, 2))
+                                .show(ui, |ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
+
+                                        ui.allocate_ui_with_layout(
+                                            Vec2::new(COL_NAME_W, 20.0),
+                                            Layout::left_to_right(Align::Center),
+                                            |ui| {
+                                                let name_color = if is_current { tokens.accent } else { tokens.text_primary };
+                                                ui.add(egui::Label::new(RichText::new(&g.name).monospace().strong().size(12.0).color(name_color)).truncate());
+                                            },
+                                        );
+
+                                        ui.allocate_ui_with_layout(
+                                            Vec2::new(COL_VENDOR_W, 20.0),
+                                            Layout::left_to_right(Align::Center),
+                                            |ui| {
+                                                ui.add(egui::Label::new(RichText::new(vendor_name).size(11.5).color(tokens.text_muted)).truncate());
+                                            },
+                                        );
+
+                                        ui.allocate_ui_with_layout(
+                                            Vec2::new(COL_ND_W, 20.0),
+                                            Layout::left_to_right(Align::Center),
+                                            |ui| {
+                                                ui.add(egui::Label::new(RichText::new(format!("{:.4}", g.nd)).monospace().size(11.5).color(tokens.text_primary)).truncate());
+                                            },
+                                        );
+
+                                        ui.allocate_ui_with_layout(
+                                            Vec2::new(COL_VD_W, 20.0),
+                                            Layout::left_to_right(Align::Center),
+                                            |ui| {
+                                                ui.add(egui::Label::new(RichText::new(format!("{:.1}", g.vd)).monospace().size(11.5).color(tokens.text_primary)).truncate());
+                                            },
+                                        );
+
+                                        ui.allocate_ui_with_layout(
+                                            Vec2::new(COL_ACTION_W, 20.0),
+                                            Layout::centered_and_justified(egui::Direction::LeftToRight),
+                                            |ui| {
+                                                let btn_text = if is_current { "Active" } else { "Set" };
+                                                let btn = Button::new(
+                                                    RichText::new(btn_text)
+                                                        .size(11.0)
+                                                        .strong()
+                                                        .color(if is_current { tokens.accent } else { tokens.text_primary }),
+                                                )
+                                                .fill(if is_current { tokens.bg_control_active } else { tokens.bg_control })
+                                                .stroke(tokens.border)
+                                                .corner_radius(CornerRadius::ZERO);
+
+                                                if ui.add_sized([COL_ACTION_W, 18.0], btn).clicked() {
+                                                    glass_to_apply = Some(g.name.clone());
+                                                }
+                                            },
+                                        );
+                                    });
+                                });
+                        }
+
+                        if matches.is_empty() && query != "AIR" {
+                            ui.vertical_centered(|ui| {
+                                ui.add_space(20.0);
+                                ui.label(RichText::new("No catalog glass matches query.").size(11.5).color(tokens.text_muted));
+                                if !query.is_empty() {
+                                    if ui.button(format!("Use custom name '{}'", query)).clicked() {
+                                        glass_to_apply = Some(query.clone());
+                                    }
                                 }
-                                ui.end_row();
-                            }
-
-                            // Render all matched glasses
-                            for g in &matches {
-                                let is_current = current_material == g.name;
-                                let name_color = if is_current { tokens.accent } else { tokens.text_primary };
-
-                                let vendor_name = match g.catalog {
-                                    GlassCatalog::Cdgm => "CDGM",
-                                    GlassCatalog::Ohara => "OHARA",
-                                    GlassCatalog::Schott => "Schott",
-                                    _ => "Infrared",
-                                };
-
-                                ui.label(RichText::new(&g.name).monospace().strong().size(12.0).color(name_color));
-                                ui.label(RichText::new(vendor_name).size(11.5).color(tokens.text_muted));
-                                ui.label(RichText::new(format!("{:.4}", g.nd)).monospace().size(11.5).color(tokens.text_primary));
-                                ui.label(RichText::new(format!("{:.1}", g.vd)).monospace().size(11.5).color(tokens.text_primary));
-
-                                let btn_text = if is_current { "Active" } else { "Set" };
-                                let btn = Button::new(
-                                    RichText::new(btn_text)
-                                        .size(11.0)
-                                        .strong()
-                                        .color(if is_current { tokens.accent } else { tokens.text_primary }),
-                                )
-                                .min_size(Vec2::new(42.0, 20.0))
-                                .fill(if is_current { tokens.bg_control_active } else { tokens.bg_control })
-                                .stroke(tokens.border)
-                                .corner_radius(CornerRadius::ZERO);
-
-                                if ui.add(btn).clicked() {
-                                    glass_to_apply = Some(g.name.clone());
-                                }
-                                ui.end_row();
-                            }
-                        });
-
-                    if matches.is_empty() && query != "AIR" {
-                        ui.vertical_centered(|ui| {
-                            ui.add_space(20.0);
-                            ui.label(RichText::new("No catalog glass matches query.").size(11.5).color(tokens.text_muted));
-                            if !query.is_empty() {
-                                if ui.button(format!("Use custom name '{}'", query)).clicked() {
-                                    glass_to_apply = Some(query.clone());
-                                }
-                            }
-                            ui.add_space(20.0);
-                        });
-                    }
+                                ui.add_space(20.0);
+                            });
+                        }
+                    });
                 });
         });
 
         // -------------------------------------------------------------------
-        // 6. Selected Glass Inspector Footer (Larger font)
+        // 5. Unified Target Surface & Material Properties Inspector (All in One Card)
         // -------------------------------------------------------------------
-        if let Some(g) = catalog.lookup(&current_material) {
-            let info_frame = Frame::NONE
-                .fill(tokens.bg_control)
-                .stroke(tokens.border)
-                .corner_radius(CornerRadius::ZERO)
-                .inner_margin(Margin::symmetric(12, 8));
+        let info_frame = Frame::NONE
+            .fill(tokens.bg_control)
+            .stroke(tokens.border)
+            .corner_radius(CornerRadius::ZERO)
+            .inner_margin(Margin::symmetric(12, 10));
 
-            info_frame.show(ui, |ui| {
-                ui.set_width(ui.available_width());
-                ui.vertical(|ui| {
-                    ui.label(
-                        RichText::new(format!("Active Glass: {} ({})", g.name, g.catalog.name()))
-                            .strong()
-                            .size(12.0)
-                            .color(tokens.text_primary),
-                    );
-                    ui.label(
-                        RichText::new(format!(
-                            "nd = {:.5} | Vd = {:.2} | Model: {}",
-                            g.nd,
-                            g.vd,
-                            match g.dispersion {
-                                optics_glass::DispersionModel::Sellmeier1 { .. } => "Sellmeier 1 (6-coef)",
-                                optics_glass::DispersionModel::Sellmeier2 { .. } => "Sellmeier 2",
-                                optics_glass::DispersionModel::Cauchy { .. } => "Cauchy",
-                                optics_glass::DispersionModel::ExtendedCauchy { .. } => "Extended Cauchy",
-                                _ => "Standard",
+        info_frame.show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing = Vec2::new(0.0, 6.0);
+
+                // Row 1: Target surface picker ComboBox + Set AIR button
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("Target Surface:").strong().size(12.0).color(tokens.text_muted));
+
+                    let selected_text = format!("Surface {} ({})", target_idx, surf_role);
+                    ComboBox::from_id_salt("unified_materials_target_cb")
+                        .selected_text(RichText::new(selected_text).strong().size(12.0).color(tokens.text_primary))
+                        .width(140.0)
+                        .show_ui(ui, |ui| {
+                            for (idx, surf) in prescription.surfaces.iter().enumerate() {
+                                let role = if idx == 0 { "Object" } else if idx == total_surfs - 1 { "Image" } else if surf.is_stop { "Stop" } else { "Standard" };
+                                let label = format!("Surface {} ({} : {})", idx, role, surf.material_name);
+                                ui.selectable_value(&mut editor_state.materials_target_surface, idx, label);
                             }
-                        ))
-                        .size(11.0)
-                        .color(tokens.text_muted),
-                    );
+                        });
+
+                    let air_btn = Button::new(
+                        RichText::new("Set to AIR")
+                            .size(11.0)
+                            .strong()
+                            .color(if current_material == "AIR" { tokens.accent } else { tokens.text_primary }),
+                    )
+                    .fill(tokens.bg_canvas)
+                    .stroke(tokens.border)
+                    .corner_radius(CornerRadius::ZERO);
+
+                    if ui.add(air_btn).on_hover_text("Assign AIR (Vacuum) to selected surface").clicked() {
+                        if current_material != "AIR" {
+                            prescription.surfaces[target_idx].material_name = "AIR".to_string();
+                            modified = true;
+                        }
+                    }
                 });
+
+                ui.separator();
+
+                // Row 2: Current Material details (Name, Vendor, nd, Vd)
+                if current_material == "AIR" {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Current Material:").strong().size(11.5).color(tokens.text_muted));
+                        ui.label(RichText::new("AIR").monospace().strong().size(12.0).color(tokens.accent));
+                        ui.label(RichText::new("(Vacuum / Free Space, nd = 1.0000)").size(11.0).color(tokens.text_muted));
+                    });
+                } else if let Some(g) = catalog.lookup(&current_material) {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Current Glass:").strong().size(11.5).color(tokens.text_muted));
+                        ui.label(RichText::new(&g.name).monospace().strong().size(12.5).color(tokens.accent));
+                        ui.label(RichText::new(format!("({})", g.catalog.name())).size(11.5).color(tokens.text_muted));
+                        ui.label(RichText::new(format!("nd = {:.5}", g.nd)).monospace().size(11.5).color(tokens.text_primary));
+                        ui.label(RichText::new(format!("Vd = {:.2}", g.vd)).monospace().size(11.5).color(tokens.text_primary));
+                    });
+
+                    let formula_desc = match g.dispersion {
+                        optics_glass::DispersionModel::Sellmeier1 { .. } => "Sellmeier 1 (6-coef)",
+                        optics_glass::DispersionModel::Sellmeier2 { .. } => "Sellmeier 2",
+                        optics_glass::DispersionModel::Cauchy { .. } => "Cauchy",
+                        optics_glass::DispersionModel::ExtendedCauchy { .. } => "Extended Cauchy",
+                        _ => "Standard",
+                    };
+                    let thermal_desc = if g.thermal.is_some() { "Available (dn/dT)" } else { "20°C Reference" };
+
+                    // Row 3: Formula and Thermal details
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Dispersion:").strong().size(11.0).color(tokens.text_muted));
+                        ui.label(RichText::new(formula_desc).size(11.0).color(tokens.text_primary));
+                        ui.label(RichText::new("|").size(11.0).color(tokens.text_muted));
+                        ui.label(RichText::new("Thermal:").strong().size(11.0).color(tokens.text_muted));
+                        ui.label(RichText::new(thermal_desc).size(11.0).color(tokens.text_primary));
+                    });
+                } else {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Current Material:").strong().size(11.5).color(tokens.text_muted));
+                        ui.label(RichText::new(&current_material).monospace().strong().size(12.0).color(tokens.warning));
+                        ui.label(RichText::new("(Custom / Non-catalog material)").size(11.0).color(tokens.text_muted));
+                    });
+                }
             });
-        }
+        });
 
         // Apply chosen glass
         if let Some(glass_name) = glass_to_apply {
