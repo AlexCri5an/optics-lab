@@ -43,6 +43,18 @@ pub enum TopBarAction {
     LoadPlanoConvex,
     /// Trigger raytracing simulation.
     RunRaytrace,
+    /// Undo last edit.
+    Undo,
+    /// Redo last undone edit.
+    Redo,
+    /// Show Spot Diagram tab in right analysis panel.
+    ShowSpotDiagram,
+    /// Show Seidel Aberrations tab in right analysis panel.
+    ShowSeidel,
+    /// Show MTF Curve tab in right analysis panel.
+    ShowMtf,
+    /// Show Paraxial Cardinal points tab in right analysis panel.
+    ShowCardinal,
     /// Zoom in viewport (+25%).
     ZoomIn,
     /// Zoom out viewport (-20%).
@@ -89,7 +101,7 @@ impl Default for TopBarState {
         Self {
             left_panel_open: true,
             right_panel_open: true,
-            theme_mode: ThemeMode::DarkSlate,
+            theme_mode: ThemeMode::ZemaxClassic,
             raytrace_running: false,
             current_file_name: "Cooke Triplet F/4.5.zmx".to_string(),
             is_dirty: false,
@@ -217,26 +229,41 @@ pub fn render_topbar(
                 });
 
                 ui.menu_button("Edit", |ui| {
-                    if ui.button("Undo").clicked() {
+                    if ui.button("Undo (Ctrl+Z)").clicked() {
+                        triggered_action = Some(TopBarAction::Undo);
                         ui.close();
                     }
-                    if ui.button("Redo").clicked() {
+                    if ui.button("Redo (Ctrl+Y)").clicked() {
+                        triggered_action = Some(TopBarAction::Redo);
                         ui.close();
                     }
                 });
 
                 ui.menu_button("Analysis", |ui| {
-                    if ui.button("Run Raytrace").clicked() {
+                    let raytrace_label = if state.raytrace_running {
+                        "Stop Raytrace"
+                    } else {
+                        "Run Raytrace"
+                    };
+                    if ui.button(raytrace_label).clicked() {
                         triggered_action = Some(TopBarAction::RunRaytrace);
                         ui.close();
                     }
-                    if ui.button("Paraxial 1st Order Solve").clicked() {
+                    ui.separator();
+                    if ui.button("Spot Diagram RMS").clicked() {
+                        triggered_action = Some(TopBarAction::ShowSpotDiagram);
                         ui.close();
                     }
                     if ui.button("3rd Order Seidel Sums").clicked() {
+                        triggered_action = Some(TopBarAction::ShowSeidel);
                         ui.close();
                     }
-                    if ui.button("Spot Diagram RMS").clicked() {
+                    if ui.button("Diffraction MTF Curve").clicked() {
+                        triggered_action = Some(TopBarAction::ShowMtf);
+                        ui.close();
+                    }
+                    if ui.button("Paraxial 1st Order Cardinal").clicked() {
+                        triggered_action = Some(TopBarAction::ShowCardinal);
                         ui.close();
                     }
                 });
@@ -269,7 +296,7 @@ pub fn render_topbar(
                     ui.separator();
                     ui.menu_button("Theme", |ui| {
                         for mode in ThemeMode::ALL {
-                            let prefix = if state.theme_mode == mode { "✓ " } else { "  " };
+                            let prefix = if state.theme_mode == mode { "* " } else { "  " };
                             if ui.button(format!("{}{}", prefix, mode.display_name())).clicked() {
                                 state.theme_mode = mode;
                                 triggered_action = Some(TopBarAction::SetTheme(mode));
@@ -333,15 +360,13 @@ pub fn render_topbar(
 
             draw_toolbar_separator(ui, tokens.border);
 
-            // Group 2: Presets quick access
-            if lucide_toolbar_button(ui, LucideIcon::Sparkles, "Standard Lens Presets (Cooke, Double Gauss)", false, tokens).clicked() {
-                triggered_action = Some(TopBarAction::LoadCookeTriplet);
-            }
-
-            draw_toolbar_separator(ui, tokens.border);
-
-            // Group 3: Simulation & Optimization
-            if lucide_toolbar_button(ui, LucideIcon::Play, "Run Sequential Raytrace (F5)", state.raytrace_running, tokens).clicked() {
+            // Group 2: Simulation & Optimization
+            let (raytrace_icon, raytrace_tooltip) = if state.raytrace_running {
+                (LucideIcon::Square, "Stop Raytrace")
+            } else {
+                (LucideIcon::Play, "Run Raytrace")
+            };
+            if lucide_toolbar_button(ui, raytrace_icon, raytrace_tooltip, state.raytrace_running, tokens).clicked() {
                 triggered_action = Some(TopBarAction::RunRaytrace);
             }
             if lucide_toolbar_button(ui, LucideIcon::Wand2, "Automatic Optimization Engine (DLS)", false, tokens).clicked() {

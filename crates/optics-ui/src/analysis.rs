@@ -22,7 +22,7 @@ use optics_core::prescription::{calculate_paraxial_properties, ParaxialPropertie
 use optics_core::OpticalPrescription;
 use optics_glass::GlassCatalogDb;
 
-use crate::icons::{render_lucide_icon, LucideIcon};
+use crate::icons::LucideIcon;
 use crate::theme::OpticsTokens;
 
 /// Active diagnostic tab in the right panel.
@@ -140,7 +140,6 @@ pub fn render_analysis_panel(
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.horizontal_wrapped(|ui| {
-                    render_lucide_icon(ui, LucideIcon::HelpCircle, 12.0, tokens.accent);
                     ui.label(
                         RichText::new(format!(
                             "Fallback Glass: {} approximated as N-BK7.",
@@ -196,16 +195,13 @@ fn render_resolution_error(ui: &mut Ui, error_msg: &str, tokens: &OpticsTokens) 
         .corner_radius(CornerRadius::ZERO)
         .inner_margin(egui::Margin::symmetric(10, 8))
         .show(ui, |ui| {
-            ui.horizontal(|ui| {
-                render_lucide_icon(ui, LucideIcon::HelpCircle, 14.0, tokens.warning);
-                ui.label(
-                    RichText::new("SYSTEM RESOLUTION")
-                        .size(11.5)
-                        .strong()
-                        .monospace()
-                        .color(tokens.warning),
-                );
-            });
+            ui.label(
+                RichText::new("SYSTEM RESOLUTION")
+                    .size(11.5)
+                    .strong()
+                    .monospace()
+                    .color(tokens.warning),
+            );
             ui.add_space(4.0);
             ui.label(
                 RichText::new(format!(
@@ -393,10 +389,7 @@ fn render_spot_diagram_view(
                 .inner_margin(egui::Margin::symmetric(10, 8))
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
-                    ui.horizontal(|ui| {
-                        render_lucide_icon(ui, LucideIcon::HelpCircle, 13.0, tokens.warning);
-                        ui.label(RichText::new("SPOT DIAGNOSTIC").size(11.0).strong().monospace().color(tokens.warning));
-                    });
+                    ui.label(RichText::new("SPOT DIAGNOSTIC").size(11.0).strong().monospace().color(tokens.warning));
                     ui.add_space(4.0);
                     ui.add(
                         egui::Label::new(
@@ -482,17 +475,17 @@ fn render_spot_diagram_view(
             .inner_margin(egui::Margin::symmetric(10, 6))
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
-                ui.horizontal_wrapped(|ui| {
-                    render_lucide_icon(ui, LucideIcon::HelpCircle, 12.0, tokens.warning);
-                    ui.label(
+                ui.add(
+                    egui::Label::new(
                         RichText::new(format!(
                             "Rays at field {:.1}° are physically blocked by lens apertures (100% mechanical vignetting). This is standard for wide-angle systems at extreme boundary angles.",
                             state.selected_field_deg
                         ))
                         .size(10.0)
                         .color(tokens.text_muted),
-                    );
-                });
+                    )
+                    .wrap(),
+                );
             });
         ui.add_space(4.0);
     }
@@ -704,10 +697,7 @@ fn render_seidel_view(
                 .inner_margin(egui::Margin::symmetric(10, 8))
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
-                    ui.horizontal(|ui| {
-                        render_lucide_icon(ui, LucideIcon::HelpCircle, 13.0, tokens.warning);
-                        ui.label(RichText::new("SEIDEL DIAGNOSTIC").size(11.0).strong().monospace().color(tokens.warning));
-                    });
+                    ui.label(RichText::new("SEIDEL DIAGNOSTIC").size(11.0).strong().monospace().color(tokens.warning));
                     ui.add_space(4.0);
                     ui.add(
                         egui::Label::new(
@@ -898,10 +888,7 @@ fn render_mtf_view(
                 .inner_margin(egui::Margin::symmetric(10, 8))
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
-                    ui.horizontal(|ui| {
-                        render_lucide_icon(ui, LucideIcon::HelpCircle, 13.0, tokens.warning);
-                        ui.label(RichText::new("MTF DIAGNOSTIC").size(11.0).strong().monospace().color(tokens.warning));
-                    });
+                    ui.label(RichText::new("MTF DIAGNOSTIC").size(11.0).strong().monospace().color(tokens.warning));
                     ui.add_space(4.0);
                     ui.add(
                         egui::Label::new(

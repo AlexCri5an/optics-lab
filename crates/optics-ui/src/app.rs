@@ -12,13 +12,26 @@ use optics_core::OpticalPrescription;
 use optics_glass::GlassCatalogDb;
 
 use crate::analysis::{AnalysisPanelState, render_analysis_panel};
-use crate::icons::{LucideIcon, lucide_small_icon_button, render_lucide_icon};
+use crate::icons::{LucideIcon, lucide_small_icon_button};
 use crate::layout::{Breakpoint, LayoutMetrics};
 use crate::lens_editor::{LeftPanelTab, LensEditorState, render_lens_editor};
 use crate::optimization::{OptimizationModalState, render_optimization_panel};
 use crate::theme::OpticsTokens;
 use crate::topbar::{TopBarAction, TopBarState, render_topbar};
 use crate::viewport::{ViewportState, render_optical_viewport};
+
+/// Complete snapshot of the application state for synchronized undo/redo.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AppUndoSnapshot {
+    /// Optical prescription snapshot.
+    pub prescription: OpticalPrescription,
+    /// Last DLS run summary at this point in time.
+    pub opt_summary: Option<crate::optimization::DlsRunSummary>,
+    /// Optimization history stack at this point in time.
+    pub opt_history: Vec<(OpticalPrescription, Option<crate::optimization::DlsRunSummary>)>,
+    /// Optimization baseline prescription at this point in time.
+    pub opt_original_prescription: Option<OpticalPrescription>,
+}
 
 /// Main application struct representing the OpticsLab desktop workbench.
 pub struct OpticsWorkbenchApp {
@@ -44,6 +57,10 @@ pub struct OpticsWorkbenchApp {
     pub current_file_path: Option<PathBuf>,
     /// Whether the active document has unsaved modifications.
     pub is_dirty: bool,
+    /// Undo history stack for synchronized edits.
+    pub undo_stack: Vec<AppUndoSnapshot>,
+    /// Redo history stack.
+    pub redo_stack: Vec<AppUndoSnapshot>,
     /// History of recently opened or saved files.
     pub recent_files: Vec<PathBuf>,
     /// Channel sender for non-blocking native file dialogs.
@@ -86,6 +103,8 @@ impl Default for OpticsWorkbenchApp {
             status_text: format!("Surfaces: {} | EPD: {:.1} mm | Status: Ready", surf_count, epd),
             current_file_path: None,
             is_dirty: false,
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
             recent_files: Vec::new(),
             file_open_sender,
             file_open_receiver,
@@ -193,6 +212,14 @@ impl eframe::App for OpticsWorkbenchApp {
         }
         if cmd && shift && ctx.input(|i| i.key_pressed(egui::Key::S)) {
             self.handle_topbar_action(TopBarAction::SaveFileAs);
+        }
+        if cmd && !shift && ctx.input(|i| i.key_pressed(egui::Key::Z)) {
+            self.handle_topbar_action(TopBarAction::Undo);
+        }
+        if (cmd && shift && ctx.input(|i| i.key_pressed(egui::Key::Z)))
+            || (cmd && !shift && ctx.input(|i| i.key_pressed(egui::Key::Y)))
+        {
+            self.handle_topbar_action(TopBarAction::Redo);
         }
 
         // 2.5. Receive any files selected asynchronously from background file picker
@@ -342,6 +369,12 @@ impl eframe::App for OpticsWorkbenchApp {
                     });
                     ui.separator();
 
+                    let prev_snapshot = AppUndoSnapshot {
+                        prescription: self.prescription.clone(),
+                        opt_summary: self.optimization_state.last_summary.clone(),
+                        opt_history: self.optimization_state.history.clone(),
+                        opt_original_prescription: self.optimization_state.original_prescription.clone(),
+                    };
                     let modified = match self.lens_editor_state.active_tab {
                         LeftPanelTab::LensData => {
                             render_lens_editor(
@@ -364,6 +397,11 @@ impl eframe::App for OpticsWorkbenchApp {
                     };
 
                     if modified {
+                        self.undo_stack.push(prev_snapshot);
+                        if self.undo_stack.len() > 50 {
+                            self.undo_stack.remove(0);
+                        }
+                        self.redo_stack.clear();
                         self.is_dirty = true;
                         self.topbar_state.is_dirty = true;
                         self.last_action_msg = format!("Prescription '{}' updated.", self.prescription.name);
@@ -393,7 +431,6 @@ impl eframe::App for OpticsWorkbenchApp {
                 )
                 .show(ctx, |ui| {
                     ui.horizontal(|ui| {
-                        render_lucide_icon(ui, LucideIcon::Activity, 13.0, tokens.accent);
                         ui.label(
                             RichText::new("ANALYSIS & DIAGNOSTICS")
                                 .strong()
@@ -496,6 +533,10 @@ impl OpticsWorkbenchApp {
                         self.topbar_state.current_file_name = file_name.clone();
                         self.topbar_state.is_dirty = false;
                         self.add_recent_file(path.to_path_buf());
+                        self.undo_stack.clear();
+                        self.redo_stack.clear();
+                        self.lens_editor_state.clear_all_variables();
+                        self.optimization_state.reset_history();
                         self.lens_editor_state.selected_surface =
                             Some(1.min(self.prescription.surfaces.len().saturating_sub(1)));
                         self.analysis_state.selected_field_deg = 0.0;
@@ -600,6 +641,10 @@ impl OpticsWorkbenchApp {
                 self.is_dirty = false;
                 self.topbar_state.current_file_name = "Untitled Singlet.zmx".to_string();
                 self.topbar_state.is_dirty = false;
+                self.undo_stack.clear();
+                self.redo_stack.clear();
+                self.lens_editor_state.clear_all_variables();
+                self.optimization_state.reset_history();
                 self.lens_editor_state.selected_surface = Some(1);
                 self.analysis_state.selected_field_deg = 0.0;
                 self.viewport_state.initialized = false;
@@ -794,6 +839,10 @@ impl OpticsWorkbenchApp {
                     self.is_dirty = false;
                     self.topbar_state.current_file_name = "Cooke Triplet F/4.5.zmx".to_string();
                     self.topbar_state.is_dirty = false;
+                    self.undo_stack.clear();
+                    self.redo_stack.clear();
+                    self.lens_editor_state.clear_all_variables();
+                    self.optimization_state.reset_history();
                     self.lens_editor_state.selected_surface = Some(1);
                     self.analysis_state.selected_field_deg = 0.0;
                     self.viewport_state.initialized = false;
@@ -813,6 +862,10 @@ impl OpticsWorkbenchApp {
                     self.is_dirty = false;
                     self.topbar_state.current_file_name = "Double Gauss F/2.0.zmx".to_string();
                     self.topbar_state.is_dirty = false;
+                    self.undo_stack.clear();
+                    self.redo_stack.clear();
+                    self.lens_editor_state.clear_all_variables();
+                    self.optimization_state.reset_history();
                     self.lens_editor_state.selected_surface = Some(1);
                     self.analysis_state.selected_field_deg = 0.0;
                     self.viewport_state.initialized = false;
@@ -832,6 +885,10 @@ impl OpticsWorkbenchApp {
                     self.is_dirty = false;
                     self.topbar_state.current_file_name = "Plano-Convex Singlet.zmx".to_string();
                     self.topbar_state.is_dirty = false;
+                    self.undo_stack.clear();
+                    self.redo_stack.clear();
+                    self.lens_editor_state.clear_all_variables();
+                    self.optimization_state.reset_history();
                     self.lens_editor_state.selected_surface = Some(1);
                     self.analysis_state.selected_field_deg = 0.0;
                     self.viewport_state.initialized = false;
@@ -842,6 +899,68 @@ impl OpticsWorkbenchApp {
                         self.prescription.entrance_pupil_diameter_mm
                     );
                 }
+            }
+            TopBarAction::Undo => {
+                if let Some(prev) = self.undo_stack.pop() {
+                    let current_snapshot = AppUndoSnapshot {
+                        prescription: self.prescription.clone(),
+                        opt_summary: self.optimization_state.last_summary.clone(),
+                        opt_history: self.optimization_state.history.clone(),
+                        opt_original_prescription: self.optimization_state.original_prescription.clone(),
+                    };
+                    self.redo_stack.push(current_snapshot);
+                    self.prescription = prev.prescription;
+                    self.optimization_state.last_summary = prev.opt_summary;
+                    self.optimization_state.history = prev.opt_history;
+                    self.optimization_state.original_prescription = prev.opt_original_prescription;
+                    self.is_dirty = true;
+                    self.topbar_state.is_dirty = true;
+                    self.viewport_state.initialized = false;
+                    self.last_action_msg = "Undo edit.".to_string();
+                } else {
+                    self.last_action_msg = "Nothing to undo.".to_string();
+                }
+            }
+            TopBarAction::Redo => {
+                if let Some(next) = self.redo_stack.pop() {
+                    let current_snapshot = AppUndoSnapshot {
+                        prescription: self.prescription.clone(),
+                        opt_summary: self.optimization_state.last_summary.clone(),
+                        opt_history: self.optimization_state.history.clone(),
+                        opt_original_prescription: self.optimization_state.original_prescription.clone(),
+                    };
+                    self.undo_stack.push(current_snapshot);
+                    self.prescription = next.prescription;
+                    self.optimization_state.last_summary = next.opt_summary;
+                    self.optimization_state.history = next.opt_history;
+                    self.optimization_state.original_prescription = next.opt_original_prescription;
+                    self.is_dirty = true;
+                    self.topbar_state.is_dirty = true;
+                    self.viewport_state.initialized = false;
+                    self.last_action_msg = "Redo edit.".to_string();
+                } else {
+                    self.last_action_msg = "Nothing to redo.".to_string();
+                }
+            }
+            TopBarAction::ShowSpotDiagram => {
+                self.topbar_state.right_panel_open = true;
+                self.analysis_state.active_tab = crate::analysis::AnalysisTab::SpotDiagram;
+                self.last_action_msg = "Analysis: Switched to Spot Diagram RMS tab.".to_string();
+            }
+            TopBarAction::ShowSeidel => {
+                self.topbar_state.right_panel_open = true;
+                self.analysis_state.active_tab = crate::analysis::AnalysisTab::SeidelAberrations;
+                self.last_action_msg = "Analysis: Switched to 3rd-Order Seidel Sums tab.".to_string();
+            }
+            TopBarAction::ShowMtf => {
+                self.topbar_state.right_panel_open = true;
+                self.analysis_state.active_tab = crate::analysis::AnalysisTab::MtfCurve;
+                self.last_action_msg = "Analysis: Switched to Diffraction MTF Curve tab.".to_string();
+            }
+            TopBarAction::ShowCardinal => {
+                self.topbar_state.right_panel_open = true;
+                self.analysis_state.active_tab = crate::analysis::AnalysisTab::ParaxialCardinal;
+                self.last_action_msg = "Analysis: Switched to Paraxial Cardinal tab.".to_string();
             }
             TopBarAction::RunRaytrace => {
                 self.viewport_state.show_rays = !self.viewport_state.show_rays;

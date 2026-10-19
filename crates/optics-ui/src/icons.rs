@@ -65,6 +65,8 @@ pub enum LucideIcon {
     TrendingDown,
     /// Trending up indicator.
     TrendingUp,
+    /// Square / Stop indicator.
+    Square,
 }
 
 impl LucideIcon {
@@ -150,6 +152,9 @@ impl LucideIcon {
             Self::TrendingUp => {
                 r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>"#
             }
+            Self::Square => {
+                r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/></svg>"#
+            }
         }
     }
 
@@ -183,6 +188,7 @@ impl LucideIcon {
             Self::ArrowRight => "bytes://lucide/arrow-right.svg",
             Self::TrendingDown => "bytes://lucide/trending-down.svg",
             Self::TrendingUp => "bytes://lucide/trending-up.svg",
+            Self::Square => "bytes://lucide/square.svg",
         }
     }
 }
@@ -315,6 +321,7 @@ mod tests {
             LucideIcon::ArrowRight,
             LucideIcon::TrendingDown,
             LucideIcon::TrendingUp,
+            LucideIcon::Square,
         ];
 
         for icon in icons {

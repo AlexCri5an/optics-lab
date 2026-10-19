@@ -15,7 +15,7 @@ use egui::{
 };
 use optics_core::{OpticalPrescription, OpticalSurface};
 
-use crate::icons::{LucideIcon, lucide_small_icon_button, lucide_text_button, render_lucide_icon};
+use crate::icons::{LucideIcon, lucide_small_icon_button, lucide_text_button};
 use crate::theme::OpticsTokens;
 
 /// Common optical glasses available in standard catalogs (Schott / Ohara).
@@ -325,15 +325,13 @@ fn render_surface_card(
                 }
 
                 if surf.is_stop {
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing = Vec2::new(3.0, 0.0);
-                        render_lucide_icon(ui, LucideIcon::Target, 11.0, tokens.warning);
-                        ui.label(
-                            RichText::new("Aperture Stop")
-                                .size(10.0)
-                                .color(tokens.warning),
-                        );
-                    });
+                    ui.label(
+                        RichText::new("[STOP]")
+                            .strong()
+                            .monospace()
+                            .size(10.5)
+                            .color(tokens.warning),
+                    );
                 } else if ui
                     .small_button(RichText::new("Set Stop").size(10.0))
                     .clicked()
@@ -366,7 +364,12 @@ fn render_surface_card(
 
                 let is_flat = surf.radius_mm.is_infinite() || surf.radius_mm.abs() > 1e12;
                 if is_flat {
-                    render_lucide_icon(ui, LucideIcon::Infinity, 14.0, tokens.text_primary);
+                    ui.label(
+                        RichText::new("Infinity")
+                            .monospace()
+                            .size(10.5)
+                            .color(tokens.text_primary),
+                    );
                     if ui.small_button("Curve").on_hover_text("Set finite radius (50 mm)").clicked() {
                         surf.radius_mm = 50.0;
                         modified = true;
