@@ -10,7 +10,7 @@
 use std::collections::BTreeSet;
 
 use egui::{
-    Align, Button, CornerRadius, DragValue, Frame, Id, Layout, Margin, RichText,
+    Align, Area, Button, CornerRadius, DragValue, Frame, Id, Layout, Margin, RichText,
     ScrollArea, TextEdit, Ui, Vec2,
 };
 use optics_core::{OpticalPrescription, OpticalSurface};
@@ -75,6 +75,8 @@ pub struct LensEditorState {
     pub variable_radii: BTreeSet<usize>,
     /// Surface indices whose axial thickness is marked as variable for optimization.
     pub variable_thicknesses: BTreeSet<usize>,
+    /// Currently open autocomplete surface index in the Lens Data Editor.
+    pub autocomplete_surface: Option<usize>,
 }
 
 impl Default for LensEditorState {
@@ -90,6 +92,7 @@ impl Default for LensEditorState {
             glass_search_query: String::new(),
             variable_radii: BTreeSet::new(),
             variable_thicknesses: BTreeSet::new(),
+            autocomplete_surface: None,
         }
     }
 }
@@ -490,10 +493,83 @@ fn render_glass_picker(
             .desired_width(52.0);
 
         let resp = ui.add(text_edit).on_hover_text(tooltip);
+        if resp.gained_focus() {
+            state.autocomplete_surface = Some(idx);
+        }
+
         if resp.changed() {
             surf.material_name = mat_buf.trim().to_uppercase();
+            state.autocomplete_surface = Some(idx);
             if surf.material_name != old_mat {
                 modified = true;
+            }
+        }
+
+        // Live autocomplete dropdown as user types in LDE
+        if state.autocomplete_surface == Some(idx) {
+            let query = mat_buf.trim().to_uppercase();
+            if !query.is_empty() {
+                let mut matches: Vec<&optics_glass::GlassMaterial> = catalog
+                    .all_glasses()
+                    .filter(|g| g.name.to_uppercase().contains(&query))
+                    .collect();
+
+                matches.sort_by_key(|g| (!g.name.to_uppercase().starts_with(&query), g.name.len(), g.name.clone()));
+                let suggestions: Vec<&optics_glass::GlassMaterial> = matches.into_iter().take(6).collect();
+                let air_matches = "AIR".contains(&query) && query != "AIR";
+
+                if !suggestions.is_empty() || air_matches {
+                    let popup_pos = resp.rect.left_bottom() + Vec2::new(0.0, 2.0);
+                    let area = Area::new(Id::new(("glass_ac_dropdown", idx)))
+                        .order(egui::Order::Foreground)
+                        .fixed_pos(popup_pos);
+
+                    let area_resp = area.show(ui.ctx(), |ui| {
+                        Frame::NONE
+                            .fill(tokens.bg_panel)
+                            .stroke(tokens.border_hovered)
+                            .corner_radius(CornerRadius::ZERO)
+                            .inner_margin(Margin::same(4))
+                            .show(ui, |ui| {
+                                ui.set_max_width(220.0);
+                                ui.vertical(|ui| {
+                                    if air_matches {
+                                        let air_btn = Button::new(RichText::new("AIR (nd=1.0000)").monospace().size(11.0).color(tokens.accent))
+                                            .fill(tokens.bg_control)
+                                            .corner_radius(CornerRadius::ZERO);
+                                        if ui.add(air_btn).clicked() {
+                                            surf.material_name = "AIR".to_string();
+                                            state.autocomplete_surface = None;
+                                            modified = true;
+                                        }
+                                    }
+                                    for g in suggestions {
+                                        let label = format!("{} (nd={:.4}, Vd={:.1})", g.name, g.nd, g.vd);
+                                        let btn = Button::new(RichText::new(label).monospace().size(11.0).color(tokens.text_primary))
+                                            .fill(tokens.bg_control)
+                                            .corner_radius(CornerRadius::ZERO);
+                                        if ui.add(btn).clicked() {
+                                            surf.material_name = g.name.clone();
+                                            state.autocomplete_surface = None;
+                                            modified = true;
+                                        }
+                                    }
+                                });
+                            });
+                    });
+
+                    // Close if escape pressed or clicked outside
+                    if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                        state.autocomplete_surface = None;
+                    }
+                    if ui.input(|i| i.pointer.any_pressed()) {
+                        if let Some(pos) = ui.input(|i| i.pointer.interact_pos()) {
+                            if !resp.rect.contains(pos) && !area_resp.response.rect.contains(pos) {
+                                state.autocomplete_surface = None;
+                            }
+                        }
+                    }
+                }
             }
         }
 
