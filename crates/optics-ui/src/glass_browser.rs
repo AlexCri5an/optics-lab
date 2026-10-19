@@ -9,8 +9,8 @@
 //! - Exact vendor totals from database: CDGM (259), OHARA (222), SCHOTT (158), INFRARED (7), Total: 646.
 
 use egui::{
-    Align, Button, Color32, ComboBox, CornerRadius, Frame, Layout, Margin, RichText,
-    ScrollArea, TextEdit, Ui, Vec2,
+    pos2, Align2, Button, Color32, ComboBox, CornerRadius, FontId, Frame, Margin, RichText,
+    ScrollArea, Sense, TextEdit, Ui, Vec2,
 };
 use optics_core::OpticalPrescription;
 use optics_glass::{GlassCatalog, GlassCatalogDb, GlassMaterial};
@@ -183,58 +183,63 @@ pub fn render_materials_panel(
 
             // Compute rigid column widths that span 100% to the right edge
             let avail_w = ui.available_width();
-            let scroll_margin = 12.0;
+            let scroll_margin = 14.0;
             let usable_w = (avail_w - scroll_margin).max(340.0);
             let spacing = 6.0;
 
-            let col_action_w = 48.0;
-            let col_vd_w = 54.0;
-            let col_nd_w = 64.0;
-            let col_vendor_w = 72.0;
+            let col_action_w = 46.0;
+            let col_vd_w = 52.0;
+            let col_nd_w = 60.0;
+            let col_vendor_w = 70.0;
             let col_name_w = (usable_w - (col_vendor_w + col_nd_w + col_vd_w + col_action_w + spacing * 4.0)).max(100.0);
 
             // Pinned Table Header (Always visible, strictly fixed columns)
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing = Vec2::new(spacing, 0.0);
 
-                ui.allocate_ui_with_layout(
-                    Vec2::new(col_name_w, 18.0),
-                    Layout::left_to_right(Align::Center),
-                    |ui| {
-                        ui.label(RichText::new("NAME").monospace().strong().size(11.5).color(tokens.text_muted));
-                    },
+                let (rect, _) = ui.allocate_exact_size(Vec2::new(col_name_w, 18.0), Sense::hover());
+                ui.painter().text(
+                    pos2(rect.min.x + 2.0, rect.center().y),
+                    Align2::LEFT_CENTER,
+                    "NAME",
+                    FontId::monospace(11.5),
+                    tokens.text_muted,
                 );
 
-                ui.allocate_ui_with_layout(
-                    Vec2::new(col_vendor_w, 18.0),
-                    Layout::left_to_right(Align::Center),
-                    |ui| {
-                        ui.label(RichText::new("VENDOR").monospace().strong().size(11.5).color(tokens.text_muted));
-                    },
+                let (rect, _) = ui.allocate_exact_size(Vec2::new(col_vendor_w, 18.0), Sense::hover());
+                ui.painter().text(
+                    pos2(rect.min.x + 2.0, rect.center().y),
+                    Align2::LEFT_CENTER,
+                    "VENDOR",
+                    FontId::monospace(11.5),
+                    tokens.text_muted,
                 );
 
-                ui.allocate_ui_with_layout(
-                    Vec2::new(col_nd_w, 18.0),
-                    Layout::left_to_right(Align::Center),
-                    |ui| {
-                        ui.label(RichText::new("nd").monospace().strong().size(11.5).color(tokens.text_muted));
-                    },
+                let (rect, _) = ui.allocate_exact_size(Vec2::new(col_nd_w, 18.0), Sense::hover());
+                ui.painter().text(
+                    pos2(rect.min.x + 2.0, rect.center().y),
+                    Align2::LEFT_CENTER,
+                    "nd",
+                    FontId::monospace(11.5),
+                    tokens.text_muted,
                 );
 
-                ui.allocate_ui_with_layout(
-                    Vec2::new(col_vd_w, 18.0),
-                    Layout::left_to_right(Align::Center),
-                    |ui| {
-                        ui.label(RichText::new("Vd").monospace().strong().size(11.5).color(tokens.text_muted));
-                    },
+                let (rect, _) = ui.allocate_exact_size(Vec2::new(col_vd_w, 18.0), Sense::hover());
+                ui.painter().text(
+                    pos2(rect.min.x + 2.0, rect.center().y),
+                    Align2::LEFT_CENTER,
+                    "Vd",
+                    FontId::monospace(11.5),
+                    tokens.text_muted,
                 );
 
-                ui.allocate_ui_with_layout(
-                    Vec2::new(col_action_w, 18.0),
-                    Layout::centered_and_justified(egui::Direction::LeftToRight),
-                    |ui| {
-                        ui.label(RichText::new("ACT").monospace().strong().size(11.5).color(tokens.text_muted));
-                    },
+                let (rect, _) = ui.allocate_exact_size(Vec2::new(col_action_w, 18.0), Sense::hover());
+                ui.painter().text(
+                    pos2(rect.center().x, rect.center().y),
+                    Align2::CENTER_CENTER,
+                    "ACT",
+                    FontId::monospace(11.5),
+                    tokens.text_muted,
                 );
             });
 
@@ -264,58 +269,57 @@ pub fn render_materials_panel(
                                     ui.horizontal(|ui| {
                                         ui.spacing_mut().item_spacing = Vec2::new(spacing, 0.0);
 
-                                        ui.allocate_ui_with_layout(
-                                            Vec2::new(col_name_w, 20.0),
-                                            Layout::left_to_right(Align::Center),
-                                            |ui| {
-                                                let name_color = if is_current { tokens.accent } else { tokens.text_primary };
-                                                ui.add(egui::Label::new(RichText::new("AIR").monospace().strong().size(12.0).color(name_color)).truncate());
-                                            },
+                                        let (rect, _) = ui.allocate_exact_size(Vec2::new(col_name_w, 20.0), Sense::hover());
+                                        let name_color = if is_current { tokens.accent } else { tokens.text_primary };
+                                        ui.painter().text(
+                                            pos2(rect.min.x + 2.0, rect.center().y),
+                                            Align2::LEFT_CENTER,
+                                            "AIR",
+                                            FontId::monospace(12.0),
+                                            name_color,
                                         );
 
-                                        ui.allocate_ui_with_layout(
-                                            Vec2::new(col_vendor_w, 20.0),
-                                            Layout::left_to_right(Align::Center),
-                                            |ui| {
-                                                ui.add(egui::Label::new(RichText::new("Vacuum").size(11.5).color(tokens.text_muted)).truncate());
-                                            },
+                                        let (rect, _) = ui.allocate_exact_size(Vec2::new(col_vendor_w, 20.0), Sense::hover());
+                                        ui.painter().text(
+                                            pos2(rect.min.x + 2.0, rect.center().y),
+                                            Align2::LEFT_CENTER,
+                                            "Vacuum",
+                                            FontId::proportional(11.5),
+                                            tokens.text_muted,
                                         );
 
-                                        ui.allocate_ui_with_layout(
-                                            Vec2::new(col_nd_w, 20.0),
-                                            Layout::left_to_right(Align::Center),
-                                            |ui| {
-                                                ui.add(egui::Label::new(RichText::new("1.0000").monospace().size(11.5).color(tokens.text_primary)).truncate());
-                                            },
+                                        let (rect, _) = ui.allocate_exact_size(Vec2::new(col_nd_w, 20.0), Sense::hover());
+                                        ui.painter().text(
+                                            pos2(rect.min.x + 2.0, rect.center().y),
+                                            Align2::LEFT_CENTER,
+                                            "1.0000",
+                                            FontId::monospace(11.5),
+                                            tokens.text_primary,
                                         );
 
-                                        ui.allocate_ui_with_layout(
-                                            Vec2::new(col_vd_w, 20.0),
-                                            Layout::left_to_right(Align::Center),
-                                            |ui| {
-                                                ui.add(egui::Label::new(RichText::new("—").monospace().size(11.5).color(tokens.text_muted)).truncate());
-                                            },
+                                        let (rect, _) = ui.allocate_exact_size(Vec2::new(col_vd_w, 20.0), Sense::hover());
+                                        ui.painter().text(
+                                            pos2(rect.min.x + 2.0, rect.center().y),
+                                            Align2::LEFT_CENTER,
+                                            "—",
+                                            FontId::monospace(11.5),
+                                            tokens.text_muted,
                                         );
 
-                                        ui.allocate_ui_with_layout(
-                                            Vec2::new(col_action_w, 20.0),
-                                            Layout::centered_and_justified(egui::Direction::LeftToRight),
-                                            |ui| {
-                                                let btn = Button::new(
-                                                    RichText::new(if is_current { "Active" } else { "Set" })
-                                                        .size(11.0)
-                                                        .strong()
-                                                        .color(if is_current { tokens.accent } else { tokens.text_primary }),
-                                                )
-                                                .fill(if is_current { tokens.bg_control_active } else { tokens.bg_control })
-                                                .stroke(tokens.border)
-                                                .corner_radius(CornerRadius::ZERO);
+                                        let (rect, _) = ui.allocate_exact_size(Vec2::new(col_action_w, 20.0), Sense::hover());
+                                        let btn = Button::new(
+                                            RichText::new(if is_current { "Active" } else { "Set" })
+                                                .size(11.0)
+                                                .strong()
+                                                .color(if is_current { tokens.accent } else { tokens.text_primary }),
+                                        )
+                                        .fill(if is_current { tokens.bg_control_active } else { tokens.bg_control })
+                                        .stroke(tokens.border)
+                                        .corner_radius(CornerRadius::ZERO);
 
-                                                if ui.add_sized([col_action_w, 18.0], btn).clicked() {
-                                                    glass_to_apply = Some("AIR".to_string());
-                                                }
-                                            },
-                                        );
+                                        if ui.put(rect, btn).clicked() {
+                                            glass_to_apply = Some("AIR".to_string());
+                                        }
                                     });
                                 });
                         }
@@ -346,59 +350,63 @@ pub fn render_materials_panel(
                                     ui.horizontal(|ui| {
                                         ui.spacing_mut().item_spacing = Vec2::new(spacing, 0.0);
 
-                                        ui.allocate_ui_with_layout(
-                                            Vec2::new(col_name_w, 20.0),
-                                            Layout::left_to_right(Align::Center),
-                                            |ui| {
-                                                let name_color = if is_current { tokens.accent } else { tokens.text_primary };
-                                                ui.add(egui::Label::new(RichText::new(&g.name).monospace().strong().size(12.0).color(name_color)).truncate());
-                                            },
+                                        let (rect, _) = ui.allocate_exact_size(Vec2::new(col_name_w, 20.0), Sense::hover());
+                                        let name_color = if is_current { tokens.accent } else { tokens.text_primary };
+                                        let display_name = if g.name.len() > 14 {
+                                            format!("{}…", &g.name[..13])
+                                        } else {
+                                            g.name.clone()
+                                        };
+                                        ui.painter().text(
+                                            pos2(rect.min.x + 2.0, rect.center().y),
+                                            Align2::LEFT_CENTER,
+                                            display_name,
+                                            FontId::monospace(12.0),
+                                            name_color,
                                         );
 
-                                        ui.allocate_ui_with_layout(
-                                            Vec2::new(col_vendor_w, 20.0),
-                                            Layout::left_to_right(Align::Center),
-                                            |ui| {
-                                                ui.add(egui::Label::new(RichText::new(vendor_name).size(11.5).color(tokens.text_muted)).truncate());
-                                            },
+                                        let (rect, _) = ui.allocate_exact_size(Vec2::new(col_vendor_w, 20.0), Sense::hover());
+                                        ui.painter().text(
+                                            pos2(rect.min.x + 2.0, rect.center().y),
+                                            Align2::LEFT_CENTER,
+                                            vendor_name,
+                                            FontId::proportional(11.5),
+                                            tokens.text_muted,
                                         );
 
-                                        ui.allocate_ui_with_layout(
-                                            Vec2::new(col_nd_w, 20.0),
-                                            Layout::left_to_right(Align::Center),
-                                            |ui| {
-                                                ui.add(egui::Label::new(RichText::new(format!("{:.4}", g.nd)).monospace().size(11.5).color(tokens.text_primary)).truncate());
-                                            },
+                                        let (rect, _) = ui.allocate_exact_size(Vec2::new(col_nd_w, 20.0), Sense::hover());
+                                        ui.painter().text(
+                                            pos2(rect.min.x + 2.0, rect.center().y),
+                                            Align2::LEFT_CENTER,
+                                            format!("{:.4}", g.nd),
+                                            FontId::monospace(11.5),
+                                            tokens.text_primary,
                                         );
 
-                                        ui.allocate_ui_with_layout(
-                                            Vec2::new(col_vd_w, 20.0),
-                                            Layout::left_to_right(Align::Center),
-                                            |ui| {
-                                                ui.add(egui::Label::new(RichText::new(format!("{:.1}", g.vd)).monospace().size(11.5).color(tokens.text_primary)).truncate());
-                                            },
+                                        let (rect, _) = ui.allocate_exact_size(Vec2::new(col_vd_w, 20.0), Sense::hover());
+                                        ui.painter().text(
+                                            pos2(rect.min.x + 2.0, rect.center().y),
+                                            Align2::LEFT_CENTER,
+                                            format!("{:.1}", g.vd),
+                                            FontId::monospace(11.5),
+                                            tokens.text_primary,
                                         );
 
-                                        ui.allocate_ui_with_layout(
-                                            Vec2::new(col_action_w, 20.0),
-                                            Layout::centered_and_justified(egui::Direction::LeftToRight),
-                                            |ui| {
-                                                let btn_text = if is_current { "Active" } else { "Set" };
-                                                let btn = Button::new(
-                                                    RichText::new(btn_text)
-                                                        .size(11.0)
-                                                        .strong()
-                                                        .color(if is_current { tokens.accent } else { tokens.text_primary }),
-                                                )
-                                                .fill(if is_current { tokens.bg_control_active } else { tokens.bg_control })
-                                                .stroke(tokens.border)
-                                                .corner_radius(CornerRadius::ZERO);
+                                        let (rect, _) = ui.allocate_exact_size(Vec2::new(col_action_w, 20.0), Sense::hover());
+                                        let btn_text = if is_current { "Active" } else { "Set" };
+                                        let btn = Button::new(
+                                            RichText::new(btn_text)
+                                                .size(11.0)
+                                                .strong()
+                                                .color(if is_current { tokens.accent } else { tokens.text_primary }),
+                                        )
+                                        .fill(if is_current { tokens.bg_control_active } else { tokens.bg_control })
+                                        .stroke(tokens.border)
+                                        .corner_radius(CornerRadius::ZERO);
 
-                                                if ui.add_sized([col_action_w, 18.0], btn).clicked() {
-                                                    glass_to_apply = Some(g.name.clone());
-                                                }
-                                            },
-                                        );
+                                        if ui.put(rect, btn).clicked() {
+                                            glass_to_apply = Some(g.name.clone());
+                                        }
                                     });
                                 });
                         }
