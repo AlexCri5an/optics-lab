@@ -330,4 +330,92 @@ mod tests {
 
         Ok(())
     }
+
+    /// Acceptance test: DLS optimizes coarse unoptimized Cooke Triplet starting point.
+    #[test]
+    fn test_dls_cooke_triplet_benchmark() -> TestResult {
+        let catalog = GlassCatalogDb::load_bundled()?;
+        let zmx = r#"NAME Cooke Triplet Benchmark
+ENPD 10.000000
+FNUM 5.000000
+PWAV 2
+WAVL 0.4861327 1.0000
+WAVL 0.5875618 1.0000
+WAVL 0.6562725 1.0000
+YFLD 0.0000 7.0000 10.0000
+SURF 0
+  TYPE STANDARD
+  CURV 0.0000000000
+  DISZ INFINITY
+SURF 1
+  TYPE STANDARD
+  CURV 0.0333333333
+  DISZ 3.250000
+  GLAS SK16
+  DIAM 6.000000
+SURF 2
+  TYPE STANDARD
+  CURV 0.0000000000
+  DISZ 6.000000
+  DIAM 6.000000
+SURF 3
+  TYPE STANDARD
+  CURV -0.0333333333
+  DISZ 1.000000
+  GLAS F2
+  DIAM 4.500000
+SURF 4
+  STOP
+  TYPE STANDARD
+  CURV 0.0333333333
+  DISZ 4.750000
+  DIAM 4.500000
+SURF 5
+  TYPE STANDARD
+  CURV 0.0250000000
+  DISZ 2.950000
+  GLAS SK16
+  DIAM 5.500000
+SURF 6
+  TYPE STANDARD
+  CURV -0.0333333333
+  DISZ 43.500000
+  DIAM 5.500000
+SURF 7
+  TYPE STANDARD
+  CURV 0.0000000000
+  DISZ 0.000000
+  DIAM 10.000000
+"#;
+        let sys = optics_zemax::parse_zmx(zmx)?;
+        let initial_presc = sys.to_optical_prescription();
+
+        let mut vars = VariableSet::new();
+        // Variable curvatures for all 6 active surfaces
+        for surf_idx in 0..6 {
+            vars.add_with_bounds(VariableType::Curvature { surface_index: surf_idx }, -0.1, 0.1);
+        }
+
+        let mf = MeritFunction::default_rms_spot(&initial_presc, Some(50.0));
+
+        let optimizer = DlsOptimizer::new(DlsConfig {
+            max_iterations: 20,
+            ..Default::default()
+        });
+
+        let res = optimizer.optimize(&initial_presc, &vars, &mf, &catalog, None)?;
+        println!(
+            "Cooke Benchmark Merit: initial {} -> final {} (reduction {:.1}%)",
+            res.initial_merit,
+            res.final_merit,
+            (1.0 - res.final_merit / res.initial_merit) * 100.0
+        );
+        assert!(res.final_merit < res.initial_merit);
+        assert!(
+            res.final_merit < res.initial_merit * 0.8,
+            "Expect at least 20% merit reduction on unoptimized benchmark"
+        );
+
+        Ok(())
+    }
 }
