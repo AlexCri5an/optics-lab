@@ -439,7 +439,7 @@ pub fn render_materials_panel(
                     ui.label(RichText::new("Target:").strong().size(12.0).color(tokens.text_muted));
 
                     let selected_text = format!("Surface {} ({})", target_idx, surf_role);
-                    ComboBox::from_id_salt("unified_materials_target_cb")
+                    let cb_resp = ComboBox::from_id_salt("unified_materials_target_cb")
                         .selected_text(RichText::new(selected_text).strong().size(11.5).color(tokens.text_primary))
                         .width(150.0)
                         .show_ui(ui, |ui| {
@@ -449,6 +449,8 @@ pub fn render_materials_panel(
                                 ui.selectable_value(&mut editor_state.materials_target_surface, idx, label);
                             }
                         });
+
+                    let cb_height = cb_resp.response.rect.height();
 
                     let air_btn = Button::new(
                         RichText::new("Set to AIR")
@@ -460,7 +462,7 @@ pub fn render_materials_panel(
                     .stroke(tokens.border)
                     .corner_radius(CornerRadius::ZERO);
 
-                    if ui.add_sized([72.0, 22.0], air_btn).on_hover_text("Assign AIR (Vacuum) to selected surface").clicked() {
+                    if ui.add_sized([72.0, cb_height], air_btn).on_hover_text("Assign AIR (Vacuum) to selected surface").clicked() {
                         if current_material != "AIR" {
                             prescription.surfaces[target_idx].material_name = "AIR".to_string();
                             modified = true;

@@ -530,7 +530,7 @@ fn render_glass_picker(
                             .corner_radius(CornerRadius::ZERO)
                             .inner_margin(Margin::same(4))
                             .show(ui, |ui| {
-                                ui.set_width(280.0);
+                                ui.set_width(215.0);
                                 ScrollArea::vertical()
                                     .max_height(134.0)
                                     .auto_shrink([false, false])
@@ -544,13 +544,13 @@ fn render_glass_picker(
                                                 if is_hov {
                                                     ui.painter().rect_filled(row_resp.rect, 0.0, tokens.bg_control_active);
                                                 }
-                                                let text_pos = row_resp.rect.left_center() + Vec2::new(8.0, 0.0);
+                                                let text_pos = row_resp.rect.left_center() + Vec2::new(6.0, 0.0);
                                                 let text_color = if is_hov { tokens.accent } else { tokens.text_primary };
                                                 ui.painter().text(
                                                     text_pos,
                                                     egui::Align2::LEFT_CENTER,
-                                                    "AIR         nd=1.0000  (Vacuum)",
-                                                    egui::FontId::monospace(11.0),
+                                                    "AIR       nd=1.0000 (Air)",
+                                                    egui::FontId::monospace(10.5),
                                                     text_color,
                                                 );
                                                 if row_resp.clicked() {
@@ -566,14 +566,14 @@ fn render_glass_picker(
                                                 if is_hov {
                                                     ui.painter().rect_filled(row_resp.rect, 0.0, tokens.bg_control_active);
                                                 }
-                                                let text_pos = row_resp.rect.left_center() + Vec2::new(8.0, 0.0);
+                                                let text_pos = row_resp.rect.left_center() + Vec2::new(6.0, 0.0);
                                                 let text_color = if is_hov { tokens.accent } else { tokens.text_primary };
-                                                let label = format!("{:<10}  nd={:.4}   Vd={:.1}", g.name, g.nd, g.vd);
+                                                let label = format!("{:<9} nd={:.4} Vd={:.1}", g.name, g.nd, g.vd);
                                                 ui.painter().text(
                                                     text_pos,
                                                     egui::Align2::LEFT_CENTER,
                                                     label,
-                                                    egui::FontId::monospace(11.0),
+                                                    egui::FontId::monospace(10.5),
                                                     text_color,
                                                 );
                                                 if row_resp.clicked() {
