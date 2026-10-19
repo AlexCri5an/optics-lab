@@ -456,27 +456,28 @@ fn render_surface_card(
         });
 
         // -------------------------------------------------------------------
-        // Row 3: Airy Feature Pills Bar: [ Asph ] [ Bic ] [ Tor ] [ Grin ] [ CB ]
+        // Row 3: Airy Feature Pills Bar: [ Asph ] [ Bic ] [ Tor ] | [ Grin ] [ CB ]
+        // Note: Asph, Bic, and Tor are strictly mutually exclusive (one sag profile per surface).
         // -------------------------------------------------------------------
-        let has_asph = !surf.asphere_coefficients.is_empty() || surf.conic_constant.abs() > 1e-9;
         let is_biconic = matches!(surf.profile, Some(SurfaceProfile::Biconic(_)));
         let is_toroidal = matches!(surf.profile, Some(SurfaceProfile::Toroidal(_)));
+        let has_asph = surf.profile.is_none() && (!surf.asphere_coefficients.is_empty() || surf.conic_constant.abs() > 1e-9);
         let has_grin = surf.grin_profile.is_some();
         let has_cb = surf.coordinate_break.is_some();
 
         ui.add_space(5.0);
 
-        // Calculate uniform pill width distributed across the available card width
+        // Calculate uniform pill width distributed across the available card width (accounting for separator)
         let avail_w = ui.available_width();
         let pill_gap = 4.0;
-        let pill_w = ((avail_w - (pill_gap * 4.0)) / 5.0).clamp(42.0, 70.0);
+        let pill_w = ((avail_w - (pill_gap * 4.0) - 8.0) / 5.0).clamp(40.0, 68.0);
 
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing = Vec2::new(pill_gap, 0.0);
 
-            // 1. Asph
+            // 1. Asph (Exclusive Sag Profile)
             let asph_resp = feature_pill(ui, "Asph", has_asph, tokens.plot_tangential, pill_w, tokens)
-                .on_hover_text("Even Asphere Profile\nConic constant (k) and polynomial even coefficients (A4, A6...)");
+                .on_hover_text("Even Asphere Profile\nConic constant (k) and polynomial even coefficients (A4, A6...)\nExclusive with Bic and Tor.");
             if asph_resp.clicked() {
                 if has_asph {
                     surf.conic_constant = 0.0;
@@ -488,14 +489,14 @@ fn render_surface_card(
                     });
                 } else {
                     surf.asphere_coefficients = vec![0.0, 0.0];
-                    surf.profile = None; // Asphere replaces other sag profiles
+                    surf.profile = None; // Asphere replaces Biconic and Toroidal
                 }
                 modified = true;
             }
 
-            // 2. Bic
+            // 2. Bic (Exclusive Sag Profile)
             let bic_resp = feature_pill(ui, "Bic", is_biconic, tokens.plot_sagittal, pill_w, tokens)
-                .on_hover_text("Biconic Anamorphic Surface\nIndependent X and Y curvatures (Rx, Ry) and conics (kx, ky)");
+                .on_hover_text("Biconic Anamorphic Surface\nIndependent X and Y curvatures (Rx, Ry) and conics (kx, ky)\nExclusive with Asph and Tor.");
             if bic_resp.clicked() {
                 if is_biconic {
                     surf.profile = None;
@@ -503,13 +504,18 @@ fn render_surface_card(
                     surf.profile = Some(SurfaceProfile::Biconic(BiconicSurface::default()));
                     surf.asphere_coefficients.clear();
                     surf.conic_constant = 0.0;
+                    ui.data_mut(|d| {
+                        d.remove_temp::<String>(Id::new(("surf_conic_k", idx)));
+                        d.remove_temp::<String>(Id::new(("surf_asph_a4", idx)));
+                        d.remove_temp::<String>(Id::new(("surf_asph_a6", idx)));
+                    });
                 }
                 modified = true;
             }
 
-            // 3. Tor
+            // 3. Tor (Exclusive Sag Profile)
             let tor_resp = feature_pill(ui, "Tor", is_toroidal, tokens.accent, pill_w, tokens)
-                .on_hover_text("Toroidal Surface\nRevolution of an optical conic about a displaced or orthogonal axis");
+                .on_hover_text("Toroidal Surface\nRevolution of an optical conic about a displaced or orthogonal axis\nExclusive with Asph and Bic.");
             if tor_resp.clicked() {
                 if is_toroidal {
                     surf.profile = None;
@@ -517,11 +523,19 @@ fn render_surface_card(
                     surf.profile = Some(SurfaceProfile::Toroidal(ToroidalSurface::default()));
                     surf.asphere_coefficients.clear();
                     surf.conic_constant = 0.0;
+                    ui.data_mut(|d| {
+                        d.remove_temp::<String>(Id::new(("surf_conic_k", idx)));
+                        d.remove_temp::<String>(Id::new(("surf_asph_a4", idx)));
+                        d.remove_temp::<String>(Id::new(("surf_asph_a6", idx)));
+                    });
                 }
                 modified = true;
             }
 
-            // 4. Grin
+            // Visual separator between surface geometry profiles (exclusive) and volumetric/spatial modifiers
+            ui.add(egui::Separator::default().vertical().shrink(3.0));
+
+            // 4. Grin (Volumetric Glass Medium)
             let grin_resp = feature_pill(ui, "Grin", has_grin, tokens.warning, pill_w, tokens)
                 .on_hover_text("Gradient Index (GRIN) Glass\nContinuous radial Selfoc, axial, or spherical Luneburg gradient");
             if grin_resp.clicked() {
