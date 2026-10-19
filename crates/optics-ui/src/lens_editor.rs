@@ -481,6 +481,11 @@ fn render_surface_card(
                 if has_asph {
                     surf.conic_constant = 0.0;
                     surf.asphere_coefficients.clear();
+                    ui.data_mut(|d| {
+                        d.remove_temp::<String>(Id::new(("surf_conic_k", idx)));
+                        d.remove_temp::<String>(Id::new(("surf_asph_a4", idx)));
+                        d.remove_temp::<String>(Id::new(("surf_asph_a6", idx)));
+                    });
                 } else {
                     surf.asphere_coefficients = vec![0.0, 0.0];
                     surf.profile = None; // Asphere replaces other sag profiles
@@ -546,6 +551,7 @@ fn render_surface_card(
         // -------------------------------------------------------------------
 
         // 1. Expanded Asphere Card
+        let mut remove_asph = false;
         if has_asph {
             ui.add_space(4.0);
             Frame::NONE
@@ -558,38 +564,42 @@ fn render_surface_card(
                         ui.label(RichText::new("Even Asphere Profile").size(10.5).strong().color(tokens.plot_tangential));
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                             if lucide_small_icon_button(ui, LucideIcon::X, "Remove Asphere", tokens).clicked() {
-                                surf.conic_constant = 0.0;
-                                surf.asphere_coefficients.clear();
+                                remove_asph = true;
                                 modified = true;
                             }
                         });
                     });
                     ui.add_space(3.0);
+                    // Single row: Conic (k): [ ... ] A4: [ ... ] A6: [ ... ]
                     ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
+                        ui.spacing_mut().item_spacing = Vec2::new(5.0, 0.0);
                         ui.label(RichText::new("Conic (k):").size(10.0).color(tokens.text_muted));
-                        if float_input(ui, Id::new(("surf_conic_k", idx)), &mut surf.conic_constant, 48.0) {
+                        if float_input(ui, Id::new(("surf_conic_k", idx)), &mut surf.conic_constant, 40.0) {
                             modified = true;
                         }
-                    });
-                    ui.add_space(2.0);
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
-                        if surf.asphere_coefficients.is_empty() {
-                            surf.asphere_coefficients = vec![0.0, 0.0];
-                        }
-                        ui.label(RichText::new("A4:").size(10.0).color(tokens.text_muted));
-                        if float_input(ui, Id::new(("surf_asph_a4", idx)), &mut surf.asphere_coefficients[0], 52.0) {
-                            modified = true;
+                        if !surf.asphere_coefficients.is_empty() {
+                            ui.label(RichText::new("A4:").size(10.0).color(tokens.text_muted));
+                            if float_input(ui, Id::new(("surf_asph_a4", idx)), &mut surf.asphere_coefficients[0], 48.0) {
+                                modified = true;
+                            }
                         }
                         if surf.asphere_coefficients.len() > 1 {
                             ui.label(RichText::new("A6:").size(10.0).color(tokens.text_muted));
-                            if float_input(ui, Id::new(("surf_asph_a6", idx)), &mut surf.asphere_coefficients[1], 52.0) {
+                            if float_input(ui, Id::new(("surf_asph_a6", idx)), &mut surf.asphere_coefficients[1], 48.0) {
                                 modified = true;
                             }
                         }
                     });
                 });
+        }
+        if remove_asph {
+            surf.conic_constant = 0.0;
+            surf.asphere_coefficients.clear();
+            ui.data_mut(|d| {
+                d.remove_temp::<String>(Id::new(("surf_conic_k", idx)));
+                d.remove_temp::<String>(Id::new(("surf_asph_a4", idx)));
+                d.remove_temp::<String>(Id::new(("surf_asph_a6", idx)));
+            });
         }
 
         // 2. Expanded Biconic Card
