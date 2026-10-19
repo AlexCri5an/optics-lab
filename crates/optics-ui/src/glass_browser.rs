@@ -36,12 +36,7 @@ pub enum MaterialVendorFilter {
     InfraredOther,
 }
 
-// Rigid fixed column widths for the table so columns NEVER wiggle or resize
-const COL_NAME_W: f32 = 110.0;
-const COL_VENDOR_W: f32 = 62.0;
-const COL_ND_W: f32 = 54.0;
-const COL_VD_W: f32 = 46.0;
-const COL_ACTION_W: f32 = 44.0;
+
 
 /// Renders the docked Materials Catalog panel inside the left sidebar.
 ///
@@ -173,7 +168,7 @@ pub fn render_materials_panel(
         });
 
         // -------------------------------------------------------------------
-        // 4. Pixel-Perfect Table with Strictly FIXED Column Widths
+        // 4. Pixel-Perfect Table with Strictly FIXED Column Widths Spanning Edge-to-Edge
         // -------------------------------------------------------------------
         let table_frame = Frame::NONE
             .fill(tokens.bg_canvas)
@@ -186,12 +181,24 @@ pub fn render_materials_panel(
         table_frame.show(ui, |ui| {
             ui.set_width(ui.available_width());
 
+            // Compute rigid column widths that span 100% to the right edge
+            let avail_w = ui.available_width();
+            let scroll_margin = 12.0;
+            let usable_w = (avail_w - scroll_margin).max(340.0);
+            let spacing = 6.0;
+
+            let col_action_w = 48.0;
+            let col_vd_w = 54.0;
+            let col_nd_w = 64.0;
+            let col_vendor_w = 72.0;
+            let col_name_w = (usable_w - (col_vendor_w + col_nd_w + col_vd_w + col_action_w + spacing * 4.0)).max(100.0);
+
             // Pinned Table Header (Always visible, strictly fixed columns)
             ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
+                ui.spacing_mut().item_spacing = Vec2::new(spacing, 0.0);
 
                 ui.allocate_ui_with_layout(
-                    Vec2::new(COL_NAME_W, 18.0),
+                    Vec2::new(col_name_w, 18.0),
                     Layout::left_to_right(Align::Center),
                     |ui| {
                         ui.label(RichText::new("NAME").monospace().strong().size(11.5).color(tokens.text_muted));
@@ -199,7 +206,7 @@ pub fn render_materials_panel(
                 );
 
                 ui.allocate_ui_with_layout(
-                    Vec2::new(COL_VENDOR_W, 18.0),
+                    Vec2::new(col_vendor_w, 18.0),
                     Layout::left_to_right(Align::Center),
                     |ui| {
                         ui.label(RichText::new("VENDOR").monospace().strong().size(11.5).color(tokens.text_muted));
@@ -207,7 +214,7 @@ pub fn render_materials_panel(
                 );
 
                 ui.allocate_ui_with_layout(
-                    Vec2::new(COL_ND_W, 18.0),
+                    Vec2::new(col_nd_w, 18.0),
                     Layout::left_to_right(Align::Center),
                     |ui| {
                         ui.label(RichText::new("nd").monospace().strong().size(11.5).color(tokens.text_muted));
@@ -215,7 +222,7 @@ pub fn render_materials_panel(
                 );
 
                 ui.allocate_ui_with_layout(
-                    Vec2::new(COL_VD_W, 18.0),
+                    Vec2::new(col_vd_w, 18.0),
                     Layout::left_to_right(Align::Center),
                     |ui| {
                         ui.label(RichText::new("Vd").monospace().strong().size(11.5).color(tokens.text_muted));
@@ -223,7 +230,7 @@ pub fn render_materials_panel(
                 );
 
                 ui.allocate_ui_with_layout(
-                    Vec2::new(COL_ACTION_W, 18.0),
+                    Vec2::new(col_action_w, 18.0),
                     Layout::centered_and_justified(egui::Direction::LeftToRight),
                     |ui| {
                         ui.label(RichText::new("ACT").monospace().strong().size(11.5).color(tokens.text_muted));
@@ -235,7 +242,7 @@ pub fn render_materials_panel(
 
             ScrollArea::vertical()
                 .auto_shrink([false, false])
-                .max_height(330.0)
+                .max_height(320.0)
                 .show(ui, |ui| {
                     ui.vertical(|ui| {
                         ui.spacing_mut().item_spacing = Vec2::new(0.0, 2.0);
@@ -255,10 +262,10 @@ pub fn render_materials_panel(
                                 .inner_margin(Margin::symmetric(2, 2))
                                 .show(ui, |ui| {
                                     ui.horizontal(|ui| {
-                                        ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
+                                        ui.spacing_mut().item_spacing = Vec2::new(spacing, 0.0);
 
                                         ui.allocate_ui_with_layout(
-                                            Vec2::new(COL_NAME_W, 20.0),
+                                            Vec2::new(col_name_w, 20.0),
                                             Layout::left_to_right(Align::Center),
                                             |ui| {
                                                 let name_color = if is_current { tokens.accent } else { tokens.text_primary };
@@ -267,7 +274,7 @@ pub fn render_materials_panel(
                                         );
 
                                         ui.allocate_ui_with_layout(
-                                            Vec2::new(COL_VENDOR_W, 20.0),
+                                            Vec2::new(col_vendor_w, 20.0),
                                             Layout::left_to_right(Align::Center),
                                             |ui| {
                                                 ui.add(egui::Label::new(RichText::new("Vacuum").size(11.5).color(tokens.text_muted)).truncate());
@@ -275,7 +282,7 @@ pub fn render_materials_panel(
                                         );
 
                                         ui.allocate_ui_with_layout(
-                                            Vec2::new(COL_ND_W, 20.0),
+                                            Vec2::new(col_nd_w, 20.0),
                                             Layout::left_to_right(Align::Center),
                                             |ui| {
                                                 ui.add(egui::Label::new(RichText::new("1.0000").monospace().size(11.5).color(tokens.text_primary)).truncate());
@@ -283,7 +290,7 @@ pub fn render_materials_panel(
                                         );
 
                                         ui.allocate_ui_with_layout(
-                                            Vec2::new(COL_VD_W, 20.0),
+                                            Vec2::new(col_vd_w, 20.0),
                                             Layout::left_to_right(Align::Center),
                                             |ui| {
                                                 ui.add(egui::Label::new(RichText::new("—").monospace().size(11.5).color(tokens.text_muted)).truncate());
@@ -291,7 +298,7 @@ pub fn render_materials_panel(
                                         );
 
                                         ui.allocate_ui_with_layout(
-                                            Vec2::new(COL_ACTION_W, 20.0),
+                                            Vec2::new(col_action_w, 20.0),
                                             Layout::centered_and_justified(egui::Direction::LeftToRight),
                                             |ui| {
                                                 let btn = Button::new(
@@ -304,7 +311,7 @@ pub fn render_materials_panel(
                                                 .stroke(tokens.border)
                                                 .corner_radius(CornerRadius::ZERO);
 
-                                                if ui.add_sized([COL_ACTION_W, 18.0], btn).clicked() {
+                                                if ui.add_sized([col_action_w, 18.0], btn).clicked() {
                                                     glass_to_apply = Some("AIR".to_string());
                                                 }
                                             },
@@ -337,10 +344,10 @@ pub fn render_materials_panel(
                                 .inner_margin(Margin::symmetric(2, 2))
                                 .show(ui, |ui| {
                                     ui.horizontal(|ui| {
-                                        ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
+                                        ui.spacing_mut().item_spacing = Vec2::new(spacing, 0.0);
 
                                         ui.allocate_ui_with_layout(
-                                            Vec2::new(COL_NAME_W, 20.0),
+                                            Vec2::new(col_name_w, 20.0),
                                             Layout::left_to_right(Align::Center),
                                             |ui| {
                                                 let name_color = if is_current { tokens.accent } else { tokens.text_primary };
@@ -349,7 +356,7 @@ pub fn render_materials_panel(
                                         );
 
                                         ui.allocate_ui_with_layout(
-                                            Vec2::new(COL_VENDOR_W, 20.0),
+                                            Vec2::new(col_vendor_w, 20.0),
                                             Layout::left_to_right(Align::Center),
                                             |ui| {
                                                 ui.add(egui::Label::new(RichText::new(vendor_name).size(11.5).color(tokens.text_muted)).truncate());
@@ -357,7 +364,7 @@ pub fn render_materials_panel(
                                         );
 
                                         ui.allocate_ui_with_layout(
-                                            Vec2::new(COL_ND_W, 20.0),
+                                            Vec2::new(col_nd_w, 20.0),
                                             Layout::left_to_right(Align::Center),
                                             |ui| {
                                                 ui.add(egui::Label::new(RichText::new(format!("{:.4}", g.nd)).monospace().size(11.5).color(tokens.text_primary)).truncate());
@@ -365,7 +372,7 @@ pub fn render_materials_panel(
                                         );
 
                                         ui.allocate_ui_with_layout(
-                                            Vec2::new(COL_VD_W, 20.0),
+                                            Vec2::new(col_vd_w, 20.0),
                                             Layout::left_to_right(Align::Center),
                                             |ui| {
                                                 ui.add(egui::Label::new(RichText::new(format!("{:.1}", g.vd)).monospace().size(11.5).color(tokens.text_primary)).truncate());
@@ -373,7 +380,7 @@ pub fn render_materials_panel(
                                         );
 
                                         ui.allocate_ui_with_layout(
-                                            Vec2::new(COL_ACTION_W, 20.0),
+                                            Vec2::new(col_action_w, 20.0),
                                             Layout::centered_and_justified(egui::Direction::LeftToRight),
                                             |ui| {
                                                 let btn_text = if is_current { "Active" } else { "Set" };
@@ -387,7 +394,7 @@ pub fn render_materials_panel(
                                                 .stroke(tokens.border)
                                                 .corner_radius(CornerRadius::ZERO);
 
-                                                if ui.add_sized([COL_ACTION_W, 18.0], btn).clicked() {
+                                                if ui.add_sized([col_action_w, 18.0], btn).clicked() {
                                                     glass_to_apply = Some(g.name.clone());
                                                 }
                                             },
@@ -419,21 +426,22 @@ pub fn render_materials_panel(
             .fill(tokens.bg_control)
             .stroke(tokens.border)
             .corner_radius(CornerRadius::ZERO)
-            .inner_margin(Margin::symmetric(12, 10));
+            .inner_margin(Margin::symmetric(14, 12));
 
         info_frame.show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.vertical(|ui| {
-                ui.spacing_mut().item_spacing = Vec2::new(0.0, 6.0);
+                ui.spacing_mut().item_spacing = Vec2::new(0.0, 9.0);
 
-                // Row 1: Target surface picker ComboBox + Set AIR button
+                // Section 1: Target surface picker ComboBox + Set AIR button
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new("Target Surface:").strong().size(12.0).color(tokens.text_muted));
+                    ui.spacing_mut().item_spacing = Vec2::new(8.0, 0.0);
+                    ui.label(RichText::new("Target:").strong().size(12.0).color(tokens.text_muted));
 
                     let selected_text = format!("Surface {} ({})", target_idx, surf_role);
                     ComboBox::from_id_salt("unified_materials_target_cb")
-                        .selected_text(RichText::new(selected_text).strong().size(12.0).color(tokens.text_primary))
-                        .width(140.0)
+                        .selected_text(RichText::new(selected_text).strong().size(11.5).color(tokens.text_primary))
+                        .width(150.0)
                         .show_ui(ui, |ui| {
                             for (idx, surf) in prescription.surfaces.iter().enumerate() {
                                 let role = if idx == 0 { "Object" } else if idx == total_surfs - 1 { "Image" } else if surf.is_stop { "Stop" } else { "Standard" };
@@ -452,7 +460,7 @@ pub fn render_materials_panel(
                     .stroke(tokens.border)
                     .corner_radius(CornerRadius::ZERO);
 
-                    if ui.add(air_btn).on_hover_text("Assign AIR (Vacuum) to selected surface").clicked() {
+                    if ui.add_sized([72.0, 22.0], air_btn).on_hover_text("Assign AIR (Vacuum) to selected surface").clicked() {
                         if current_material != "AIR" {
                             prescription.surfaces[target_idx].material_name = "AIR".to_string();
                             modified = true;
@@ -460,22 +468,47 @@ pub fn render_materials_panel(
                     }
                 });
 
+                ui.add_space(2.0);
                 ui.separator();
+                ui.add_space(2.0);
 
-                // Row 2: Current Material details (Name, Vendor, nd, Vd)
+                // Section 2: Active Glass Details with generous breathing room
                 if current_material == "AIR" {
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new("Current Material:").strong().size(11.5).color(tokens.text_muted));
-                        ui.label(RichText::new("AIR").monospace().strong().size(12.0).color(tokens.accent));
-                        ui.label(RichText::new("(Vacuum / Free Space, nd = 1.0000)").size(11.0).color(tokens.text_muted));
+                        ui.spacing_mut().item_spacing = Vec2::new(8.0, 0.0);
+                        ui.label(RichText::new("Active:").strong().size(11.5).color(tokens.text_muted));
+                        ui.label(RichText::new("AIR").monospace().strong().size(13.0).color(tokens.accent));
+                        ui.label(RichText::new("(Vacuum / Free Space)").size(11.0).color(tokens.text_muted));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = Vec2::new(4.0, 0.0);
+                        ui.label(RichText::new("Refractive Index:").size(11.0).color(tokens.text_muted));
+                        ui.label(RichText::new("nd = 1.00000").monospace().strong().size(11.5).color(tokens.text_primary));
                     });
                 } else if let Some(g) = catalog.lookup(&current_material) {
+                    // Line 1: Glass Name & Catalog
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new("Current Glass:").strong().size(11.5).color(tokens.text_muted));
-                        ui.label(RichText::new(&g.name).monospace().strong().size(12.5).color(tokens.accent));
-                        ui.label(RichText::new(format!("({})", g.catalog.name())).size(11.5).color(tokens.text_muted));
-                        ui.label(RichText::new(format!("nd = {:.5}", g.nd)).monospace().size(11.5).color(tokens.text_primary));
-                        ui.label(RichText::new(format!("Vd = {:.2}", g.vd)).monospace().size(11.5).color(tokens.text_primary));
+                        ui.spacing_mut().item_spacing = Vec2::new(8.0, 0.0);
+                        ui.label(RichText::new("Active:").strong().size(11.5).color(tokens.text_muted));
+                        ui.label(RichText::new(&g.name).monospace().strong().size(13.5).color(tokens.accent));
+                        ui.label(RichText::new(format!("[{}]", g.catalog.name())).size(11.0).color(tokens.text_muted));
+                    });
+
+                    // Line 2: Optical Constants (Index nd & Abbe number Vd spaced apart)
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = Vec2::new(20.0, 0.0);
+
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing = Vec2::new(4.0, 0.0);
+                            ui.label(RichText::new("nd:").strong().size(11.5).color(tokens.text_muted));
+                            ui.label(RichText::new(format!("{:.5}", g.nd)).monospace().strong().size(12.0).color(tokens.text_primary));
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing = Vec2::new(4.0, 0.0);
+                            ui.label(RichText::new("Vd:").strong().size(11.5).color(tokens.text_muted));
+                            ui.label(RichText::new(format!("{:.2}", g.vd)).monospace().strong().size(12.0).color(tokens.text_primary));
+                        });
                     });
 
                     let formula_desc = match g.dispersion {
@@ -487,20 +520,30 @@ pub fn render_materials_panel(
                     };
                     let thermal_desc = if g.thermal.is_some() { "Available (dn/dT)" } else { "20°C Reference" };
 
-                    // Row 3: Formula and Thermal details
+                    // Line 3: Mathematical Model & Thermal Status
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new("Dispersion:").strong().size(11.0).color(tokens.text_muted));
-                        ui.label(RichText::new(formula_desc).size(11.0).color(tokens.text_primary));
-                        ui.label(RichText::new("|").size(11.0).color(tokens.text_muted));
-                        ui.label(RichText::new("Thermal:").strong().size(11.0).color(tokens.text_muted));
-                        ui.label(RichText::new(thermal_desc).size(11.0).color(tokens.text_primary));
+                        ui.spacing_mut().item_spacing = Vec2::new(16.0, 0.0);
+
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing = Vec2::new(4.0, 0.0);
+                            ui.label(RichText::new("Formula:").size(11.0).color(tokens.text_muted));
+                            ui.label(RichText::new(formula_desc).size(11.0).color(tokens.text_primary));
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing = Vec2::new(4.0, 0.0);
+                            ui.label(RichText::new("Thermal:").size(11.0).color(tokens.text_muted));
+                            ui.label(RichText::new(thermal_desc).size(11.0).color(tokens.text_primary));
+                        });
                     });
                 } else {
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new("Current Material:").strong().size(11.5).color(tokens.text_muted));
-                        ui.label(RichText::new(&current_material).monospace().strong().size(12.0).color(tokens.warning));
-                        ui.label(RichText::new("(Custom / Non-catalog material)").size(11.0).color(tokens.text_muted));
+                        ui.spacing_mut().item_spacing = Vec2::new(8.0, 0.0);
+                        ui.label(RichText::new("Active:").strong().size(11.5).color(tokens.text_muted));
+                        ui.label(RichText::new(&current_material).monospace().strong().size(13.0).color(tokens.warning));
+                        ui.label(RichText::new("(Custom Material)").size(11.0).color(tokens.text_muted));
                     });
+                    ui.label(RichText::new("Non-catalog material — custom dispersion model.").size(10.5).color(tokens.text_muted));
                 }
             });
         });

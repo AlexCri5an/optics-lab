@@ -530,29 +530,53 @@ fn render_glass_picker(
                             .corner_radius(CornerRadius::ZERO)
                             .inner_margin(Margin::same(4))
                             .show(ui, |ui| {
-                                ui.set_width(260.0);
+                                ui.set_width(280.0);
                                 ScrollArea::vertical()
-                                    .max_height(200.0)
+                                    .max_height(134.0)
                                     .auto_shrink([false, false])
                                     .show(ui, |ui| {
                                         ui.vertical(|ui| {
-                                            ui.spacing_mut().item_spacing = Vec2::new(0.0, 2.0);
+                                            ui.spacing_mut().item_spacing = Vec2::new(0.0, 1.0);
+
                                             if air_matches {
-                                                let air_btn = Button::new(RichText::new("AIR (nd=1.0000)").monospace().size(11.0).color(tokens.accent))
-                                                    .fill(tokens.bg_control)
-                                                    .corner_radius(CornerRadius::ZERO);
-                                                if ui.add_sized([ui.available_width(), 20.0], air_btn).clicked() {
+                                                let row_resp = ui.allocate_response(Vec2::new(ui.available_width(), 22.0), egui::Sense::click());
+                                                let is_hov = row_resp.hovered();
+                                                if is_hov {
+                                                    ui.painter().rect_filled(row_resp.rect, 0.0, tokens.bg_control_active);
+                                                }
+                                                let text_pos = row_resp.rect.left_center() + Vec2::new(8.0, 0.0);
+                                                let text_color = if is_hov { tokens.accent } else { tokens.text_primary };
+                                                ui.painter().text(
+                                                    text_pos,
+                                                    egui::Align2::LEFT_CENTER,
+                                                    "AIR         nd=1.0000  (Vacuum)",
+                                                    egui::FontId::monospace(11.0),
+                                                    text_color,
+                                                );
+                                                if row_resp.clicked() {
                                                     surf.material_name = "AIR".to_string();
                                                     state.autocomplete_surface = None;
                                                     modified = true;
                                                 }
                                             }
+
                                             for g in matches {
-                                                let label = format!("{} (nd={:.4}, Vd={:.1})", g.name, g.nd, g.vd);
-                                                let btn = Button::new(RichText::new(label).monospace().size(11.0).color(tokens.text_primary))
-                                                    .fill(tokens.bg_control)
-                                                    .corner_radius(CornerRadius::ZERO);
-                                                if ui.add_sized([ui.available_width(), 20.0], btn).clicked() {
+                                                let row_resp = ui.allocate_response(Vec2::new(ui.available_width(), 22.0), egui::Sense::click());
+                                                let is_hov = row_resp.hovered();
+                                                if is_hov {
+                                                    ui.painter().rect_filled(row_resp.rect, 0.0, tokens.bg_control_active);
+                                                }
+                                                let text_pos = row_resp.rect.left_center() + Vec2::new(8.0, 0.0);
+                                                let text_color = if is_hov { tokens.accent } else { tokens.text_primary };
+                                                let label = format!("{:<10}  nd={:.4}   Vd={:.1}", g.name, g.nd, g.vd);
+                                                ui.painter().text(
+                                                    text_pos,
+                                                    egui::Align2::LEFT_CENTER,
+                                                    label,
+                                                    egui::FontId::monospace(11.0),
+                                                    text_color,
+                                                );
+                                                if row_resp.clicked() {
                                                     surf.material_name = g.name.clone();
                                                     state.autocomplete_surface = None;
                                                     modified = true;
