@@ -194,12 +194,18 @@ impl MeritOperand {
     pub fn evaluate(&self, resolved: &ResolvedPrescription) -> Result<f64, OptimizeError> {
         match self.operand_type {
             OperandType::EffectiveFocalLength { wavelength_nm } => {
-                let paraxial = calculate_paraxial_properties(resolved, wavelength_nm)?;
-                Ok(paraxial.efl_mm)
+                match calculate_paraxial_properties(resolved, wavelength_nm) {
+                    Ok(paraxial) if paraxial.efl_mm.is_finite() && paraxial.efl_mm.abs() > 0.01 => {
+                        Ok(paraxial.efl_mm)
+                    }
+                    _ => Ok(10_000.0), // Finite penalty for concentric / zero-power / singular paraxial trace
+                }
             }
             OperandType::WorkingFNumber { wavelength_nm } => {
-                let paraxial = calculate_paraxial_properties(resolved, wavelength_nm)?;
-                Ok(paraxial.f_number)
+                match calculate_paraxial_properties(resolved, wavelength_nm) {
+                    Ok(paraxial) if paraxial.f_number.is_finite() => Ok(paraxial.f_number),
+                    _ => Ok(100.0),
+                }
             }
             OperandType::TotalTrack => {
                 let mut totr = 0.0;
@@ -209,18 +215,18 @@ impl MeritOperand {
                 Ok(totr)
             }
             OperandType::BackFocalLength { wavelength_nm } => {
-                let paraxial = calculate_paraxial_properties(resolved, wavelength_nm)?;
-                Ok(paraxial.bfl_mm)
+                match calculate_paraxial_properties(resolved, wavelength_nm) {
+                    Ok(paraxial) if paraxial.bfl_mm.is_finite() => Ok(paraxial.bfl_mm),
+                    _ => Ok(10_000.0),
+                }
             }
             OperandType::ParaxialMagnification { wavelength_nm } => {
-                let paraxial = calculate_paraxial_properties(resolved, wavelength_nm)?;
-                // Approximate transverse magnification as ratio of focal distances or 0.0 for infinite conjugate
-                let mag = if paraxial.bfl_mm.abs() > 1e-12 {
-                    paraxial.bfl_mm / paraxial.efl_mm
-                } else {
-                    0.0
-                };
-                Ok(mag)
+                match calculate_paraxial_properties(resolved, wavelength_nm) {
+                    Ok(paraxial) if paraxial.bfl_mm.abs() > 1e-12 && paraxial.efl_mm.abs() > 1e-6 => {
+                        Ok(paraxial.bfl_mm / paraxial.efl_mm)
+                    }
+                    _ => Ok(0.0),
+                }
             }
             OperandType::RmsSpotRadius {
                 field_angle_deg,
@@ -230,23 +236,28 @@ impl MeritOperand {
                 let pattern = PupilPattern::Hexapolar {
                     num_rings: hex_rings.max(1),
                 };
-                let spot =
-                    trace_spot_diagram(resolved, (0.0, field_angle_deg), wavelength_nm, pattern)?;
-                Ok(spot.metrics.rms_radius_um)
+                match trace_spot_diagram(resolved, (0.0, field_angle_deg), wavelength_nm, pattern) {
+                    Ok(spot) if spot.metrics.passed_rays_count > 0 && spot.metrics.rms_radius_um.is_finite() => {
+                        Ok(spot.metrics.rms_radius_um)
+                    }
+                    _ => Ok(100_000.0), // Standard Zemax-style 100 mm penalty for failed ray trace / TIR
+                }
             }
             OperandType::RmsWavefrontError {
                 field_angle_deg,
                 wavelength_nm,
                 grid_size,
             } => {
-                let wf = compute_wavefront_map(
+                match compute_wavefront_map(
                     resolved,
                     grid_size.max(8),
                     field_angle_deg,
                     wavelength_nm,
                     true,
-                )?;
-                Ok(wf.rms_waves)
+                ) {
+                    Ok(wf) if wf.rms_waves.is_finite() => Ok(wf.rms_waves),
+                    _ => Ok(100.0), // Finite penalty in waves for wavefront failure
+                }
             }
             OperandType::SeidelSpherical {
                 field_angle_deg,

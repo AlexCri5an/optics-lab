@@ -550,15 +550,25 @@ pub fn render_optimization_panel(
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing = Vec2::new(5.0, 0.0);
                             ui.label(RichText::new("Merit:").size(10.5).color(tokens.text_muted));
+                            let init_str = if summary.initial_merit >= 1e5 {
+                                format!("{:.2e}", summary.initial_merit)
+                            } else {
+                                format!("{:.4}", summary.initial_merit)
+                            };
+                            let final_str = if summary.final_merit >= 1e5 {
+                                format!("{:.2e}", summary.final_merit)
+                            } else {
+                                format!("{:.4}", summary.final_merit)
+                            };
                             ui.label(
-                                RichText::new(format!("{:.4}", summary.initial_merit))
+                                RichText::new(init_str)
                                     .monospace()
                                     .size(11.0)
                                     .color(tokens.text_primary),
                             );
                             render_lucide_icon(ui, LucideIcon::ArrowRight, 11.0, tokens.text_muted);
                             ui.label(
-                                RichText::new(format!("{:.4}", summary.final_merit))
+                                RichText::new(final_str)
                                     .monospace()
                                     .strong()
                                     .size(11.0)

@@ -155,7 +155,12 @@ impl DlsOptimizer {
                 let denom = actual_delta_plus + actual_delta_minus;
                 for i in 0..m_dim {
                     let d_res = if denom.abs() > 1e-14 {
-                        (eval_plus.residuals[i] - eval_minus.residuals[i]) / denom
+                        let diff = eval_plus.residuals[i] - eval_minus.residuals[i];
+                        if diff.is_finite() {
+                            (diff / denom).clamp(-1e8, 1e8)
+                        } else {
+                            0.0
+                        }
                     } else {
                         0.0
                     };
@@ -172,7 +177,7 @@ impl DlsOptimizer {
 
             // Gradient norm termination check
             let grad_norm = g_vec.norm();
-            if grad_norm < self.config.gradient_tolerance {
+            if !grad_norm.is_finite() || grad_norm < self.config.gradient_tolerance {
                 converged = true;
                 break;
             }
@@ -189,36 +194,38 @@ impl DlsOptimizer {
 
                 let lu = a_mat.lu();
                 if let Some(dx) = lu.solve(&(-&g_vec)) {
-                    let mut candidate_params = params.clone();
-                    for i in 0..p_dim {
-                        candidate_params[i] += dx[i];
-                    }
-                    variables.clamp_values(&mut candidate_params);
+                    if dx.iter().all(|&v| v.is_finite()) {
+                        let mut candidate_params = params.clone();
+                        for i in 0..p_dim {
+                            candidate_params[i] += dx[i];
+                        }
+                        variables.clamp_values(&mut candidate_params);
 
-                    let mut test_presc = current_prescription.clone();
-                    if variables
-                        .apply_values(&mut test_presc, &candidate_params)
-                        .is_ok()
-                    {
-                        if let Ok(test_eval) = merit_function.evaluate(&test_presc, catalog) {
-                            if test_eval.total_merit < current_merit {
-                                // Successful reduction!
-                                let improvement = current_merit - test_eval.total_merit;
-                                let rel_improvement = improvement / current_merit.max(1e-12);
+                        let mut test_presc = current_prescription.clone();
+                        if variables
+                            .apply_values(&mut test_presc, &candidate_params)
+                            .is_ok()
+                        {
+                            if let Ok(test_eval) = merit_function.evaluate(&test_presc, catalog) {
+                                if test_eval.total_merit.is_finite() && test_eval.total_merit < current_merit {
+                                    // Successful reduction!
+                                    let improvement = current_merit - test_eval.total_merit;
+                                    let rel_improvement = improvement / current_merit.max(1e-12);
 
-                                current_merit = test_eval.total_merit;
-                                current_eval = test_eval;
-                                current_prescription = test_presc;
-                                params = candidate_params;
+                                    current_merit = test_eval.total_merit;
+                                    current_eval = test_eval;
+                                    current_prescription = test_presc;
+                                    params = candidate_params;
 
-                                // Reduce damping
-                                damping = (damping / 3.0).max(1e-7);
-                                step_accepted = true;
+                                    // Reduce damping
+                                    damping = (damping / 3.0).max(1e-7);
+                                    step_accepted = true;
 
-                                if rel_improvement < self.config.relative_merit_tolerance {
-                                    converged = true;
+                                    if rel_improvement < self.config.relative_merit_tolerance {
+                                        converged = true;
+                                    }
+                                    break;
                                 }
-                                break;
                             }
                         }
                     }

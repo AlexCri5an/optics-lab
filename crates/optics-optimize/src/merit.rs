@@ -73,8 +73,11 @@ impl MeritFunction {
         let mut operand_ids = Vec::with_capacity(self.operands.len());
 
         for op in &self.operands {
-            let val = op.evaluate(&resolved)?;
-            let diff = val - op.target;
+            let val = match op.evaluate(&resolved) {
+                Ok(v) if v.is_finite() => v,
+                _ => 100_000.0, // Finite penalty fallback for ray-trace / paraxial failure (Zemax standard)
+            };
+            let diff = (val - op.target).clamp(-1e6, 1e6);
             let res = op.weight.sqrt() * diff;
             let term = op.weight * diff * diff;
 
@@ -86,8 +89,14 @@ impl MeritFunction {
             operand_ids.push(op.id.clone());
         }
 
+        let finite_merit = if total_merit.is_finite() {
+            total_merit
+        } else {
+            1e12
+        };
+
         Ok(MeritEvaluation {
-            total_merit,
+            total_merit: finite_merit,
             residuals,
             values,
             targets,
