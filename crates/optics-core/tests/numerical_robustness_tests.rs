@@ -179,6 +179,9 @@ fn test_sweep_extreme_thicknesses() -> TestResult {
                     semi_diameter_mm: 10.0,
                     material_name: "GLASS".to_string(),
                     is_stop: true,
+                    asphere_coefficients: Vec::new(),
+                    coordinate_break: None,
+                    grin_profile: None,
                 },
                 OpticalSurface {
                     surface_index: 1,
@@ -188,6 +191,9 @@ fn test_sweep_extreme_thicknesses() -> TestResult {
                     semi_diameter_mm: 10.0,
                     material_name: "AIR".to_string(),
                     is_stop: false,
+                    asphere_coefficients: Vec::new(),
+                    coordinate_break: None,
+                    grin_profile: None,
                 },
             ],
         };

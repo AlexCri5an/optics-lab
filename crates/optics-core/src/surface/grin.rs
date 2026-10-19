@@ -34,6 +34,14 @@ pub enum GrinProfile {
         /// Quadratic gradient coefficient $n_2$ in $\text{mm}^{-2}$.
         n2: f64,
     },
+    /// Luneburg lens profile (radial gradient for optical beam steering and focusing):
+    /// $$n(r) = n_0 \sqrt{\max\left(1.0, 2 - \frac{r^2}{R^2}\right)}$$
+    Luneburg {
+        /// Base ambient/rim refractive index $n_0$ (typically 1.0).
+        n0: f64,
+        /// Lens radius $R$ in mm.
+        radius_mm: f64,
+    },
 }
 
 impl GrinProfile {
@@ -48,6 +56,12 @@ impl GrinProfile {
             Self::Axial { n0, n1, n2 } => {
                 let z = pos.z;
                 (n0 + n1 * z + n2 * z * z).max(1.0)
+            }
+            Self::Luneburg { n0, radius_mm } => {
+                let r2 = pos.x * pos.x + pos.y * pos.y;
+                let r_max2 = radius_mm * radius_mm;
+                let term = (2.0 - r2 / r_max2).max(1.0);
+                n0 * term.sqrt()
             }
         }
     }
@@ -64,6 +78,27 @@ impl GrinProfile {
                 let dn_dz = n1 + 2.0 * n2 * pos.z;
                 Vec3::new(0.0, 0.0, dn_dz)
             }
+            Self::Luneburg { n0, radius_mm } => {
+                let r2 = pos.x * pos.x + pos.y * pos.y;
+                let r_max2 = radius_mm * radius_mm;
+                let term = 2.0 - r2 / r_max2;
+                if term <= 1.0 {
+                    Vec3::zeros()
+                } else {
+                    let n = n0 * term.sqrt();
+                    let factor = -(n0 * n0) / (n * r_max2);
+                    Vec3::new(factor * pos.x, factor * pos.y, 0.0)
+                }
+            }
+        }
+    }
+}
+
+impl crate::geometry::RefractiveIndex for GrinProfile {
+    fn n(&self, _wavelength_nm: f64) -> f64 {
+        match self {
+            Self::Radial { n0, .. } | Self::Axial { n0, .. } => *n0,
+            Self::Luneburg { n0, .. } => *n0 * std::f64::consts::SQRT_2,
         }
     }
 }
@@ -84,20 +119,22 @@ impl RkState {
     }
 }
 
-/// Traces a ray through a GRIN slab from initial position to target exit plane $z = z_{\text{exit}}$.
+/// Traces a ray through a GRIN slab from initial position to target exit plane $z = z_{\text{exit}}$,
+/// returning both the exit ray and sampled intermediate 3D positions along the curved trajectory.
 ///
 /// # Errors
 /// Returns [`OpticsError::NumericalSingularity`] if step underflows or ray loops back.
-pub fn trace_grin_rk4(
+pub fn trace_grin_rk4_path(
     ray: &Ray,
     profile: &GrinProfile,
     z_exit: f64,
     initial_step: f64,
     max_steps: usize,
-) -> Result<Ray, OpticsError> {
+) -> Result<(Ray, Vec<Vec3>), OpticsError> {
     let mut current_pos = ray.origin;
     let n_init = profile.index_at(current_pos);
     let mut current_momentum = ray.direction * n_init;
+    let mut trajectory = vec![current_pos];
 
     let target_z = z_exit;
     let forward = target_z >= current_pos.z;
@@ -112,7 +149,8 @@ pub fn trace_grin_rk4(
         if (forward && current_pos.z >= target_z) || (!forward && current_pos.z <= target_z) {
             let n_exit = profile.index_at(current_pos);
             let final_dir = (current_momentum / n_exit).normalize();
-            return Ray::new(current_pos, final_dir, ray.wavelength_nm, ray.energy);
+            let exit_ray = Ray::new(current_pos, final_dir, ray.wavelength_nm, ray.energy)?;
+            return Ok((exit_ray, trajectory));
         }
 
         // Clip step if close to exit plane
@@ -159,11 +197,27 @@ pub fn trace_grin_rk4(
         if p_norm > 1e-15 {
             current_momentum = (current_momentum / p_norm) * n_curr;
         }
+
+        trajectory.push(current_pos);
     }
 
     Err(OpticsError::NumericalSingularity(
         "GRIN RK4 tracer exceeded maximum integration steps".to_string(),
     ))
+}
+
+/// Traces a ray through a GRIN slab from initial position to target exit plane $z = z_{\text{exit}}$.
+///
+/// # Errors
+/// Returns [`OpticsError::NumericalSingularity`] if step underflows or ray loops back.
+pub fn trace_grin_rk4(
+    ray: &Ray,
+    profile: &GrinProfile,
+    z_exit: f64,
+    initial_step: f64,
+    max_steps: usize,
+) -> Result<Ray, OpticsError> {
+    trace_grin_rk4_path(ray, profile, z_exit, initial_step, max_steps).map(|(r, _)| r)
 }
 
 #[cfg(test)]
@@ -210,6 +264,54 @@ mod tests {
         let exit_ray = trace_grin_rk4(&ray, &profile, 5.0, 0.2, 200)?;
         assert!((exit_ray.origin.x).abs() < 1e-10);
         assert!((exit_ray.direction.z - 1.0).abs() < 1e-10);
+        Ok(())
+    }
+
+    #[test]
+    fn test_radial_grin_sinusoidal_quarter_pitch() -> TestResult {
+        // Analytical Selfoc quarter pitch: z_f = pi / (2 * sqrt(A))
+        // For A = 0.01 mm^-2: sqrt(A) = 0.1, z_f = pi / 0.2 = 15.707963 mm
+        let profile = GrinProfile::Radial { n0: 1.5, a: 0.01 };
+        let z_f = std::f64::consts::PI / (2.0 * 0.1);
+
+        for &h in &[1.0, 2.0, 3.0] {
+            let ray = Ray::new(
+                Vec3::new(h, 0.0, 0.0),
+                Vec3::new(0.0, 0.0, 1.0),
+                587.56,
+                1.0,
+            )?;
+            let (exit_ray, pts) = trace_grin_rk4_path(&ray, &profile, z_f, 0.05, 1000)?;
+            assert!(pts.len() > 10, "Curved path must record intermediate points");
+            // At quarter pitch, rays focus to near axis (accounting for third-order spherical aberration)
+            assert!(
+                exit_ray.origin.x.abs() < 0.15,
+                "Radial GRIN at height {h} must focus near axis at quarter pitch z={z_f}: got {}",
+                exit_ray.origin.x
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_luneburg_focusing() -> TestResult {
+        // Luneburg lens with R = 10.0 mm
+        let profile = GrinProfile::Luneburg {
+            n0: 1.0,
+            radius_mm: 10.0,
+        };
+
+        let ray = Ray::new(
+            Vec3::new(3.0, 0.0, 0.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            587.56,
+            1.0,
+        )?;
+
+        let exit_ray = trace_grin_rk4(&ray, &profile, 8.0, 0.05, 500)?;
+        // Luneburg lens must strongly bend the parallel ray toward the axis
+        assert!(exit_ray.origin.x < 3.0);
+        assert!(exit_ray.direction.x < -0.1);
         Ok(())
     }
 }

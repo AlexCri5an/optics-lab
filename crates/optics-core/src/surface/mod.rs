@@ -12,7 +12,7 @@ pub mod polynomial;
 pub use aperture::{Aperture, ApertureShape};
 pub use asphere::{EvenAsphere, OddAsphere};
 pub use biconic::{BiconicSurface, ToroidalSurface};
-pub use coordinate_break::CoordinateBreak;
+pub use coordinate_break::{CoordinateBreak, SurfaceTransform};
 pub use diffractive::DiffractivePhaseSurface;
 pub use forbes::{ForbesQbfsSurface, ForbesQconSurface};
 pub use grin::{GrinProfile, trace_grin_rk4};

@@ -42,7 +42,8 @@ impl Default for CoordinateBreak {
 
 impl CoordinateBreak {
     /// Creates a 3D Euler rotation matrix $\mathbf{R} = \mathbf{R}_z \mathbf{R}_y \mathbf{R}_x$.
-    fn rotation_matrix(&self) -> nalgebra::Matrix3<f64> {
+    #[must_use]
+    pub fn rotation_matrix(&self) -> nalgebra::Matrix3<f64> {
         let to_rad = std::f64::consts::PI / 180.0;
         let rx = self.tilt_x_deg * to_rad;
         let ry = self.tilt_y_deg * to_rad;
@@ -87,13 +88,19 @@ impl CoordinateBreak {
         rot_z * rot_y * rot_x
     }
 
+    /// Evaluates the 3D translation displacement vector (dx, dy, dz) in millimeters.
+    #[must_use]
+    pub fn translation(&self) -> Vec3 {
+        Vec3::new(self.decenter_x_mm, self.decenter_y_mm, self.decenter_z_mm)
+    }
+
     /// Transforms a ray into the new local coordinate system.
     ///
     /// # Errors
     /// Returns [`OpticsError::NumericalSingularity`] if transformed direction has zero norm.
     pub fn transform_ray_forward(&self, ray: &Ray) -> Result<Ray, OpticsError> {
         let r_mat = self.rotation_matrix();
-        let decenter = Vec3::new(self.decenter_x_mm, self.decenter_y_mm, self.decenter_z_mm);
+        let decenter = self.translation();
 
         let (new_origin, new_dir) = if self.tilt_first {
             // Rotation then translation: origin' = R * origin - decenter
@@ -115,7 +122,7 @@ impl CoordinateBreak {
     /// Returns [`OpticsError::NumericalSingularity`] if transformed direction has zero norm.
     pub fn transform_ray_inverse(&self, ray: &Ray) -> Result<Ray, OpticsError> {
         let r_mat_t = self.rotation_matrix().transpose();
-        let decenter = Vec3::new(self.decenter_x_mm, self.decenter_y_mm, self.decenter_z_mm);
+        let decenter = self.translation();
 
         let (parent_origin, parent_dir) = if self.tilt_first {
             let trans_o = ray.origin + decenter;
@@ -126,6 +133,70 @@ impl CoordinateBreak {
         };
 
         Ray::new(parent_origin, parent_dir, ray.wavelength_nm, ray.energy)
+    }
+}
+
+/// Global 3D rigid transform (origin vertex position and orientation matrix) of an optical surface.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct SurfaceTransform {
+    /// 3D vertex position in global coordinates (mm).
+    pub origin: Vec3,
+    /// 3D orthonormal orientation rotation matrix transforming local vectors to global coordinates.
+    pub rotation: nalgebra::Matrix3<f64>,
+}
+
+impl Default for SurfaceTransform {
+    fn default() -> Self {
+        Self {
+            origin: Vec3::zeros(),
+            rotation: nalgebra::Matrix3::identity(),
+        }
+    }
+}
+
+impl SurfaceTransform {
+    /// Creates a transform from vertex position and rotation matrix.
+    #[must_use]
+    pub fn new(origin: Vec3, rotation: nalgebra::Matrix3<f64>) -> Self {
+        Self { origin, rotation }
+    }
+
+    /// Transforms a global point into local surface coordinates:
+    /// $$\mathbf{P}_{\text{local}} = \mathbf{R}^T (\mathbf{P}_{\text{global}} - \mathbf{O})$$
+    #[must_use]
+    pub fn to_local_point(&self, p_global: Vec3) -> Vec3 {
+        self.rotation.transpose() * (p_global - self.origin)
+    }
+
+    /// Transforms a local point into global coordinates:
+    /// $$\mathbf{P}_{\text{global}} = \mathbf{O} + \mathbf{R} \mathbf{P}_{\text{local}}$$
+    #[must_use]
+    pub fn to_global_point(&self, p_local: Vec3) -> Vec3 {
+        self.origin + self.rotation * p_local
+    }
+
+    /// Transforms a global direction vector into local surface coordinates:
+    /// $$\mathbf{D}_{\text{local}} = \mathbf{R}^T \mathbf{D}_{\text{global}}$$
+    #[must_use]
+    pub fn to_local_dir(&self, d_global: Vec3) -> Vec3 {
+        self.rotation.transpose() * d_global
+    }
+
+    /// Transforms a local direction vector into global coordinates:
+    /// $$\mathbf{D}_{\text{global}} = \mathbf{R} \mathbf{D}_{\text{local}}$$
+    #[must_use]
+    pub fn to_global_dir(&self, d_local: Vec3) -> Vec3 {
+        self.rotation * d_local
+    }
+
+    /// Transforms a global ray into the local surface coordinate frame.
+    ///
+    /// # Errors
+    /// Returns [`OpticsError`] if normalized direction has zero or invalid norm.
+    pub fn to_local_ray(&self, ray: &Ray) -> Result<Ray, OpticsError> {
+        let local_o = self.to_local_point(ray.origin);
+        let local_d = self.to_local_dir(ray.direction);
+        Ray::new(local_o, local_d, ray.wavelength_nm, ray.energy)
     }
 }
 

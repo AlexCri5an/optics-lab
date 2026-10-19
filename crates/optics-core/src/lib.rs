@@ -69,8 +69,8 @@ pub use project::{CameraConfig, OpticsProject, PROJECT_SCHEMA_VERSION, RenderCon
 pub use snell::{reflect, snell_refract};
 pub use surface::{
     Aperture, ApertureShape, BiconicSurface, CoordinateBreak, DiffractivePhaseSurface, EvenAsphere,
-    ForbesQbfsSurface, ForbesQconSurface, GrinProfile, OddAsphere, SurfaceProfile, ToroidalSurface,
-    XyPolynomialSurface, XyTerm, ZernikeSagSurface, trace_grin_rk4,
+    ForbesQbfsSurface, ForbesQconSurface, GrinProfile, OddAsphere, SurfaceProfile, SurfaceTransform,
+    ToroidalSurface, XyPolynomialSurface, XyTerm, ZernikeSagSurface, trace_grin_rk4,
 };
 pub use tessellate::{
     prescription_to_trimesh, prescription_to_trimesh_with_materials, tessellate_conic_surface,

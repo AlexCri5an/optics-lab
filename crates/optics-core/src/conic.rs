@@ -283,12 +283,13 @@ pub fn intersect_conic(
                 "Ray is parallel to planar surface".to_string(),
             ));
         }
-        let t = -pz / dz;
-        if t <= 1e-9 {
+        let t_raw = -pz / dz;
+        if t_raw < -1e-7 {
             return Err(OpticsError::RayMissedSurface(
                 "Plane intersection lies behind ray origin".to_string(),
             ));
         }
+        let t = t_raw.max(0.0);
 
         let hit_pt = ray.at(t);
         let r = (hit_pt.x * hit_pt.x + hit_pt.y * hit_pt.y).sqrt();
@@ -332,14 +333,14 @@ pub fn intersect_conic(
     let mut candidate_t: Vec<f64> = Vec::with_capacity(2);
     if q.abs() > 1e-30 {
         let t1 = c_coeff / q;
-        if t1 > 1e-9 {
-            candidate_t.push(t1);
+        if t1 > -1e-7 {
+            candidate_t.push(t1.max(0.0));
         }
     }
     if a.abs() > 1e-30 && q.abs() > 1e-30 {
         let t2 = q / a;
-        if t2 > 1e-9 {
-            candidate_t.push(t2);
+        if t2 > -1e-7 {
+            candidate_t.push(t2.max(0.0));
         }
     }
 

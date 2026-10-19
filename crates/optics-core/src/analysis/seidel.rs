@@ -284,6 +284,10 @@ mod tests {
                 ResolvedSurface {
                     surface_index: 0,
                     conic: ConicSurface::sphere(r1, 15.0)?.with_vertex_z(0.0),
+                    asphere: None,
+                    coordinate_break: None,
+                    global_transform: None,
+                    grin_profile: None,
                     thickness_mm: d,
                     material: Arc::new(ConstantIndex(n)),
                     material_name: "MockGlass".to_string(),
@@ -292,6 +296,10 @@ mod tests {
                 ResolvedSurface {
                     surface_index: 1,
                     conic: ConicSurface::plane(15.0)?.with_vertex_z(d),
+                    asphere: None,
+                    coordinate_break: None,
+                    global_transform: None,
+                    grin_profile: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),

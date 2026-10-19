@@ -333,6 +333,9 @@ fn test_prop_lagrange_invariant_conservation() -> TestResult {
                     semi_diameter_mm: 12.0,
                     material_name: "GLASS".to_string(),
                     is_stop: false,
+                    asphere_coefficients: Vec::new(),
+                    coordinate_break: None,
+                    grin_profile: None,
                 },
                 OpticalSurface {
                     surface_index: 1,
@@ -342,6 +345,9 @@ fn test_prop_lagrange_invariant_conservation() -> TestResult {
                     semi_diameter_mm: 12.0,
                     material_name: "AIR".to_string(),
                     is_stop: true,
+                    asphere_coefficients: Vec::new(),
+                    coordinate_break: None,
+                    grin_profile: None,
                 },
             ],
         };
@@ -421,6 +427,9 @@ fn test_prop_project_workspace_serialization_roundtrip() -> TestResult {
                     "AIR".to_string()
                 },
                 is_stop: s == num_surfaces / 2,
+                asphere_coefficients: Vec::new(),
+                coordinate_break: None,
+                grin_profile: None,
             });
         }
 
