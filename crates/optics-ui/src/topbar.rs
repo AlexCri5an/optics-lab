@@ -242,7 +242,7 @@ pub fn render_topbar(
                 });
 
                 ui.menu_button("Optimize", |ui| {
-                    if ui.button("DLS Automatic Optimization Hub...").clicked() {
+                    if ui.button("DLS Automatic Optimization Hub").clicked() {
                         triggered_action = Some(TopBarAction::OpenOptimization);
                         ui.close();
                     }

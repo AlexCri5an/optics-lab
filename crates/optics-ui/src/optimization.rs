@@ -7,8 +7,8 @@
 //! - Non-destructive experimentation with instantaneous "Revert" functionality.
 
 use egui::{
-    Align, Button, Color32, CornerRadius, DragValue, Frame, Layout, Margin, RichText,
-    ScrollArea, Slider, Ui, Vec2,
+    Button, Color32, CornerRadius, DragValue, Frame, Image, Margin, RichText, ScrollArea, Stroke,
+    Ui, Vec2,
 };
 use optics_core::OpticalPrescription;
 use optics_core::prescription::calculate_paraxial_properties;
@@ -17,7 +17,7 @@ use optics_optimize::{
     DlsConfig, DlsOptimizer, MeritFunction, MeritOperand, OperandType, VariableSet, VariableType,
 };
 
-use crate::icons::{LucideIcon, lucide_text_button, render_lucide_icon};
+use crate::icons::{LucideIcon, render_lucide_icon};
 use crate::lens_editor::LensEditorState;
 use crate::theme::OpticsTokens;
 
@@ -237,6 +237,81 @@ pub fn execute_dls_cycle(
     }
 }
 
+/// Renders a crisp, technical square checkbox with an exact 1px academic border and label.
+///
+/// Distinct from rounded consumer checkboxes:
+/// - Unchecked: clear 14x14px square with visible academic border and background.
+/// - Checked: filled with accent color and crisp checkmark vector lines.
+/// - Fully clickable across both the square box and the label text.
+pub fn academic_square_checkbox_with_label(
+    ui: &mut Ui,
+    checked: &mut bool,
+    label: &str,
+    tokens: &OpticsTokens,
+) -> egui::Response {
+    let size = Vec2::splat(14.0);
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing = Vec2::new(7.0, 0.0);
+        let (rect, mut box_resp) = ui.allocate_exact_size(size, egui::Sense::click());
+        let label_resp = ui.add(
+            egui::Label::new(
+                RichText::new(label)
+                    .size(11.0)
+                    .strong()
+                    .color(if *checked { tokens.text_primary } else { tokens.text_muted }),
+            )
+            .sense(egui::Sense::click()),
+        );
+
+        let clicked = box_resp.clicked() || label_resp.clicked();
+        let hovered = box_resp.hovered() || label_resp.hovered();
+
+        if clicked {
+            *checked = !*checked;
+            box_resp.mark_changed();
+        }
+
+        if ui.is_rect_visible(rect) {
+            let painter = ui.painter();
+            let border_color = if hovered {
+                tokens.text_primary
+            } else if *checked {
+                tokens.accent
+            } else {
+                tokens.border_hovered.color
+            };
+
+            let bg_color = if *checked {
+                tokens.accent
+            } else if hovered {
+                tokens.bg_control_active
+            } else {
+                tokens.bg_canvas
+            };
+
+            painter.rect_filled(rect, CornerRadius::ZERO, bg_color);
+            painter.rect_stroke(
+                rect,
+                CornerRadius::ZERO,
+                Stroke::new(1.0, border_color),
+                egui::StrokeKind::Inside,
+            );
+
+            if *checked {
+                let p1 = egui::pos2(rect.left() + 2.5, rect.top() + 7.0);
+                let p2 = egui::pos2(rect.left() + 5.5, rect.top() + 10.5);
+                let p3 = egui::pos2(rect.left() + 11.5, rect.top() + 3.5);
+
+                painter.line_segment([p1, p2], Stroke::new(1.8, Color32::WHITE));
+                painter.line_segment([p2, p3], Stroke::new(1.8, Color32::WHITE));
+            }
+        }
+
+        box_resp.union(label_resp)
+    })
+    .inner
+}
+
 /// Renders the complete academic Optimization Panel docked cleanly inside the Left Panel.
 ///
 /// Returns `true` if the optical prescription was modified by optimization.
@@ -257,7 +332,7 @@ pub fn render_optimization_panel(
             ui.spacing_mut().item_spacing = Vec2::new(0.0, 8.0);
 
             // -------------------------------------------------------------------
-            // 1. Header: Active Variables Badge & Status
+            // 1. Header: Active Variables Badge & Status (No icon, clean typography)
             // -------------------------------------------------------------------
             let var_count = editor_state.total_variable_count();
             let var_frame = Frame::NONE
@@ -270,7 +345,6 @@ pub fn render_optimization_panel(
                 ui.set_width(ui.available_width());
                 ui.vertical(|ui| {
                     ui.horizontal(|ui| {
-                        render_lucide_icon(ui, LucideIcon::SlidersHorizontal, 13.0, tokens.accent);
                         ui.label(
                             RichText::new("OPTIMIZATION VARIABLES")
                                 .monospace()
@@ -279,8 +353,8 @@ pub fn render_optimization_panel(
                                 .color(tokens.text_primary),
                         );
 
-                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                            let badge_color = if var_count > 0 { tokens.accent } else { tokens.warning };
+                        let badge_color = if var_count > 0 { tokens.accent } else { tokens.warning };
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             ui.label(
                                 RichText::new(format!("{} Active", var_count))
                                     .monospace()
@@ -325,7 +399,7 @@ pub fn render_optimization_panel(
             });
 
             // -------------------------------------------------------------------
-            // 2. Merit Function Operands Card
+            // 2. Merit Function Operands Card (Aligned, Square Checkboxes)
             // -------------------------------------------------------------------
             let operands_frame = Frame::NONE
                 .fill(tokens.bg_control)
@@ -343,58 +417,61 @@ pub fn render_optimization_panel(
                             .size(10.5)
                             .color(tokens.text_primary),
                     );
-                    ui.add_space(6.0);
+                    ui.add_space(8.0);
 
                     // Operand 1: Minimize RMS Spot Size
+                    academic_square_checkbox_with_label(
+                        ui,
+                        &mut opt_state.min_rms_spot,
+                        "Minimize RMS Spot Size",
+                        tokens,
+                    );
+                    ui.add_space(2.0);
                     ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
-                        ui.checkbox(&mut opt_state.min_rms_spot, "");
-                        ui.label(
-                            RichText::new("Minimize RMS Spot Size")
-                                .size(11.0)
-                                .color(tokens.text_primary),
+                        ui.add_space(21.0);
+                        ui.label(RichText::new("Weight:").size(10.5).color(tokens.text_muted));
+                        ui.add_enabled(
+                            opt_state.min_rms_spot,
+                            DragValue::new(&mut opt_state.min_rms_weight)
+                                .speed(0.1)
+                                .range(0.1..=1000.0),
                         );
-                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                            ui.add(
-                                DragValue::new(&mut opt_state.min_rms_weight)
-                                    .speed(0.1)
-                                    .range(0.1..=1000.0)
-                                    .prefix("Weight: "),
-                            );
-                        });
                     });
 
-                    ui.add_space(4.0);
+                    ui.add_space(8.0);
 
                     // Operand 2: Target Effective Focal Length
+                    academic_square_checkbox_with_label(
+                        ui,
+                        &mut opt_state.target_efl_enabled,
+                        "Hold Target EFL",
+                        tokens,
+                    );
+                    ui.add_space(2.0);
                     ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
-                        ui.checkbox(&mut opt_state.target_efl_enabled, "");
-                        ui.label(
-                            RichText::new("Hold Target EFL:")
-                                .size(11.0)
-                                .color(tokens.text_primary),
-                        );
-                        ui.add(
+                        ui.add_space(21.0);
+                        ui.label(RichText::new("Target:").size(10.5).color(tokens.text_muted));
+                        ui.add_enabled(
+                            opt_state.target_efl_enabled,
                             DragValue::new(&mut opt_state.target_efl_value)
                                 .speed(0.5)
                                 .range(0.5..=5000.0)
                                 .suffix(" mm"),
                         );
-                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                            ui.add(
-                                DragValue::new(&mut opt_state.target_efl_weight)
-                                    .speed(1.0)
-                                    .range(0.1..=5000.0)
-                                    .prefix("Weight: "),
-                            );
-                        });
+                        ui.add_space(10.0);
+                        ui.label(RichText::new("Weight:").size(10.5).color(tokens.text_muted));
+                        ui.add_enabled(
+                            opt_state.target_efl_enabled,
+                            DragValue::new(&mut opt_state.target_efl_weight)
+                                .speed(1.0)
+                                .range(0.1..=5000.0),
+                        );
                     });
                 });
             });
 
             // -------------------------------------------------------------------
-            // 3. Algorithm Controls (Iterations & Damping)
+            // 3. Algorithm Controls (Direct Numeric Inputs, No Slider)
             // -------------------------------------------------------------------
             let algo_frame = Frame::NONE
                 .fill(tokens.bg_control)
@@ -412,15 +489,20 @@ pub fn render_optimization_panel(
                             .size(10.5)
                             .color(tokens.text_primary),
                     );
-                    ui.add_space(6.0);
+                    ui.add_space(8.0);
 
-                    // Iterations Slider
+                    // Cycle Iterations DragValue (Clean numeric input, no slider)
                     ui.horizontal(|ui| {
                         ui.label(RichText::new("Cycle Iterations:").size(11.0).color(tokens.text_muted));
-                        ui.add(Slider::new(&mut opt_state.iterations, 1..=50).text("cycles"));
+                        ui.add(
+                            DragValue::new(&mut opt_state.iterations)
+                                .range(1..=100)
+                                .speed(1)
+                                .suffix(" cycles"),
+                        );
                     });
 
-                    ui.add_space(3.0);
+                    ui.add_space(4.0);
 
                     // Damping factor lambda
                     ui.horizontal(|ui| {
@@ -435,7 +517,7 @@ pub fn render_optimization_panel(
             });
 
             // -------------------------------------------------------------------
-            // 4. Convergence & Results Card
+            // 4. Convergence & Results Card (Lucide Vector Icons, No ASCII/Greek)
             // -------------------------------------------------------------------
             if let Some(ref summary) = opt_state.last_summary {
                 let res_frame = Frame::NONE
@@ -451,7 +533,7 @@ pub fn render_optimization_panel(
                             render_lucide_icon(ui, LucideIcon::Check, 13.0, tokens.accent);
                             ui.label(
                                 RichText::new(format!(
-                                    "Completed {} cycles | {}",
+                                    "Completed {} cycles ({})",
                                     summary.iterations_run,
                                     if summary.converged { "Converged" } else { "Step limit reached" }
                                 ))
@@ -462,41 +544,61 @@ pub fn render_optimization_panel(
                             );
                         });
 
-                        ui.add_space(2.0);
+                        ui.add_space(4.0);
 
+                        // Merit progression row with LucideIcon::ArrowRight
                         ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing = Vec2::new(5.0, 0.0);
+                            ui.label(RichText::new("Merit:").size(10.5).color(tokens.text_muted));
                             ui.label(
-                                RichText::new(format!(
-                                    "Merit: {:.4} → {:.4}",
-                                    summary.initial_merit, summary.final_merit
-                                ))
-                                .monospace()
-                                .size(11.0)
-                                .color(tokens.text_primary),
+                                RichText::new(format!("{:.4}", summary.initial_merit))
+                                    .monospace()
+                                    .size(11.0)
+                                    .color(tokens.text_primary),
                             );
+                            render_lucide_icon(ui, LucideIcon::ArrowRight, 11.0, tokens.text_muted);
+                            ui.label(
+                                RichText::new(format!("{:.4}", summary.final_merit))
+                                    .monospace()
+                                    .strong()
+                                    .size(11.0)
+                                    .color(tokens.text_primary),
+                            );
+                        });
 
-                            let imp_color = if summary.percent_improvement > 0.0 {
-                                tokens.accent
+                        ui.add_space(3.0);
+
+                        // Improvement row with LucideIcon::TrendingDown / LucideIcon::TrendingUp
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing = Vec2::new(5.0, 0.0);
+                            let (icon, color, text) = if summary.percent_improvement >= 0.0 {
+                                (
+                                    LucideIcon::TrendingDown,
+                                    tokens.accent,
+                                    format!("Reduction: -{:.1}%", summary.percent_improvement),
+                                )
                             } else {
-                                tokens.warning
+                                (
+                                    LucideIcon::TrendingUp,
+                                    tokens.warning,
+                                    format!("Increased: +{:.1}%", -summary.percent_improvement),
+                                )
                             };
-
-                            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                                ui.label(
-                                    RichText::new(format!("Δ {:.1}%", summary.percent_improvement))
-                                        .monospace()
-                                        .strong()
-                                        .size(11.0)
-                                        .color(imp_color),
-                                );
-                            });
+                            render_lucide_icon(ui, icon, 12.0, color);
+                            ui.label(
+                                RichText::new(text)
+                                    .monospace()
+                                    .strong()
+                                    .size(10.5)
+                                    .color(color),
+                            );
                         });
                     });
                 });
             } else if let Some(ref err) = opt_state.status_message {
                 let err_frame = Frame::NONE
                     .fill(tokens.bg_control)
-                    .stroke(egui::Stroke::new(1.0, tokens.warning))
+                    .stroke(Stroke::new(1.0, tokens.warning))
                     .corner_radius(CornerRadius::ZERO)
                     .inner_margin(Margin::same(8));
 
@@ -510,75 +612,123 @@ pub fn render_optimization_panel(
             }
 
             // -------------------------------------------------------------------
-            // 5. Action Buttons (Run DLS, Step, Revert)
+            // 5. Action Buttons (Run DLS, Step, Revert) - Crisp & Legible When Disabled
             // -------------------------------------------------------------------
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
                 let can_run = var_count > 0;
 
                 // Run DLS Button (Primary Action)
+                let (run_bg, run_fg, run_stroke) = if can_run {
+                    (tokens.accent, Color32::WHITE, tokens.border)
+                } else {
+                    (tokens.bg_control, tokens.text_muted, tokens.border)
+                };
+
                 let run_btn = Button::new(
                     RichText::new(format!("Run DLS ({})", opt_state.iterations))
                         .monospace()
                         .strong()
                         .size(11.0)
-                        .color(Color32::WHITE),
+                        .color(run_fg),
                 )
-                .fill(if can_run { tokens.accent } else { tokens.bg_control })
-                .stroke(tokens.border)
+                .fill(run_bg)
+                .stroke(run_stroke)
                 .corner_radius(CornerRadius::ZERO);
 
-                if ui.add_enabled(can_run, run_btn).on_hover_text("Execute full DLS optimization cycles").clicked() {
-                    if opt_state.original_prescription.is_none() {
-                        opt_state.original_prescription = Some(prescription.clone());
-                    }
-                    match execute_dls_cycle(opt_state.iterations, prescription, editor_state, opt_state, catalog) {
-                        Ok(summary) => {
-                            opt_state.last_summary = Some(summary);
-                            opt_state.status_message = None;
-                            modified = true;
+                let run_resp = ui.add(run_btn);
+                if can_run {
+                    if run_resp.on_hover_text("Execute full DLS optimization cycles").clicked() {
+                        if opt_state.original_prescription.is_none() {
+                            opt_state.original_prescription = Some(prescription.clone());
                         }
-                        Err(e) => {
-                            opt_state.status_message = Some(e);
+                        match execute_dls_cycle(opt_state.iterations, prescription, editor_state, opt_state, catalog) {
+                            Ok(summary) => {
+                                opt_state.last_summary = Some(summary);
+                                opt_state.status_message = None;
+                                modified = true;
+                            }
+                            Err(e) => {
+                                opt_state.status_message = Some(e);
+                            }
                         }
                     }
+                } else {
+                    run_resp.on_hover_text("Cannot run: select variables with [V] in LENS DATA tab first");
                 }
 
                 // Step 1 Cycle
+                let (step_bg, step_fg) = if can_run {
+                    (tokens.bg_control, tokens.text_primary)
+                } else {
+                    (tokens.bg_control, tokens.text_muted)
+                };
+
                 let step_btn = Button::new(
                     RichText::new("Step (1)")
                         .monospace()
                         .strong()
                         .size(11.0)
-                        .color(if can_run { tokens.text_primary } else { tokens.text_muted }),
+                        .color(step_fg),
+                )
+                .fill(step_bg)
+                .stroke(tokens.border)
+                .corner_radius(CornerRadius::ZERO);
+
+                let step_resp = ui.add(step_btn);
+                if can_run {
+                    if step_resp.on_hover_text("Execute a single DLS step for incremental analysis").clicked() {
+                        if opt_state.original_prescription.is_none() {
+                            opt_state.original_prescription = Some(prescription.clone());
+                        }
+                        match execute_dls_cycle(1, prescription, editor_state, opt_state, catalog) {
+                            Ok(summary) => {
+                                opt_state.last_summary = Some(summary);
+                                opt_state.status_message = None;
+                                modified = true;
+                            }
+                            Err(e) => {
+                                opt_state.status_message = Some(e);
+                            }
+                        }
+                    }
+                } else {
+                    step_resp.on_hover_text("Cannot step: select variables with [V] in LENS DATA tab first");
+                }
+
+                // Revert button
+                let can_revert = opt_state.original_prescription.is_some() && opt_state.last_summary.is_some();
+                let revert_icon_color = if can_revert {
+                    tokens.accent
+                } else {
+                    tokens.text_muted
+                };
+                let revert_text_color = if can_revert {
+                    tokens.text_primary
+                } else {
+                    tokens.text_muted
+                };
+
+                let revert_img = Image::from_bytes(
+                    LucideIcon::RotateCcw.uri(),
+                    LucideIcon::RotateCcw.svg_content().as_bytes(),
+                )
+                .tint(revert_icon_color)
+                .fit_to_exact_size(Vec2::splat(13.0));
+
+                let revert_btn = Button::image_and_text(
+                    revert_img,
+                    RichText::new("Revert")
+                        .size(11.0)
+                        .color(revert_text_color),
                 )
                 .fill(tokens.bg_control)
                 .stroke(tokens.border)
                 .corner_radius(CornerRadius::ZERO);
 
-                if ui.add_enabled(can_run, step_btn).on_hover_text("Execute a single DLS step for incremental analysis").clicked() {
-                    if opt_state.original_prescription.is_none() {
-                        opt_state.original_prescription = Some(prescription.clone());
-                    }
-                    match execute_dls_cycle(1, prescription, editor_state, opt_state, catalog) {
-                        Ok(summary) => {
-                            opt_state.last_summary = Some(summary);
-                            opt_state.status_message = None;
-                            modified = true;
-                        }
-                        Err(e) => {
-                            opt_state.status_message = Some(e);
-                        }
-                    }
-                }
-
-                // Revert button
-                let can_revert = opt_state.original_prescription.is_some() && opt_state.last_summary.is_some();
-                ui.add_enabled_ui(can_revert, |ui| {
-                    if lucide_text_button(ui, LucideIcon::RotateCcw, "Revert", tokens)
-                        .on_hover_text("Restore baseline system prior to optimization")
-                        .clicked()
-                    {
+                let revert_resp = ui.add(revert_btn);
+                if can_revert {
+                    if revert_resp.on_hover_text("Restore baseline system prior to optimization").clicked() {
                         if let Some(ref orig) = opt_state.original_prescription {
                             *prescription = orig.clone();
                             opt_state.last_summary = None;
@@ -586,7 +736,9 @@ pub fn render_optimization_panel(
                             modified = true;
                         }
                     }
-                });
+                } else {
+                    revert_resp.on_hover_text("No optimization changes to revert");
+                }
             });
         });
 

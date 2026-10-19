@@ -59,6 +59,12 @@ pub enum LucideIcon {
     Minus,
     /// Wand2 / Automatic optimization wizard.
     Wand2,
+    /// Arrow pointing right (e.g. A -> B progression).
+    ArrowRight,
+    /// Trending down indicator (aberration reduction).
+    TrendingDown,
+    /// Trending up indicator.
+    TrendingUp,
 }
 
 impl LucideIcon {
@@ -135,6 +141,15 @@ impl LucideIcon {
             Self::Wand2 => {
                 r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72Z"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/></svg>"#
             }
+            Self::ArrowRight => {
+                r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>"#
+            }
+            Self::TrendingDown => {
+                r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/></svg>"#
+            }
+            Self::TrendingUp => {
+                r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>"#
+            }
         }
     }
 
@@ -165,6 +180,9 @@ impl LucideIcon {
             Self::Infinity => "bytes://lucide/infinity.svg",
             Self::Minus => "bytes://lucide/minus.svg",
             Self::Wand2 => "bytes://lucide/wand-2.svg",
+            Self::ArrowRight => "bytes://lucide/arrow-right.svg",
+            Self::TrendingDown => "bytes://lucide/trending-down.svg",
+            Self::TrendingUp => "bytes://lucide/trending-up.svg",
         }
     }
 }
@@ -294,6 +312,9 @@ mod tests {
             LucideIcon::Infinity,
             LucideIcon::Minus,
             LucideIcon::Wand2,
+            LucideIcon::ArrowRight,
+            LucideIcon::TrendingDown,
+            LucideIcon::TrendingUp,
         ];
 
         for icon in icons {
