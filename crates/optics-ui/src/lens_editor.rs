@@ -14,6 +14,7 @@ use egui::{
     ScrollArea, TextEdit, Ui, Vec2,
 };
 use optics_core::{OpticalPrescription, OpticalSurface};
+use optics_glass::{GlassCatalog, GlassCatalogDb, GlassMaterial};
 
 use crate::icons::{LucideIcon, lucide_small_icon_button, lucide_text_button};
 use crate::theme::OpticsTokens;
@@ -61,6 +62,8 @@ pub struct LensEditorState {
     pub new_field_buf: String,
     /// New wavelength input buffer (string for typing, e.g. "532.0").
     pub new_wav_buf: String,
+    /// Filter query text for glass catalog search.
+    pub glass_search_query: String,
     /// Surface indices whose radius of curvature is marked as variable for optimization.
     pub variable_radii: BTreeSet<usize>,
     /// Surface indices whose axial thickness is marked as variable for optimization.
@@ -75,6 +78,7 @@ impl Default for LensEditorState {
             system_explorer_open: false,
             new_field_buf: "20.0".to_string(),
             new_wav_buf: "532.0".to_string(),
+            glass_search_query: String::new(),
             variable_radii: BTreeSet::new(),
             variable_thicknesses: BTreeSet::new(),
         }
@@ -102,6 +106,7 @@ pub fn render_lens_editor(
     ui: &mut Ui,
     prescription: &mut OpticalPrescription,
     state: &mut LensEditorState,
+    catalog: &GlassCatalogDb,
     tokens: &OpticsTokens,
 ) -> bool {
     let mut modified = false;
@@ -222,6 +227,7 @@ pub fn render_lens_editor(
                         state,
                         &mut surf_to_remove,
                         &mut surf_to_toggle_stop,
+                        catalog,
                         tokens,
                     );
                     if card_modified {
@@ -274,6 +280,7 @@ fn render_surface_card(
     state: &mut LensEditorState,
     surf_to_remove: &mut Option<usize>,
     surf_to_toggle_stop: &mut Option<usize>,
+    catalog: &GlassCatalogDb,
     tokens: &OpticsTokens,
 ) -> bool {
     let mut modified = false;
@@ -413,35 +420,10 @@ fn render_surface_card(
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing = Vec2::new(10.0, 0.0);
 
-            // Glass Dropdown (Strictly locked fixed width: never resizes or stretches)
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing = Vec2::new(3.0, 0.0);
-                ui.label(RichText::new("Glass:").size(10.5).color(tokens.text_muted));
-
-                let display_glass = if surf.material_name.len() > 6 {
-                    format!("{}…", &surf.material_name[..5])
-                } else {
-                    surf.material_name.clone()
-                };
-
-                ComboBox::from_id_salt(format!("glass_cb_{}", idx))
-                    .selected_text(RichText::new(display_glass).monospace().size(10.0))
-                    .width(58.0)
-                    .show_ui(ui, |ui| {
-                        for &glass in COMMON_OPTICAL_GLASSES {
-                            if ui
-                                .selectable_value(
-                                    &mut surf.material_name,
-                                    glass.to_string(),
-                                    glass,
-                                )
-                                .clicked()
-                            {
-                                modified = true;
-                            }
-                        }
-                    });
-            });
+            // Glass Picker with Direct Typing + Searchable 646-glass catalog
+            if render_glass_picker(ui, idx, surf, state, catalog, tokens) {
+                modified = true;
+            }
 
             // Clear Semi-Aperture (strictly 4 digits + point width)
             ui.horizontal(|ui| {
@@ -453,6 +435,187 @@ fn render_surface_card(
                 ui.label(RichText::new("mm").size(10.0).color(tokens.text_muted));
             });
         });
+    });
+
+    modified
+}
+
+/// Renders the dense, high-precision glass selector with direct text editing and searchable 646-glass catalog browser.
+fn render_glass_picker(
+    ui: &mut Ui,
+    idx: usize,
+    surf: &mut OpticalSurface,
+    state: &mut LensEditorState,
+    catalog: &GlassCatalogDb,
+    tokens: &OpticsTokens,
+) -> bool {
+    let mut modified = false;
+
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing = Vec2::new(2.0, 0.0);
+        ui.label(RichText::new("Glass:").size(10.5).color(tokens.text_muted));
+
+        // 1. Direct editable text box
+        let old_mat = surf.material_name.clone();
+        let mut mat_buf = surf.material_name.clone();
+
+        let is_known = surf.material_name.to_uppercase() == "AIR"
+            || catalog.lookup(&surf.material_name).is_some();
+        let text_color = if is_known {
+            tokens.text_primary
+        } else {
+            tokens.warning
+        };
+
+        let tooltip = if surf.material_name.to_uppercase() == "AIR" {
+            "AIR: Refractive index 1.0 (free space)".to_string()
+        } else if let Some(g) = catalog.lookup(&surf.material_name) {
+            format!("{}: {} (nd = {:.4}, Vd = {:.1})", g.catalog.name(), g.name, g.nd, g.vd)
+        } else {
+            format!("Custom material: '{}' (not in standard catalog)", surf.material_name)
+        };
+
+        let text_edit = TextEdit::singleline(&mut mat_buf)
+            .font(egui::TextStyle::Monospace)
+            .text_color(text_color)
+            .desired_width(46.0);
+
+        let resp = ui.add(text_edit).on_hover_text(tooltip);
+        if resp.changed() {
+            surf.material_name = mat_buf.trim().to_uppercase();
+            if surf.material_name != old_mat {
+                modified = true;
+            }
+        }
+
+        // 2. Full 646 Glass Catalog Picker ComboBox
+        let cb_id = format!("glass_cb_{}", idx);
+        ComboBox::from_id_salt(cb_id)
+            .selected_text(RichText::new("▼").monospace().size(8.0).color(tokens.text_muted))
+            .width(16.0)
+            .show_ui(ui, |ui| {
+                ui.set_max_width(260.0);
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("Search:").size(10.0).color(tokens.text_muted));
+                    ui.add(
+                        TextEdit::singleline(&mut state.glass_search_query)
+                            .hint_text("Filter 646 glasses...")
+                            .desired_width(135.0),
+                    );
+                    if !state.glass_search_query.is_empty() {
+                        if ui.small_button("x").clicked() {
+                            state.glass_search_query.clear();
+                        }
+                    }
+                });
+                ui.separator();
+
+                let query = state.glass_search_query.trim().to_uppercase();
+                if query.is_empty() {
+                    ui.label(RichText::new("COMMON GLASSES").size(9.0).strong().color(tokens.accent));
+                    for &glass in COMMON_OPTICAL_GLASSES {
+                        let label = if glass == "AIR" {
+                            "AIR (nd=1.0000)".to_string()
+                        } else if let Some(g) = catalog.lookup(glass) {
+                            format!("{} (nd={:.4}, Vd={:.1})", glass, g.nd, g.vd)
+                        } else {
+                            glass.to_string()
+                        };
+                        if ui.selectable_value(&mut surf.material_name, glass.to_string(), label).clicked() {
+                            modified = true;
+                        }
+                    }
+
+                    ui.separator();
+                    ui.label(RichText::new(format!("FULL CATALOG ({} GLASSES)", catalog.len())).size(9.0).strong().color(tokens.accent));
+
+                    ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
+                        // Schott
+                        let mut schott: Vec<&GlassMaterial> = catalog.all_glasses().filter(|g| g.catalog == GlassCatalog::Schott).collect();
+                        schott.sort_by_key(|g| &g.name);
+                        ui.collapsing(format!("SCHOTT ({} glasses)", schott.len()), |ui| {
+                            for g in schott {
+                                let label = format!("{} (nd={:.4}, Vd={:.1})", g.name, g.nd, g.vd);
+                                if ui.selectable_value(&mut surf.material_name, g.name.clone(), label).clicked() {
+                                    modified = true;
+                                }
+                            }
+                        });
+
+                        // Ohara
+                        let mut ohara: Vec<&GlassMaterial> = catalog.all_glasses().filter(|g| g.catalog == GlassCatalog::Ohara).collect();
+                        ohara.sort_by_key(|g| &g.name);
+                        ui.collapsing(format!("OHARA ({} glasses)", ohara.len()), |ui| {
+                            for g in ohara {
+                                let label = format!("{} (nd={:.4}, Vd={:.1})", g.name, g.nd, g.vd);
+                                if ui.selectable_value(&mut surf.material_name, g.name.clone(), label).clicked() {
+                                    modified = true;
+                                }
+                            }
+                        });
+
+                        // CDGM
+                        let mut cdgm: Vec<&GlassMaterial> = catalog.all_glasses().filter(|g| g.catalog == GlassCatalog::Cdgm).collect();
+                        cdgm.sort_by_key(|g| &g.name);
+                        ui.collapsing(format!("CDGM ({} glasses)", cdgm.len()), |ui| {
+                            for g in cdgm {
+                                let label = format!("{} (nd={:.4}, Vd={:.1})", g.name, g.nd, g.vd);
+                                if ui.selectable_value(&mut surf.material_name, g.name.clone(), label).clicked() {
+                                    modified = true;
+                                }
+                            }
+                        });
+
+                        // Infrared & other
+                        let mut others: Vec<&GlassMaterial> = catalog
+                            .all_glasses()
+                            .filter(|g| g.catalog != GlassCatalog::Schott && g.catalog != GlassCatalog::Ohara && g.catalog != GlassCatalog::Cdgm)
+                            .collect();
+                        if !others.is_empty() {
+                            others.sort_by_key(|g| &g.name);
+                            ui.collapsing(format!("INFRARED & OTHER ({} glasses)", others.len()), |ui| {
+                                for g in others {
+                                    let label = format!("{} (nd={:.4}, Vd={:.1}) - {}", g.name, g.nd, g.vd, g.catalog.name());
+                                    if ui.selectable_value(&mut surf.material_name, g.name.clone(), label).clicked() {
+                                        modified = true;
+                                    }
+                                }
+                            });
+                        }
+                    });
+                } else {
+                    let mut matches: Vec<&GlassMaterial> = catalog
+                        .all_glasses()
+                        .filter(|g| g.name.to_uppercase().contains(&query))
+                        .collect();
+                    matches.sort_by_key(|g| &g.name);
+
+                    ui.label(RichText::new(format!("Matches found: {}", matches.len())).size(9.5).color(tokens.text_muted));
+
+                    ScrollArea::vertical().max_height(220.0).show(ui, |ui| {
+                        if query == "AIR" || "AIR".contains(&query) {
+                            if ui.selectable_value(&mut surf.material_name, "AIR".to_string(), "AIR (nd=1.0000)").clicked() {
+                                modified = true;
+                            }
+                        }
+
+                        for g in matches.iter().take(50) {
+                            let label = format!("{} (nd={:.4}, Vd={:.1}) - {}", g.name, g.nd, g.vd, g.catalog.name());
+                            if ui.selectable_value(&mut surf.material_name, g.name.clone(), label).clicked() {
+                                modified = true;
+                            }
+                        }
+
+                        if matches.is_empty() && query != "AIR" {
+                            ui.label(RichText::new("No catalog glass matches query.").size(10.0).color(tokens.text_muted));
+                            if ui.button(format!("Use custom name '{}'", query)).clicked() {
+                                surf.material_name = query.clone();
+                                modified = true;
+                            }
+                        }
+                    });
+                }
+            });
     });
 
     modified

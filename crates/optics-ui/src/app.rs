@@ -381,6 +381,7 @@ impl eframe::App for OpticsWorkbenchApp {
                                 ui,
                                 &mut self.prescription,
                                 &mut self.lens_editor_state,
+                                &self.catalog,
                                 &tokens,
                             )
                         }
