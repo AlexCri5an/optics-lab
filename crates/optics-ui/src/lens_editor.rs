@@ -16,6 +16,7 @@ use egui::{
 use optics_core::{OpticalPrescription, OpticalSurface};
 use optics_glass::GlassCatalogDb;
 
+use crate::glass_browser::MaterialVendorFilter;
 use crate::icons::{LucideIcon, lucide_small_icon_button, lucide_text_button};
 use crate::theme::OpticsTokens;
 
@@ -45,6 +46,8 @@ pub enum LeftPanelTab {
     /// Surface-by-surface optical prescription editor.
     #[default]
     LensData,
+    /// Dedicated 646-glass materials database browser.
+    Materials,
     /// DLS automatic optimization engine & merit function.
     Optimizer,
 }
@@ -56,6 +59,10 @@ pub struct LensEditorState {
     pub active_tab: LeftPanelTab,
     /// Currently selected surface index.
     pub selected_surface: Option<usize>,
+    /// Target surface index for assigning materials in the Materials tab.
+    pub materials_target_surface: usize,
+    /// Selected manufacturer filter for the Materials tab.
+    pub materials_filter: MaterialVendorFilter,
     /// Whether the System Explorer (Aperture, Fields, Wavelengths) section is expanded.
     pub system_explorer_open: bool,
     /// New field angle input buffer (string for typing, e.g. "20.0").
@@ -68,8 +75,6 @@ pub struct LensEditorState {
     pub variable_radii: BTreeSet<usize>,
     /// Surface indices whose axial thickness is marked as variable for optimization.
     pub variable_thicknesses: BTreeSet<usize>,
-    /// Target surface requesting to open the dedicated Glass Catalog Browser dialog.
-    pub open_glass_browser_for: Option<usize>,
 }
 
 impl Default for LensEditorState {
@@ -77,13 +82,14 @@ impl Default for LensEditorState {
         Self {
             active_tab: LeftPanelTab::LensData,
             selected_surface: None,
+            materials_target_surface: 0,
+            materials_filter: MaterialVendorFilter::All,
             system_explorer_open: false,
             new_field_buf: "20.0".to_string(),
             new_wav_buf: "532.0".to_string(),
             glass_search_query: String::new(),
             variable_radii: BTreeSet::new(),
             variable_thicknesses: BTreeSet::new(),
-            open_glass_browser_for: None,
         }
     }
 }
@@ -501,9 +507,10 @@ fn render_glass_picker(
         .fill(tokens.bg_control)
         .corner_radius(CornerRadius::ZERO);
 
-        let btn_resp = ui.add(browse_btn).on_hover_text("Open Glass Catalog Browser (646 glasses)");
+        let btn_resp = ui.add(browse_btn).on_hover_text("Open Materials Catalog tab for this surface");
         if btn_resp.clicked() {
-            state.open_glass_browser_for = Some(idx);
+            state.materials_target_surface = idx;
+            state.active_tab = LeftPanelTab::Materials;
         }
     });
 
