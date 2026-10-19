@@ -403,6 +403,9 @@ mod tests {
                     semi_diameter_mm: 8.0,
                     material_name: "N-BK7".to_string(),
                     is_stop: true,
+                    asphere_coefficients: Vec::new(),
+                    coordinate_break: None,
+                    grin_profile: None,
                 },
                 OpticalSurface {
                     surface_index: 1,
@@ -412,6 +415,9 @@ mod tests {
                     semi_diameter_mm: 8.0,
                     material_name: "AIR".to_string(),
                     is_stop: false,
+                    asphere_coefficients: Vec::new(),
+                    coordinate_break: None,
+                    grin_profile: None,
                 },
             ],
         };

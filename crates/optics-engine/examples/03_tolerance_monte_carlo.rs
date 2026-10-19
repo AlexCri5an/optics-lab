@@ -35,6 +35,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 semi_diameter_mm: 12.0,
                 material_name: "N-BK7".to_string(),
                 is_stop: true,
+                asphere_coefficients: Vec::new(),
+                coordinate_break: None,
+                grin_profile: None,
             },
             OpticalSurface {
                 surface_index: 1,
@@ -44,6 +47,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 semi_diameter_mm: 12.0,
                 material_name: "SF11".to_string(),
                 is_stop: false,
+                asphere_coefficients: Vec::new(),
+                coordinate_break: None,
+                grin_profile: None,
             },
             OpticalSurface {
                 surface_index: 2,
@@ -53,6 +59,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 semi_diameter_mm: 12.0,
                 material_name: "AIR".to_string(),
                 is_stop: false,
+                asphere_coefficients: Vec::new(),
+                coordinate_break: None,
+                grin_profile: None,
             },
         ],
     };

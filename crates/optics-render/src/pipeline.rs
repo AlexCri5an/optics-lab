@@ -787,6 +787,9 @@ mod tests {
                         semi_diameter_mm: 8.0,
                         material_name: "SK16".to_string(),
                         is_stop: false,
+                        asphere_coefficients: Vec::new(),
+                        coordinate_break: None,
+                        grin_profile: None,
                     },
                     optics_core::OpticalSurface {
                         surface_index: 2,
@@ -796,6 +799,9 @@ mod tests {
                         semi_diameter_mm: 8.0,
                         material_name: "AIR".to_string(),
                         is_stop: false,
+                        asphere_coefficients: Vec::new(),
+                        coordinate_break: None,
+                        grin_profile: None,
                     },
                     optics_core::OpticalSurface {
                         surface_index: 3,
@@ -805,6 +811,9 @@ mod tests {
                         semi_diameter_mm: 8.0,
                         material_name: "F2".to_string(),
                         is_stop: false,
+                        asphere_coefficients: Vec::new(),
+                        coordinate_break: None,
+                        grin_profile: None,
                     },
                     optics_core::OpticalSurface {
                         surface_index: 4,
@@ -814,6 +823,9 @@ mod tests {
                         semi_diameter_mm: 8.0,
                         material_name: "AIR".to_string(),
                         is_stop: false,
+                        asphere_coefficients: Vec::new(),
+                        coordinate_break: None,
+                        grin_profile: None,
                     },
                 ],
             };
