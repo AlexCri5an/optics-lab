@@ -17,8 +17,8 @@ pub use icons::{
     render_lucide_icon,
 };
 pub use layout::{Breakpoint, LayoutMetrics};
-pub use lens_editor::{LensEditorState, render_lens_editor};
-pub use optimization::{DlsRunSummary, OptimizationModalState, render_optimization_modal};
+pub use lens_editor::{LeftPanelTab, LensEditorState, render_lens_editor};
+pub use optimization::{DlsRunSummary, OptimizationModalState, render_optimization_panel};
 pub use theme::{OpticsTokens, ThemeMode};
 pub use topbar::{TopBarAction, TopBarState, render_topbar};
 pub use viewport::{ViewportState, render_optical_viewport};

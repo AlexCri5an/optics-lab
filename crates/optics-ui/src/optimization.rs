@@ -7,8 +7,8 @@
 //! - Non-destructive experimentation with instantaneous "Revert" functionality.
 
 use egui::{
-    Align, Button, Color32, CornerRadius, DragValue, Frame, Layout, Margin, Pos2, RichText,
-    Slider, Vec2, Window,
+    Align, Button, Color32, CornerRadius, DragValue, Frame, Layout, Margin, RichText,
+    ScrollArea, Slider, Ui, Vec2,
 };
 use optics_core::OpticalPrescription;
 use optics_core::prescription::calculate_paraxial_properties;
@@ -85,7 +85,14 @@ impl OptimizationModalState {
     /// Opens the dialog and captures the baseline prescription for potential revert.
     pub fn open_with_snapshot(&mut self, prescription: &OpticalPrescription, catalog: &GlassCatalogDb) {
         self.open = true;
-        self.original_prescription = Some(prescription.clone());
+        self.init_if_needed(prescription, catalog);
+    }
+
+    /// Initializes default baseline snapshot and target EFL from prescription if not set.
+    pub fn init_if_needed(&mut self, prescription: &OpticalPrescription, catalog: &GlassCatalogDb) {
+        if self.original_prescription.is_none() {
+            self.original_prescription = Some(prescription.clone());
+        }
         self.last_summary = None;
         self.status_message = None;
 
@@ -230,85 +237,92 @@ pub fn execute_dls_cycle(
     }
 }
 
-/// Renders the complete academic Optimization Window.
+/// Renders the complete academic Optimization Panel docked cleanly inside the Left Panel.
 ///
 /// Returns `true` if the optical prescription was modified by optimization.
-pub fn render_optimization_modal(
-    ctx: &egui::Context,
+pub fn render_optimization_panel(
+    ui: &mut Ui,
     prescription: &mut OpticalPrescription,
     editor_state: &LensEditorState,
     opt_state: &mut OptimizationModalState,
     catalog: &GlassCatalogDb,
     tokens: &OpticsTokens,
 ) -> bool {
-    if !opt_state.open {
-        return false;
-    }
+    let mut modified = false;
 
-    let mut is_open = opt_state.open;
-    let mut prescription_modified = false;
-    let mut close_requested = false;
-
-    Window::new("DLS OPTICAL OPTIMIZER")
-        .open(&mut is_open)
-        .resizable(false)
-        .default_width(440.0)
-        .default_pos(Pos2::new(380.0, 90.0))
-        .frame(
-            Frame::NONE
-                .fill(tokens.bg_panel)
-                .stroke(tokens.border)
-                .corner_radius(CornerRadius::ZERO)
-                .inner_margin(Margin::same(12)),
-        )
-        .show(ctx, |ui| {
+    ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
             ui.spacing_mut().item_spacing = Vec2::new(0.0, 8.0);
 
             // -------------------------------------------------------------------
-            // 1. Header: Title, Active Variables Badge
+            // 1. Header: Active Variables Badge & Status
             // -------------------------------------------------------------------
             let var_count = editor_state.total_variable_count();
-            ui.horizontal(|ui| {
-                render_lucide_icon(ui, LucideIcon::Wand2, 14.0, tokens.accent);
-                ui.label(
-                    RichText::new("AUTOMATIC SYSTEM OPTIMIZATION (DLS)")
-                        .strong()
-                        .size(11.5)
-                        .color(tokens.text_primary),
-                );
+            let var_frame = Frame::NONE
+                .fill(tokens.bg_control)
+                .stroke(tokens.border)
+                .corner_radius(CornerRadius::ZERO)
+                .inner_margin(Margin::same(10));
 
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    let badge_color = if var_count > 0 { tokens.accent } else { tokens.warning };
-                    ui.label(
-                        RichText::new(format!("{} Active Variables", var_count))
-                            .monospace()
-                            .strong()
-                            .size(10.5)
-                            .color(badge_color),
-                    );
-                });
-            });
-
-            // Variable guidance notice if zero variables
-            if var_count == 0 {
-                let notice_frame = Frame::NONE
-                    .fill(tokens.bg_control)
-                    .stroke(tokens.border)
-                    .corner_radius(CornerRadius::ZERO)
-                    .inner_margin(Margin::symmetric(10, 8));
-
-                notice_frame.show(ui, |ui| {
-                    ui.set_width(ui.available_width());
+            var_frame.show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.vertical(|ui| {
                     ui.horizontal(|ui| {
-                        render_lucide_icon(ui, LucideIcon::Activity, 13.0, tokens.warning);
+                        render_lucide_icon(ui, LucideIcon::SlidersHorizontal, 13.0, tokens.accent);
                         ui.label(
-                            RichText::new("Notice: No variables are marked for optimization. Toggle [ V ] on Radii or Thicknesses in the Lens Data Editor to allow DLS to adjust them.")
+                            RichText::new("OPTIMIZATION VARIABLES")
+                                .monospace()
+                                .strong()
                                 .size(10.5)
+                                .color(tokens.text_primary),
+                        );
+
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            let badge_color = if var_count > 0 { tokens.accent } else { tokens.warning };
+                            ui.label(
+                                RichText::new(format!("{} Active", var_count))
+                                    .monospace()
+                                    .strong()
+                                    .size(10.5)
+                                    .color(badge_color),
+                            );
+                        });
+                    });
+
+                    ui.add_space(4.0);
+
+                    if var_count == 0 {
+                        ui.label(
+                            RichText::new("No variables marked. Switch to the LENS DATA tab and toggle [ V ] on any Radius or Thickness to allow DLS to optimize it.")
+                                .size(10.0)
                                 .color(tokens.text_muted),
                         );
-                    });
+                    } else {
+                        let mut var_tags = Vec::new();
+                        for &r_idx in &editor_state.variable_radii {
+                            var_tags.push(format!("R{} (Curv)", r_idx));
+                        }
+                        for &t_idx in &editor_state.variable_thicknesses {
+                            var_tags.push(format!("T{} (Thick)", t_idx));
+                        }
+                        ui.horizontal_wrapped(|ui| {
+                            ui.spacing_mut().item_spacing = Vec2::new(4.0, 2.0);
+                            ui.label(RichText::new("Varying:").size(10.5).color(tokens.text_muted));
+                            for tag in var_tags {
+                                ui.label(
+                                    RichText::new(tag)
+                                        .monospace()
+                                        .strong()
+                                        .size(10.0)
+                                        .color(tokens.accent),
+                                );
+                            }
+                        });
+                    }
                 });
-            }
+            });
 
             // -------------------------------------------------------------------
             // 2. Merit Function Operands Card
@@ -329,14 +343,14 @@ pub fn render_optimization_modal(
                             .size(10.5)
                             .color(tokens.text_primary),
                     );
-                    ui.add_space(4.0);
+                    ui.add_space(6.0);
 
                     // Operand 1: Minimize RMS Spot Size
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
                         ui.checkbox(&mut opt_state.min_rms_spot, "");
                         ui.label(
-                            RichText::new("Minimize RMS Spot Size (Micrometers)")
+                            RichText::new("Minimize RMS Spot Size")
                                 .size(11.0)
                                 .color(tokens.text_primary),
                         );
@@ -350,12 +364,14 @@ pub fn render_optimization_modal(
                         });
                     });
 
+                    ui.add_space(4.0);
+
                     // Operand 2: Target Effective Focal Length
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
                         ui.checkbox(&mut opt_state.target_efl_enabled, "");
                         ui.label(
-                            RichText::new("Target Focal Length (EFL):")
+                            RichText::new("Hold Target EFL:")
                                 .size(11.0)
                                 .color(tokens.text_primary),
                         );
@@ -378,7 +394,7 @@ pub fn render_optimization_modal(
             });
 
             // -------------------------------------------------------------------
-            // 3. Algorithm Controls (Iterations & Initial Damping)
+            // 3. Algorithm Controls (Iterations & Damping)
             // -------------------------------------------------------------------
             let algo_frame = Frame::NONE
                 .fill(tokens.bg_control)
@@ -390,13 +406,13 @@ pub fn render_optimization_modal(
                 ui.set_width(ui.available_width());
                 ui.vertical(|ui| {
                     ui.label(
-                        RichText::new("DLS ALGORITHM PARAMETERS")
+                        RichText::new("DLS ALGORITHM CONTROLS")
                             .monospace()
                             .strong()
                             .size(10.5)
                             .color(tokens.text_primary),
                     );
-                    ui.add_space(4.0);
+                    ui.add_space(6.0);
 
                     // Iterations Slider
                     ui.horizontal(|ui| {
@@ -404,9 +420,11 @@ pub fn render_optimization_modal(
                         ui.add(Slider::new(&mut opt_state.iterations, 1..=50).text("cycles"));
                     });
 
+                    ui.add_space(3.0);
+
                     // Damping factor lambda
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new("Initial Damping λ:").size(11.0).color(tokens.text_muted));
+                        ui.label(RichText::new("Damping Factor λ:").size(11.0).color(tokens.text_muted));
                         ui.add(
                             DragValue::new(&mut opt_state.initial_damping)
                                 .speed(0.05)
@@ -417,7 +435,7 @@ pub fn render_optimization_modal(
             });
 
             // -------------------------------------------------------------------
-            // 4. Results & Convergence Display
+            // 4. Convergence & Results Card
             // -------------------------------------------------------------------
             if let Some(ref summary) = opt_state.last_summary {
                 let res_frame = Frame::NONE
@@ -433,9 +451,9 @@ pub fn render_optimization_modal(
                             render_lucide_icon(ui, LucideIcon::Check, 13.0, tokens.accent);
                             ui.label(
                                 RichText::new(format!(
-                                    "Completed {} cycles | Convergence: {}",
+                                    "Completed {} cycles | {}",
                                     summary.iterations_run,
-                                    if summary.converged { "Converged" } else { "Step limit" }
+                                    if summary.converged { "Converged" } else { "Step limit reached" }
                                 ))
                                 .strong()
                                 .monospace()
@@ -443,6 +461,8 @@ pub fn render_optimization_modal(
                                 .color(tokens.accent),
                             );
                         });
+
+                        ui.add_space(2.0);
 
                         ui.horizontal(|ui| {
                             ui.label(
@@ -489,19 +509,44 @@ pub fn render_optimization_modal(
                 });
             }
 
-            ui.add_space(2.0);
-
             // -------------------------------------------------------------------
-            // 5. Action Buttons (Step 1, Run N, Revert, Close)
+            // 5. Action Buttons (Run DLS, Step, Revert)
             // -------------------------------------------------------------------
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
-
                 let can_run = var_count > 0;
+
+                // Run DLS Button (Primary Action)
+                let run_btn = Button::new(
+                    RichText::new(format!("Run DLS ({})", opt_state.iterations))
+                        .monospace()
+                        .strong()
+                        .size(11.0)
+                        .color(Color32::WHITE),
+                )
+                .fill(if can_run { tokens.accent } else { tokens.bg_control })
+                .stroke(tokens.border)
+                .corner_radius(CornerRadius::ZERO);
+
+                if ui.add_enabled(can_run, run_btn).on_hover_text("Execute full DLS optimization cycles").clicked() {
+                    if opt_state.original_prescription.is_none() {
+                        opt_state.original_prescription = Some(prescription.clone());
+                    }
+                    match execute_dls_cycle(opt_state.iterations, prescription, editor_state, opt_state, catalog) {
+                        Ok(summary) => {
+                            opt_state.last_summary = Some(summary);
+                            opt_state.status_message = None;
+                            modified = true;
+                        }
+                        Err(e) => {
+                            opt_state.status_message = Some(e);
+                        }
+                    }
+                }
 
                 // Step 1 Cycle
                 let step_btn = Button::new(
-                    RichText::new("Step (1 Cycle)")
+                    RichText::new("Step (1)")
                         .monospace()
                         .strong()
                         .size(11.0)
@@ -512,36 +557,14 @@ pub fn render_optimization_modal(
                 .corner_radius(CornerRadius::ZERO);
 
                 if ui.add_enabled(can_run, step_btn).on_hover_text("Execute a single DLS step for incremental analysis").clicked() {
+                    if opt_state.original_prescription.is_none() {
+                        opt_state.original_prescription = Some(prescription.clone());
+                    }
                     match execute_dls_cycle(1, prescription, editor_state, opt_state, catalog) {
                         Ok(summary) => {
                             opt_state.last_summary = Some(summary);
                             opt_state.status_message = None;
-                            prescription_modified = true;
-                        }
-                        Err(e) => {
-                            opt_state.status_message = Some(e);
-                        }
-                    }
-                }
-
-                // Run N Cycles (Primary Action)
-                let run_btn = Button::new(
-                    RichText::new(format!("Run DLS ({} Cycles)", opt_state.iterations))
-                        .monospace()
-                        .strong()
-                        .size(11.0)
-                        .color(Color32::WHITE),
-                )
-                .fill(if can_run { tokens.accent } else { tokens.bg_control })
-                .stroke(tokens.border)
-                .corner_radius(CornerRadius::ZERO);
-
-                if ui.add_enabled(can_run, run_btn).on_hover_text("Execute full DLS optimization").clicked() {
-                    match execute_dls_cycle(opt_state.iterations, prescription, editor_state, opt_state, catalog) {
-                        Ok(summary) => {
-                            opt_state.last_summary = Some(summary);
-                            opt_state.status_message = None;
-                            prescription_modified = true;
+                            modified = true;
                         }
                         Err(e) => {
                             opt_state.status_message = Some(e);
@@ -560,23 +583,14 @@ pub fn render_optimization_modal(
                             *prescription = orig.clone();
                             opt_state.last_summary = None;
                             opt_state.status_message = Some("Reverted to original prescription.".to_string());
-                            prescription_modified = true;
+                            modified = true;
                         }
-                    }
-                });
-
-                // Close button
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if ui.button(RichText::new("Close").size(11.0).color(tokens.text_muted)).clicked() {
-                        close_requested = true;
                     }
                 });
             });
         });
 
-    opt_state.open = is_open && !close_requested;
-
-    prescription_modified
+    modified
 }
 
 #[cfg(test)]

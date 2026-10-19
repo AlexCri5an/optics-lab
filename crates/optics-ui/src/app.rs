@@ -14,8 +14,8 @@ use optics_glass::GlassCatalogDb;
 use crate::analysis::{AnalysisPanelState, render_analysis_panel};
 use crate::icons::{LucideIcon, lucide_small_icon_button, render_lucide_icon};
 use crate::layout::{Breakpoint, LayoutMetrics};
-use crate::lens_editor::{LensEditorState, render_lens_editor};
-use crate::optimization::{OptimizationModalState, render_optimization_modal};
+use crate::lens_editor::{LeftPanelTab, LensEditorState, render_lens_editor};
+use crate::optimization::{OptimizationModalState, render_optimization_panel};
 use crate::theme::OpticsTokens;
 use crate::topbar::{TopBarAction, TopBarState, render_topbar};
 use crate::viewport::{ViewportState, render_optical_viewport};
@@ -288,14 +288,52 @@ impl eframe::App for OpticsWorkbenchApp {
                         .inner_margin(egui::Margin::same(8)),
                 )
                 .show(ctx, |ui| {
+                    // Header: Left Panel Segmented Tabs (LENS DATA | OPTIMIZER)
                     ui.horizontal(|ui| {
-                        render_lucide_icon(ui, LucideIcon::Layers, 13.0, tokens.accent);
-                        ui.label(
-                            RichText::new("LENS DATA EDITOR")
+                        ui.spacing_mut().item_spacing = egui::Vec2::new(4.0, 0.0);
+
+                        // Tab 1: LENS DATA
+                        let is_ld = self.lens_editor_state.active_tab == LeftPanelTab::LensData;
+                        let btn_ld = egui::Button::new(
+                            RichText::new("LENS DATA")
+                                .size(10.5)
+                                .monospace()
                                 .strong()
-                                .size(11.5)
-                                .color(tokens.text_primary),
-                        );
+                                .color(if is_ld { tokens.accent } else { tokens.text_muted }),
+                        )
+                        .fill(if is_ld { tokens.bg_control_active } else { tokens.bg_control })
+                        .stroke(if is_ld { tokens.border_hovered } else { tokens.border })
+                        .corner_radius(egui::CornerRadius::ZERO);
+
+                        if ui.add(btn_ld).clicked() {
+                            self.lens_editor_state.active_tab = LeftPanelTab::LensData;
+                        }
+
+                        // Tab 2: OPTIMIZER (with active variable count badge)
+                        let is_opt = self.lens_editor_state.active_tab == LeftPanelTab::Optimizer;
+                        let var_count = self.lens_editor_state.total_variable_count();
+                        let opt_text = if var_count > 0 {
+                            format!("OPTIMIZER ({})", var_count)
+                        } else {
+                            "OPTIMIZER".to_string()
+                        };
+
+                        let btn_opt = egui::Button::new(
+                            RichText::new(opt_text)
+                                .size(10.5)
+                                .monospace()
+                                .strong()
+                                .color(if is_opt { tokens.accent } else { tokens.text_muted }),
+                        )
+                        .fill(if is_opt { tokens.bg_control_active } else { tokens.bg_control })
+                        .stroke(if is_opt { tokens.border_hovered } else { tokens.border })
+                        .corner_radius(egui::CornerRadius::ZERO);
+
+                        if ui.add(btn_opt).clicked() {
+                            self.lens_editor_state.active_tab = LeftPanelTab::Optimizer;
+                            self.optimization_state.init_if_needed(&self.prescription, &self.catalog);
+                        }
+
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if lucide_small_icon_button(ui, LucideIcon::X, "Close Panel", &tokens).clicked() {
                                 self.topbar_state.left_panel_open = false;
@@ -304,12 +342,26 @@ impl eframe::App for OpticsWorkbenchApp {
                     });
                     ui.separator();
 
-                    let modified = render_lens_editor(
-                        ui,
-                        &mut self.prescription,
-                        &mut self.lens_editor_state,
-                        &tokens,
-                    );
+                    let modified = match self.lens_editor_state.active_tab {
+                        LeftPanelTab::LensData => {
+                            render_lens_editor(
+                                ui,
+                                &mut self.prescription,
+                                &mut self.lens_editor_state,
+                                &tokens,
+                            )
+                        }
+                        LeftPanelTab::Optimizer => {
+                            render_optimization_panel(
+                                ui,
+                                &mut self.prescription,
+                                &self.lens_editor_state,
+                                &mut self.optimization_state,
+                                &self.catalog,
+                                &tokens,
+                            )
+                        }
+                    };
 
                     if modified {
                         self.is_dirty = true;
@@ -379,28 +431,6 @@ impl eframe::App for OpticsWorkbenchApp {
                     &tokens,
                 );
             });
-
-        // -------------------------------------------------------------------
-        // 9. DLS Optical Optimization Modal Dialog
-        // -------------------------------------------------------------------
-        let opt_modified = render_optimization_modal(
-            ctx,
-            &mut self.prescription,
-            &self.lens_editor_state,
-            &mut self.optimization_state,
-            &self.catalog,
-            &tokens,
-        );
-        if opt_modified {
-            self.is_dirty = true;
-            self.topbar_state.is_dirty = true;
-            self.last_action_msg = format!("Prescription '{}' updated via DLS optimization.", self.prescription.name);
-            self.status_text = format!(
-                "Surfaces: {} | EPD: {:.1} mm | DLS Optimized",
-                self.prescription.surfaces.len(),
-                self.prescription.entrance_pupil_diameter_mm
-            );
-        }
     }
 }
 
@@ -878,8 +908,10 @@ impl OpticsWorkbenchApp {
                     "OpticsLab v0.0.1 — Academic Optical Engineering Workbench".to_string();
             }
             TopBarAction::OpenOptimization => {
-                self.optimization_state.open_with_snapshot(&self.prescription, &self.catalog);
-                self.last_action_msg = "Opened DLS Optical Optimization Hub.".to_string();
+                self.topbar_state.left_panel_open = true;
+                self.lens_editor_state.active_tab = LeftPanelTab::Optimizer;
+                self.optimization_state.init_if_needed(&self.prescription, &self.catalog);
+                self.last_action_msg = "Switched to DLS Optimizer tab.".to_string();
             }
         }
     }
