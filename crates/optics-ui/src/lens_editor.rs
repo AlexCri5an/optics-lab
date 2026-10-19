@@ -456,324 +456,387 @@ fn render_surface_card(
         });
 
         // -------------------------------------------------------------------
-        // Row 3: Coordinate Break & GRIN Profile Badges and Editors
+        // Row 3: Airy Feature Pills Bar: [ Asph ] [ Bic ] [ Tor ] [ Grin ] [ CB ]
         // -------------------------------------------------------------------
-        let mut toggle_cb = false;
-        let mut remove_cb = false;
-        let mut toggle_grin = false;
-        let mut remove_grin = false;
-        let mut toggle_biconic = false;
-        let mut remove_biconic = false;
-        let mut toggle_toroidal = false;
-        let mut remove_toroidal = false;
-
         let has_asph = !surf.asphere_coefficients.is_empty() || surf.conic_constant.abs() > 1e-9;
         let is_biconic = matches!(surf.profile, Some(SurfaceProfile::Biconic(_)));
         let is_toroidal = matches!(surf.profile, Some(SurfaceProfile::Toroidal(_)));
+        let has_grin = surf.grin_profile.is_some();
+        let has_cb = surf.coordinate_break.is_some();
 
-        ui.add_space(2.0);
+        ui.add_space(5.0);
+
+        // Calculate uniform pill width distributed across the available card width
+        let avail_w = ui.available_width();
+        let pill_gap = 4.0;
+        let pill_w = ((avail_w - (pill_gap * 4.0)) / 5.0).clamp(42.0, 70.0);
+
         ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing = Vec2::new(5.0, 0.0);
+            ui.spacing_mut().item_spacing = Vec2::new(pill_gap, 0.0);
 
-            // Asphere toggle / indicator
-            if has_asph {
-                ui.label(
-                    RichText::new("[Asph]")
-                        .strong()
-                        .monospace()
-                        .size(10.0)
-                        .color(tokens.plot_tangential),
-                );
-                if ui.small_button("Del Asph").on_hover_text("Reset to spherical surface").clicked() {
+            // 1. Asph
+            let asph_resp = feature_pill(ui, "Asph", has_asph, tokens.plot_tangential, pill_w, tokens)
+                .on_hover_text("Even Asphere Profile\nConic constant (k) and polynomial even coefficients (A4, A6...)");
+            if asph_resp.clicked() {
+                if has_asph {
                     surf.conic_constant = 0.0;
                     surf.asphere_coefficients.clear();
-                    modified = true;
+                } else {
+                    surf.asphere_coefficients = vec![0.0, 0.0];
+                    surf.profile = None; // Asphere replaces other sag profiles
                 }
-            } else if ui.small_button("+ Asph").on_hover_text("Add Even Asphere (Conic k and higher-order polynomial coefficients)").clicked() {
-                surf.asphere_coefficients = vec![0.0, 0.0, 0.0];
                 modified = true;
             }
 
-            // Biconic toggle / indicator
-            if is_biconic {
-                ui.label(
-                    RichText::new("[Bic]")
-                        .strong()
-                        .monospace()
-                        .size(10.0)
-                        .color(tokens.plot_sagittal),
-                );
-                if ui.small_button("Del Bic").on_hover_text("Remove Biconic surface profile").clicked() {
-                    remove_biconic = true;
+            // 2. Bic
+            let bic_resp = feature_pill(ui, "Bic", is_biconic, tokens.plot_sagittal, pill_w, tokens)
+                .on_hover_text("Biconic Anamorphic Surface\nIndependent X and Y curvatures (Rx, Ry) and conics (kx, ky)");
+            if bic_resp.clicked() {
+                if is_biconic {
+                    surf.profile = None;
+                } else {
+                    surf.profile = Some(SurfaceProfile::Biconic(BiconicSurface::default()));
+                    surf.asphere_coefficients.clear();
+                    surf.conic_constant = 0.0;
                 }
-            } else if !is_toroidal && ui.small_button("+ Bic").on_hover_text("Add Biconic Surface (independent Rx, kx, Ry, ky)").clicked() {
-                toggle_biconic = true;
+                modified = true;
             }
 
-            // Toroidal toggle / indicator
-            if is_toroidal {
-                ui.label(
-                    RichText::new("[Tor]")
-                        .strong()
-                        .monospace()
-                        .size(10.0)
-                        .color(tokens.accent),
-                );
-                if ui.small_button("Del Tor").on_hover_text("Remove Toroidal surface profile").clicked() {
-                    remove_toroidal = true;
+            // 3. Tor
+            let tor_resp = feature_pill(ui, "Tor", is_toroidal, tokens.accent, pill_w, tokens)
+                .on_hover_text("Toroidal Surface\nRevolution of an optical conic about a displaced or orthogonal axis");
+            if tor_resp.clicked() {
+                if is_toroidal {
+                    surf.profile = None;
+                } else {
+                    surf.profile = Some(SurfaceProfile::Toroidal(ToroidalSurface::default()));
+                    surf.asphere_coefficients.clear();
+                    surf.conic_constant = 0.0;
                 }
-            } else if !is_biconic && ui.small_button("+ Tor").on_hover_text("Add Toroidal Surface of revolution (Rx, Ry, ky)").clicked() {
-                toggle_toroidal = true;
+                modified = true;
             }
 
-            // Coordinate Break toggle / indicator
-            if surf.coordinate_break.is_some() {
-                ui.label(
-                    RichText::new("[CB]")
-                        .strong()
-                        .monospace()
-                        .size(10.0)
-                        .color(tokens.accent),
-                );
-                if ui.small_button("Del CB").on_hover_text("Remove Coordinate Break").clicked() {
-                    remove_cb = true;
+            // 4. Grin
+            let grin_resp = feature_pill(ui, "Grin", has_grin, tokens.warning, pill_w, tokens)
+                .on_hover_text("Gradient Index (GRIN) Glass\nContinuous radial Selfoc, axial, or spherical Luneburg gradient");
+            if grin_resp.clicked() {
+                if has_grin {
+                    surf.grin_profile = None;
+                } else {
+                    surf.grin_profile = Some(GrinProfile::Radial { n0: 1.6, a: 0.01 });
                 }
-            } else if ui.small_button("+ CB").on_hover_text("Add 3D Coordinate Break (Decenters & Euler Tilts)").clicked() {
-                toggle_cb = true;
+                modified = true;
             }
 
-            // GRIN Profile toggle / indicator
-            if surf.grin_profile.is_some() {
-                ui.label(
-                    RichText::new("[GRIN]")
-                        .strong()
-                        .monospace()
-                        .size(10.0)
-                        .color(tokens.warning),
-                );
-                if ui.small_button("Del GRIN").on_hover_text("Remove Gradient-Index Profile").clicked() {
-                    remove_grin = true;
+            // 5. CB
+            let cb_resp = feature_pill(ui, "CB", has_cb, tokens.plot_axial, pill_w, tokens)
+                .on_hover_text("Coordinate Break (3D Transform)\nRigid decenters (dx, dy, dz) and 3D Euler rotation tilts (tx, ty, tz)");
+            if cb_resp.clicked() {
+                if has_cb {
+                    surf.coordinate_break = None;
+                } else {
+                    surf.coordinate_break = Some(CoordinateBreak::default());
                 }
-            } else if ui.small_button("+ GRIN").on_hover_text("Add Gradient-Index Material (Radial Selfoc, Axial, Luneburg)").clicked() {
-                toggle_grin = true;
+                modified = true;
             }
         });
 
-        // Expanded Asphere fields
+        // -------------------------------------------------------------------
+        // Expanded Parameter Sub-Cards for Active Features
+        // -------------------------------------------------------------------
+
+        // 1. Expanded Asphere Card
         if has_asph {
-            ui.add_space(2.0);
-            ui.group(|ui| {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing = Vec2::new(3.0, 0.0);
-                    ui.label(RichText::new("k:").size(10.0).color(tokens.plot_tangential));
-                    if float_input(ui, Id::new(("surf_conic_k", idx)), &mut surf.conic_constant, 38.0) {
-                        modified = true;
-                    }
-                    if !surf.asphere_coefficients.is_empty() {
+            ui.add_space(4.0);
+            Frame::NONE
+                .fill(tokens.bg_canvas)
+                .stroke(egui::Stroke::new(1.0, tokens.plot_tangential.gamma_multiply(0.45)))
+                .corner_radius(CornerRadius::same(5))
+                .inner_margin(Margin::symmetric(10, 7))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Even Asphere Profile").size(10.5).strong().color(tokens.plot_tangential));
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            if lucide_small_icon_button(ui, LucideIcon::X, "Remove Asphere", tokens).clicked() {
+                                surf.conic_constant = 0.0;
+                                surf.asphere_coefficients.clear();
+                                modified = true;
+                            }
+                        });
+                    });
+                    ui.add_space(3.0);
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
+                        ui.label(RichText::new("Conic (k):").size(10.0).color(tokens.text_muted));
+                        if float_input(ui, Id::new(("surf_conic_k", idx)), &mut surf.conic_constant, 48.0) {
+                            modified = true;
+                        }
+                    });
+                    ui.add_space(2.0);
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
+                        if surf.asphere_coefficients.is_empty() {
+                            surf.asphere_coefficients = vec![0.0, 0.0];
+                        }
                         ui.label(RichText::new("A4:").size(10.0).color(tokens.text_muted));
-                        if float_input(ui, Id::new(("surf_asph_a4", idx)), &mut surf.asphere_coefficients[0], 48.0) {
+                        if float_input(ui, Id::new(("surf_asph_a4", idx)), &mut surf.asphere_coefficients[0], 52.0) {
                             modified = true;
                         }
-                    }
-                    if surf.asphere_coefficients.len() > 1 {
-                        ui.label(RichText::new("A6:").size(10.0).color(tokens.text_muted));
-                        if float_input(ui, Id::new(("surf_asph_a6", idx)), &mut surf.asphere_coefficients[1], 48.0) {
-                            modified = true;
+                        if surf.asphere_coefficients.len() > 1 {
+                            ui.label(RichText::new("A6:").size(10.0).color(tokens.text_muted));
+                            if float_input(ui, Id::new(("surf_asph_a6", idx)), &mut surf.asphere_coefficients[1], 52.0) {
+                                modified = true;
+                            }
                         }
-                    }
+                    });
                 });
-            });
         }
 
-        if toggle_cb {
-            surf.coordinate_break = Some(CoordinateBreak::default());
-            modified = true;
-        }
-        if remove_cb {
-            surf.coordinate_break = None;
-            modified = true;
-        }
-        if toggle_grin {
-            surf.grin_profile = Some(GrinProfile::Radial { n0: 1.6, a: 0.01 });
-            modified = true;
-        }
-        if remove_grin {
-            surf.grin_profile = None;
-            modified = true;
-        }
-        if toggle_biconic {
-            surf.profile = Some(SurfaceProfile::Biconic(BiconicSurface::default()));
-            modified = true;
+        // 2. Expanded Biconic Card
+        let mut remove_biconic = false;
+        if let Some(SurfaceProfile::Biconic(biconic)) = &mut surf.profile {
+            ui.add_space(4.0);
+            Frame::NONE
+                .fill(tokens.bg_canvas)
+                .stroke(egui::Stroke::new(1.0, tokens.plot_sagittal.gamma_multiply(0.45)))
+                .corner_radius(CornerRadius::same(5))
+                .inner_margin(Margin::symmetric(10, 7))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Biconic Anamorphic Profile").size(10.5).strong().color(tokens.plot_sagittal));
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            if lucide_small_icon_button(ui, LucideIcon::X, "Remove Biconic", tokens).clicked() {
+                                remove_biconic = true;
+                                modified = true;
+                            }
+                        });
+                    });
+                    ui.add_space(3.0);
+                    // X-Axis
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
+                        ui.label(RichText::new("X-Axis:").size(10.0).strong().color(tokens.plot_sagittal));
+                        ui.label(RichText::new("Rx:").size(10.0).color(tokens.text_muted));
+                        let mut rx = biconic.rx_mm();
+                        if float_input(ui, Id::new(("surf_bic_rx", idx)), &mut rx, 46.0) {
+                            biconic.cx = if rx.abs() < 1e-15 || rx.is_infinite() { 0.0 } else { 1.0 / rx };
+                            modified = true;
+                        }
+                        ui.label(RichText::new("kx:").size(10.0).color(tokens.text_muted));
+                        if float_input(ui, Id::new(("surf_bic_kx", idx)), &mut biconic.kx, 40.0) {
+                            modified = true;
+                        }
+                    });
+                    ui.add_space(2.0);
+                    // Y-Axis
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
+                        ui.label(RichText::new("Y-Axis:").size(10.0).strong().color(tokens.plot_sagittal));
+                        ui.label(RichText::new("Ry:").size(10.0).color(tokens.text_muted));
+                        let mut ry = biconic.ry_mm();
+                        if float_input(ui, Id::new(("surf_bic_ry", idx)), &mut ry, 46.0) {
+                            biconic.cy = if ry.abs() < 1e-15 || ry.is_infinite() { 0.0 } else { 1.0 / ry };
+                            modified = true;
+                        }
+                        ui.label(RichText::new("ky:").size(10.0).color(tokens.text_muted));
+                        if float_input(ui, Id::new(("surf_bic_ky", idx)), &mut biconic.ky, 40.0) {
+                            modified = true;
+                        }
+                    });
+                });
         }
         if remove_biconic {
             surf.profile = None;
-            modified = true;
-        }
-        if toggle_toroidal {
-            surf.profile = Some(SurfaceProfile::Toroidal(ToroidalSurface::default()));
-            modified = true;
-        }
-        if remove_toroidal {
-            surf.profile = None;
-            modified = true;
         }
 
-        // Expanded Coordinate Break fields
-        if let Some(cb) = &mut surf.coordinate_break {
-            ui.add_space(2.0);
-            ui.group(|ui| {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing = Vec2::new(3.0, 0.0);
-                    ui.label(RichText::new("dx:").size(10.0).color(tokens.text_muted));
-                    if float_input(ui, Id::new(("surf_cb_dx", idx)), &mut cb.decenter_x_mm, 34.0) {
-                        modified = true;
-                    }
-                    ui.label(RichText::new("dy:").size(10.0).color(tokens.text_muted));
-                    if float_input(ui, Id::new(("surf_cb_dy", idx)), &mut cb.decenter_y_mm, 34.0) {
-                        modified = true;
-                    }
-                    ui.label(RichText::new("dz:").size(10.0).color(tokens.text_muted));
-                    if float_input(ui, Id::new(("surf_cb_dz", idx)), &mut cb.decenter_z_mm, 34.0) {
-                        modified = true;
-                    }
-                });
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing = Vec2::new(3.0, 0.0);
-                    ui.label(RichText::new("tx°:").size(10.0).color(tokens.text_muted));
-                    if float_input(ui, Id::new(("surf_cb_tx", idx)), &mut cb.tilt_x_deg, 34.0) {
-                        modified = true;
-                    }
-                    ui.label(RichText::new("ty°:").size(10.0).color(tokens.text_muted));
-                    if float_input(ui, Id::new(("surf_cb_ty", idx)), &mut cb.tilt_y_deg, 34.0) {
-                        modified = true;
-                    }
-                    ui.label(RichText::new("tz°:").size(10.0).color(tokens.text_muted));
-                    if float_input(ui, Id::new(("surf_cb_tz", idx)), &mut cb.tilt_z_deg, 34.0) {
-                        modified = true;
-                    }
-                    if ui.checkbox(&mut cb.tilt_first, "Tilt First").changed() {
-                        modified = true;
-                    }
-                });
-            });
-        }
-
-        // Expanded GRIN Profile fields
-        if let Some(grin) = &mut surf.grin_profile {
-            ui.add_space(2.0);
-            ui.group(|ui| {
-                match grin {
-                    GrinProfile::Radial { n0, a } => {
-                        ui.horizontal(|ui| {
-                            ui.spacing_mut().item_spacing = Vec2::new(3.0, 0.0);
-                            ui.label(RichText::new("Selfoc:").size(10.0).color(tokens.warning));
-                            ui.label(RichText::new("n0:").size(10.0).color(tokens.text_muted));
-                            if float_input(ui, Id::new(("surf_grin_n0", idx)), n0, 36.0) {
-                                modified = true;
-                            }
-                            ui.label(RichText::new("A:").size(10.0).color(tokens.text_muted));
-                            if float_input(ui, Id::new(("surf_grin_a", idx)), a, 44.0) {
-                                modified = true;
-                            }
-                        });
-                    }
-                    GrinProfile::Axial { n0, n1, n2 } => {
-                        ui.horizontal(|ui| {
-                            ui.spacing_mut().item_spacing = Vec2::new(3.0, 0.0);
-                            ui.label(RichText::new("Axial:").size(10.0).color(tokens.warning));
-                            ui.label(RichText::new("n0:").size(10.0).color(tokens.text_muted));
-                            if float_input(ui, Id::new(("surf_grin_n0", idx)), n0, 34.0) {
-                                modified = true;
-                            }
-                            ui.label(RichText::new("n1:").size(10.0).color(tokens.text_muted));
-                            if float_input(ui, Id::new(("surf_grin_n1", idx)), n1, 34.0) {
-                                modified = true;
-                            }
-                            ui.label(RichText::new("n2:").size(10.0).color(tokens.text_muted));
-                            if float_input(ui, Id::new(("surf_grin_n2", idx)), n2, 34.0) {
-                                modified = true;
-                            }
-                        });
-                    }
-                    GrinProfile::Luneburg { n0, radius_mm } => {
-                        ui.horizontal(|ui| {
-                            ui.spacing_mut().item_spacing = Vec2::new(3.0, 0.0);
-                            ui.label(RichText::new("Luneburg:").size(10.0).color(tokens.warning));
-                            ui.label(RichText::new("n0:").size(10.0).color(tokens.text_muted));
-                            if float_input(ui, Id::new(("surf_grin_n0", idx)), n0, 36.0) {
-                                modified = true;
-                            }
-                            ui.label(RichText::new("R:").size(10.0).color(tokens.text_muted));
-                            if float_input(ui, Id::new(("surf_grin_r", idx)), radius_mm, 40.0) {
-                                modified = true;
-                            }
-                        });
-                    }
-                }
-            });
-        }
-
-        // Expanded Biconic fields
-        if let Some(SurfaceProfile::Biconic(biconic)) = &mut surf.profile {
-            ui.add_space(2.0);
-            ui.group(|ui| {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing = Vec2::new(3.0, 0.0);
-                    ui.label(RichText::new("Biconic:").size(10.0).color(tokens.plot_sagittal));
-
-                    ui.label(RichText::new("Rx:").size(10.0).color(tokens.text_muted));
-                    let mut rx = biconic.rx_mm();
-                    if float_input(ui, Id::new(("surf_bic_rx", idx)), &mut rx, 40.0) {
-                        biconic.cx = if rx.abs() < 1e-15 || rx.is_infinite() { 0.0 } else { 1.0 / rx };
-                        modified = true;
-                    }
-
-                    ui.label(RichText::new("kx:").size(10.0).color(tokens.text_muted));
-                    if float_input(ui, Id::new(("surf_bic_kx", idx)), &mut biconic.kx, 34.0) {
-                        modified = true;
-                    }
-
-                    ui.label(RichText::new("Ry:").size(10.0).color(tokens.text_muted));
-                    let mut ry = biconic.ry_mm();
-                    if float_input(ui, Id::new(("surf_bic_ry", idx)), &mut ry, 40.0) {
-                        biconic.cy = if ry.abs() < 1e-15 || ry.is_infinite() { 0.0 } else { 1.0 / ry };
-                        modified = true;
-                    }
-
-                    ui.label(RichText::new("ky:").size(10.0).color(tokens.text_muted));
-                    if float_input(ui, Id::new(("surf_bic_ky", idx)), &mut biconic.ky, 34.0) {
-                        modified = true;
-                    }
-                });
-            });
-        }
-
-        // Expanded Toroidal fields
+        // 3. Expanded Toroidal Card
+        let mut remove_toroid = false;
         if let Some(SurfaceProfile::Toroidal(toroid)) = &mut surf.profile {
-            ui.add_space(2.0);
-            ui.group(|ui| {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing = Vec2::new(3.0, 0.0);
-                    ui.label(RichText::new("Toroid:").size(10.0).color(tokens.accent));
+            ui.add_space(4.0);
+            Frame::NONE
+                .fill(tokens.bg_canvas)
+                .stroke(egui::Stroke::new(1.0, tokens.accent.gamma_multiply(0.45)))
+                .corner_radius(CornerRadius::same(5))
+                .inner_margin(Margin::symmetric(10, 7))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Toroidal Surface Profile").size(10.5).strong().color(tokens.accent));
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            if lucide_small_icon_button(ui, LucideIcon::X, "Remove Toroidal", tokens).clicked() {
+                                remove_toroid = true;
+                                modified = true;
+                            }
+                        });
+                    });
+                    ui.add_space(3.0);
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
+                        ui.label(RichText::new("Rotation Rx:").size(10.0).color(tokens.text_muted));
+                        if float_input(ui, Id::new(("surf_tor_rx", idx)), &mut toroid.rx_mm, 46.0) {
+                            modified = true;
+                        }
+                        ui.label(RichText::new("mm").size(10.0).color(tokens.text_muted));
+                    });
+                    ui.add_space(2.0);
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
+                        ui.label(RichText::new("Base Ry:").size(10.0).color(tokens.text_muted));
+                        let mut ry = toroid.ry_mm();
+                        if float_input(ui, Id::new(("surf_tor_ry", idx)), &mut ry, 46.0) {
+                            toroid.cy = if ry.abs() < 1e-15 || ry.is_infinite() { 0.0 } else { 1.0 / ry };
+                            modified = true;
+                        }
+                        ui.label(RichText::new("ky:").size(10.0).color(tokens.text_muted));
+                        if float_input(ui, Id::new(("surf_tor_ky", idx)), &mut toroid.ky, 40.0) {
+                            modified = true;
+                        }
+                    });
+                });
+        }
+        if remove_toroid {
+            surf.profile = None;
+        }
 
-                    ui.label(RichText::new("Rx:").size(10.0).color(tokens.text_muted));
-                    if float_input(ui, Id::new(("surf_tor_rx", idx)), &mut toroid.rx_mm, 40.0) {
-                        modified = true;
-                    }
-
-                    ui.label(RichText::new("Ry:").size(10.0).color(tokens.text_muted));
-                    let mut ry = toroid.ry_mm();
-                    if float_input(ui, Id::new(("surf_tor_ry", idx)), &mut ry, 40.0) {
-                        toroid.cy = if ry.abs() < 1e-15 || ry.is_infinite() { 0.0 } else { 1.0 / ry };
-                        modified = true;
-                    }
-
-                    ui.label(RichText::new("ky:").size(10.0).color(tokens.text_muted));
-                    if float_input(ui, Id::new(("surf_tor_ky", idx)), &mut toroid.ky, 34.0) {
+        // 4. Expanded Coordinate Break Card
+        let mut remove_cb = false;
+        if let Some(cb) = &mut surf.coordinate_break {
+            ui.add_space(4.0);
+            Frame::NONE
+                .fill(tokens.bg_canvas)
+                .stroke(egui::Stroke::new(1.0, tokens.plot_axial.gamma_multiply(0.45)))
+                .corner_radius(CornerRadius::same(5))
+                .inner_margin(Margin::symmetric(10, 7))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Coordinate Break (3D Transform)").size(10.5).strong().color(tokens.plot_axial));
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            if lucide_small_icon_button(ui, LucideIcon::X, "Remove Coordinate Break", tokens).clicked() {
+                                remove_cb = true;
+                                modified = true;
+                            }
+                        });
+                    });
+                    ui.add_space(3.0);
+                    // Decenters
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = Vec2::new(5.0, 0.0);
+                        ui.label(RichText::new("Decenter:").size(10.0).color(tokens.text_muted));
+                        ui.label(RichText::new("dx").size(10.0).color(tokens.text_muted));
+                        if float_input(ui, Id::new(("surf_cb_dx", idx)), &mut cb.decenter_x_mm, 36.0) {
+                            modified = true;
+                        }
+                        ui.label(RichText::new("dy").size(10.0).color(tokens.text_muted));
+                        if float_input(ui, Id::new(("surf_cb_dy", idx)), &mut cb.decenter_y_mm, 36.0) {
+                            modified = true;
+                        }
+                        ui.label(RichText::new("dz").size(10.0).color(tokens.text_muted));
+                        if float_input(ui, Id::new(("surf_cb_dz", idx)), &mut cb.decenter_z_mm, 36.0) {
+                            modified = true;
+                        }
+                    });
+                    ui.add_space(2.0);
+                    // Tilts
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = Vec2::new(5.0, 0.0);
+                        ui.label(RichText::new("Euler Tilt:").size(10.0).color(tokens.text_muted));
+                        ui.label(RichText::new("tx°").size(10.0).color(tokens.text_muted));
+                        if float_input(ui, Id::new(("surf_cb_tx", idx)), &mut cb.tilt_x_deg, 36.0) {
+                            modified = true;
+                        }
+                        ui.label(RichText::new("ty°").size(10.0).color(tokens.text_muted));
+                        if float_input(ui, Id::new(("surf_cb_ty", idx)), &mut cb.tilt_y_deg, 36.0) {
+                            modified = true;
+                        }
+                        ui.label(RichText::new("tz°").size(10.0).color(tokens.text_muted));
+                        if float_input(ui, Id::new(("surf_cb_tz", idx)), &mut cb.tilt_z_deg, 36.0) {
+                            modified = true;
+                        }
+                    });
+                    ui.add_space(2.0);
+                    if ui.checkbox(&mut cb.tilt_first, "Order: Tilt First (rotations before decenters)").changed() {
                         modified = true;
                     }
                 });
-            });
+        }
+        if remove_cb {
+            surf.coordinate_break = None;
+        }
+
+        // 5. Expanded GRIN Profile Card
+        let mut remove_grin = false;
+        if let Some(grin) = &mut surf.grin_profile {
+            ui.add_space(4.0);
+            Frame::NONE
+                .fill(tokens.bg_canvas)
+                .stroke(egui::Stroke::new(1.0, tokens.warning.gamma_multiply(0.45)))
+                .corner_radius(CornerRadius::same(5))
+                .inner_margin(Margin::symmetric(10, 7))
+                .show(ui, |ui| {
+                    let name = match grin {
+                        GrinProfile::Radial { .. } => "Radial Selfoc GRIN",
+                        GrinProfile::Axial { .. } => "Axial GRIN Profile",
+                        GrinProfile::Luneburg { .. } => "Luneburg Sphere GRIN",
+                    };
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(name).size(10.5).strong().color(tokens.warning));
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            if lucide_small_icon_button(ui, LucideIcon::X, "Remove GRIN", tokens).clicked() {
+                                remove_grin = true;
+                                modified = true;
+                            }
+                        });
+                    });
+                    ui.add_space(3.0);
+                    match grin {
+                        GrinProfile::Radial { n0, a } => {
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
+                                ui.label(RichText::new("n0:").size(10.0).color(tokens.text_muted));
+                                if float_input(ui, Id::new(("surf_grin_n0", idx)), n0, 44.0) {
+                                    modified = true;
+                                }
+                                ui.label(RichText::new("a:").size(10.0).color(tokens.text_muted));
+                                if float_input(ui, Id::new(("surf_grin_a", idx)), a, 48.0) {
+                                    modified = true;
+                                }
+                            });
+                        }
+                        GrinProfile::Axial { n0, n1, n2 } => {
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing = Vec2::new(5.0, 0.0);
+                                ui.label(RichText::new("n0:").size(10.0).color(tokens.text_muted));
+                                if float_input(ui, Id::new(("surf_grin_n0", idx)), n0, 38.0) {
+                                    modified = true;
+                                }
+                                ui.label(RichText::new("n1:").size(10.0).color(tokens.text_muted));
+                                if float_input(ui, Id::new(("surf_grin_n1", idx)), n1, 38.0) {
+                                    modified = true;
+                                }
+                                ui.label(RichText::new("n2:").size(10.0).color(tokens.text_muted));
+                                if float_input(ui, Id::new(("surf_grin_n2", idx)), n2, 38.0) {
+                                    modified = true;
+                                }
+                            });
+                        }
+                        GrinProfile::Luneburg { n0, radius_mm } => {
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
+                                ui.label(RichText::new("n0:").size(10.0).color(tokens.text_muted));
+                                if float_input(ui, Id::new(("surf_grin_n0", idx)), n0, 42.0) {
+                                    modified = true;
+                                }
+                                ui.label(RichText::new("Radius:").size(10.0).color(tokens.text_muted));
+                                if float_input(ui, Id::new(("surf_grin_r", idx)), radius_mm, 46.0) {
+                                    modified = true;
+                                }
+                                ui.label(RichText::new("mm").size(10.0).color(tokens.text_muted));
+                            });
+                        }
+                    }
+                });
+        }
+        if remove_grin {
+            surf.grin_profile = None;
         }
     });
 
@@ -983,6 +1046,40 @@ fn float_input(ui: &mut Ui, id: Id, value: &mut f64, width: f32) -> bool {
     }
 
     changed
+}
+
+/// Renders an airy, modern scientific pill button for surface modifiers (Asph, Bic, Tor, Grin, CB).
+fn feature_pill(
+    ui: &mut Ui,
+    label: &str,
+    is_active: bool,
+    active_color: egui::Color32,
+    width: f32,
+    tokens: &OpticsTokens,
+) -> egui::Response {
+    let (bg, stroke, text_color, text) = if is_active {
+        (
+            active_color.gamma_multiply(0.18),
+            egui::Stroke::new(1.2, active_color),
+            active_color,
+            format!("● {}", label),
+        )
+    } else {
+        (
+            tokens.bg_control,
+            tokens.border,
+            tokens.text_muted,
+            label.to_string(),
+        )
+    };
+
+    let btn = Button::new(RichText::new(text).size(9.5).strong().color(text_color))
+        .fill(bg)
+        .stroke(stroke)
+        .corner_radius(CornerRadius::same(4))
+        .min_size(Vec2::new(width, 21.0));
+
+    ui.add(btn)
 }
 
 /// Renders an academic variable toggle badge ('V' for Variable, 'F' for Fixed).
