@@ -455,8 +455,21 @@ fn render_surface_card(
                     modified = true;
                 }
                 ui.label(RichText::new("mm").size(10.0).color(tokens.text_muted));
+            });
+        });
 
-                // Aperture Shape selector
+        ui.add_space(2.0);
+
+        // -------------------------------------------------------------------
+        // Row 2C: Aperture Shape & Optical Coating Selectors
+        // -------------------------------------------------------------------
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing = Vec2::new(10.0, 0.0);
+
+            // Aperture Shape selector
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing = Vec2::new(3.0, 0.0);
+                ui.label(RichText::new("Shape:").size(10.5).color(tokens.text_muted));
                 let shape_name = match &surf.aperture {
                     None => "Circ",
                     Some(ap) => match &ap.shape {
@@ -472,9 +485,9 @@ fn render_surface_card(
                     .selected_text(
                         RichText::new(shape_name)
                             .size(10.0)
-                            .color(if has_custom_ap { tokens.plot_axial } else { tokens.text_muted })
+                            .color(if has_custom_ap { tokens.plot_axial } else { tokens.text_muted }),
                     )
-                    .width(52.0)
+                    .width(58.0)
                     .show_ui(ui, |ui| {
                         if ui.selectable_label(!has_custom_ap, "Circular (Standard)").clicked() {
                             surf.aperture = None;
@@ -499,8 +512,12 @@ fn render_surface_card(
                             modified = true;
                         }
                     });
+            });
 
-                // Optical Coating Selector
+            // Optical Coating Selector
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing = Vec2::new(3.0, 0.0);
+                ui.label(RichText::new("Coat:").size(10.5).color(tokens.text_muted));
                 let coat_label = match &surf.coating {
                     None => "Uncoated",
                     Some(c) => c.label(),
@@ -512,7 +529,7 @@ fn render_surface_card(
                             .size(10.0)
                             .color(if has_coat { tokens.plot_tangential } else { tokens.text_muted }),
                     )
-                    .width(62.0)
+                    .width(72.0)
                     .show_ui(ui, |ui| {
                         if ui.selectable_label(surf.coating.is_none(), "Uncoated").clicked() {
                             surf.coating = None;
