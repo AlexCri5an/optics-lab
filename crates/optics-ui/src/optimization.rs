@@ -14,21 +14,37 @@ use optics_core::OpticalPrescription;
 use optics_core::prescription::calculate_paraxial_properties;
 use optics_glass::catalog::GlassCatalogDb;
 use optics_optimize::{
-    DlsConfig, DlsOptimizer, MeritFunction, MeritOperand, OperandType, VariableSet, VariableType,
+    DlsConfig, DlsOptimizer, GlassHammerConfig, GlassHammerOptimizer, MeritFunction, MeritOperand,
+    MultiStartConfig, MultiStartOptimizer, OperandType, SimulatedAnnealingConfig,
+    SimulatedAnnealingOptimizer, VariableSet, VariableType,
 };
 
 use crate::icons::LucideIcon;
 use crate::lens_editor::LensEditorState;
 use crate::theme::OpticsTokens;
 
-/// Summary of an executed DLS optimization session.
+/// Selected optimization algorithm mode in the UI.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum OptimizationAlgorithm {
+    /// Standard local Damped Least Squares (Levenberg-Marquardt).
+    #[default]
+    Dls,
+    /// Simulated Annealing ("Hammer") global thermal cooling.
+    Annealing,
+    /// Multi-start random trials across variable bounds.
+    GlobalSearch,
+    /// Discrete glass material substitution from optical catalog.
+    GlassSubstitution,
+}
+
+/// Summary of an executed optimization session.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DlsRunSummary {
     /// Initial merit value prior to optimization.
     pub initial_merit: f64,
     /// Final merit value achieved.
     pub final_merit: f64,
-    /// Number of cycles executed in this run.
+    /// Number of cycles or trials executed in this run.
     pub iterations_run: usize,
     /// Whether the solver satisfied tolerance criteria.
     pub converged: bool,
@@ -41,6 +57,8 @@ pub struct DlsRunSummary {
 pub struct OptimizationModalState {
     /// Whether the optimization window is visible.
     pub open: bool,
+    /// Active algorithm mode (DLS, Annealing, Global Search, Glass Substitution).
+    pub algorithm: OptimizationAlgorithm,
     /// Number of iterations per execution cycle (default: 10).
     pub iterations: usize,
     /// Initial Levenberg-Marquardt damping factor $\lambda_0$ (default: 1.0).
@@ -55,6 +73,22 @@ pub struct OptimizationModalState {
     pub target_efl_value: f64,
     /// Optimization weight for target EFL operand.
     pub target_efl_weight: f64,
+    /// Whether to enforce minimum center thickness (MNCA) across optical elements.
+    pub min_center_thickness_enabled: bool,
+    /// Minimum allowable center thickness in millimeters (MNCA).
+    pub min_center_thickness_val: f64,
+    /// Optimization weight for minimum center thickness constraint.
+    pub min_center_thickness_weight: f64,
+    /// Whether to enforce minimum edge thickness (ETVA) across optical elements.
+    pub min_edge_thickness_enabled: bool,
+    /// Minimum allowable physical edge thickness in millimeters (ETVA).
+    pub min_edge_thickness_val: f64,
+    /// Optimization weight for minimum edge thickness constraint.
+    pub min_edge_thickness_weight: f64,
+    /// Number of multi-start trials for Global Search.
+    pub global_trials: usize,
+    /// Maximum execution time budget in seconds for global/hammer routines.
+    pub time_budget_secs: f64,
     /// Snapshot of the prescription before optimization started (for Revert).
     pub original_prescription: Option<OpticalPrescription>,
     /// History stack of (prescription, summary) before each optimization run for multi-level synchronized undo.
@@ -69,6 +103,7 @@ impl Default for OptimizationModalState {
     fn default() -> Self {
         Self {
             open: false,
+            algorithm: OptimizationAlgorithm::Dls,
             iterations: 10,
             initial_damping: 1.0,
             min_rms_spot: true,
@@ -76,6 +111,14 @@ impl Default for OptimizationModalState {
             target_efl_enabled: true,
             target_efl_value: 50.0,
             target_efl_weight: 100.0,
+            min_center_thickness_enabled: true,
+            min_center_thickness_val: 1.5,
+            min_center_thickness_weight: 50.0,
+            min_edge_thickness_enabled: true,
+            min_edge_thickness_val: 1.0,
+            min_edge_thickness_weight: 50.0,
+            global_trials: 20,
+            time_budget_secs: 15.0,
             original_prescription: None,
             history: Vec::new(),
             last_summary: None,
@@ -144,6 +187,12 @@ pub fn build_variable_set(
         }
     }
 
+    for &idx in &editor_state.variable_conics {
+        if idx < n_surfaces {
+            vars.add(VariableType::Conic { surface_index: idx });
+        }
+    }
+
     vars
 }
 
@@ -195,13 +244,49 @@ pub fn build_merit_function(
         ));
     }
 
+    // 3. Minimum Center Thickness constraint (MNCA) across optical elements
+    if opt_state.min_center_thickness_enabled {
+        let n_surf = prescription.surfaces.len();
+        for (i, surf) in prescription.surfaces.iter().enumerate() {
+            if i + 1 < n_surf && !surf.material_name.is_empty() && surf.material_name.to_uppercase() != "AIR" {
+                mf.add_operand(MeritOperand::new(
+                    format!("MNCA_SURF_{}", i),
+                    OperandType::MinCenterThickness {
+                        surface_index: i,
+                        min_thickness_mm: opt_state.min_center_thickness_val,
+                    },
+                    0.0,
+                    opt_state.min_center_thickness_weight,
+                ));
+            }
+        }
+    }
+
+    // 4. Minimum Edge Thickness constraint (ETVA) across optical elements
+    if opt_state.min_edge_thickness_enabled {
+        let n_surf = prescription.surfaces.len();
+        for (i, surf) in prescription.surfaces.iter().enumerate() {
+            if i + 1 < n_surf && !surf.material_name.is_empty() && surf.material_name.to_uppercase() != "AIR" {
+                mf.add_operand(MeritOperand::new(
+                    format!("ETVA_SURF_{}", i),
+                    OperandType::MinEdgeThickness {
+                        surface_index: i,
+                        min_edge_mm: opt_state.min_edge_thickness_val,
+                    },
+                    0.0,
+                    opt_state.min_edge_thickness_weight,
+                ));
+            }
+        }
+    }
+
     mf
 }
 
-/// Runs a DLS optimization cycle on the prescription.
+/// Runs an optimization cycle or global search on the prescription using the configured algorithm.
 ///
 /// Returns `Ok(DlsRunSummary)` on success, updating `prescription` in-place.
-pub fn execute_dls_cycle(
+pub fn execute_optimization_cycle(
     cycles: usize,
     prescription: &mut OpticalPrescription,
     editor_state: &LensEditorState,
@@ -209,16 +294,27 @@ pub fn execute_dls_cycle(
     catalog: &GlassCatalogDb,
 ) -> Result<DlsRunSummary, String> {
     let vars = build_variable_set(editor_state, prescription);
-    if vars.num_active() == 0 {
-        return Err("No active variables. Toggle [V] on Radii or Thicknesses in the Lens Data Editor first.".to_string());
+    let n_surfaces = prescription.surfaces.len();
+
+    // Check prerequisites based on algorithm
+    if opt_state.algorithm == OptimizationAlgorithm::GlassSubstitution {
+        // Hammer requires at least one lens element (non-air surface)
+        let has_elements = prescription.surfaces.iter().take(n_surfaces.saturating_sub(1)).any(|s| {
+            !s.material_name.is_empty() && s.material_name.to_uppercase() != "AIR"
+        });
+        if !has_elements {
+            return Err("Glass Substitution requires at least one optical element with glass material.".to_string());
+        }
+    } else if vars.num_active() == 0 {
+        return Err("No active variables. Toggle [V] on Radii, Thicknesses, or Conics in the Lens Data Editor first.".to_string());
     }
 
     let mf = build_merit_function(prescription, opt_state);
     if mf.len() == 0 {
-        return Err("Merit function is empty. Enable at least one target operand (RMS Spot or Target EFL).".to_string());
+        return Err("Merit function is empty. Enable at least one target operand or physical constraint.".to_string());
     }
 
-    let config = DlsConfig {
+    let local_dls_config = DlsConfig {
         max_iterations: cycles,
         initial_damping: opt_state.initial_damping,
         relative_merit_tolerance: 1e-6,
@@ -226,26 +322,81 @@ pub fn execute_dls_cycle(
         finite_difference_relative_step: 1e-5,
     };
 
-    let optimizer = DlsOptimizer::new(config);
-    match optimizer.optimize(prescription, &vars, &mf, catalog, None) {
-        Ok(result) => {
-            *prescription = result.optimized_prescription;
-            let improvement = if result.initial_merit > 1e-12 {
-                ((result.initial_merit - result.final_merit) / result.initial_merit) * 100.0
-            } else {
-                0.0
-            };
-
-            Ok(DlsRunSummary {
-                initial_merit: result.initial_merit,
-                final_merit: result.final_merit,
-                iterations_run: result.iterations,
-                converged: result.converged,
-                percent_improvement: improvement,
-            })
+    let result = match opt_state.algorithm {
+        OptimizationAlgorithm::Dls => {
+            let optimizer = DlsOptimizer::new(local_dls_config);
+            optimizer.optimize(prescription, &vars, &mf, catalog, None)
+                .map_err(|e| format!("DLS Optimization error: {}", e))?
         }
-        Err(err) => Err(format!("DLS Optimization error: {}", err)),
-    }
+        OptimizationAlgorithm::Annealing => {
+            let config = SimulatedAnnealingConfig {
+                initial_temperature: 10.0,
+                cooling_rate: 0.90,
+                steps_per_temperature: cycles.max(5),
+                max_cooling_cycles: cycles.max(10),
+                seed: 42,
+            };
+            let optimizer = SimulatedAnnealingOptimizer::new(config);
+            optimizer.optimize(prescription, &vars, &mf, catalog, None)
+                .map_err(|e| format!("Annealing Optimization error: {}", e))?
+        }
+        OptimizationAlgorithm::GlobalSearch => {
+            let config = MultiStartConfig {
+                num_trials: opt_state.global_trials,
+                time_budget_secs: opt_state.time_budget_secs,
+                local_dls_config,
+                seed: 42,
+            };
+            let optimizer = MultiStartOptimizer::new(config);
+            optimizer.optimize(prescription, &vars, &mf, catalog, None)
+                .map_err(|e| format!("Global Search error: {}", e))?
+        }
+        OptimizationAlgorithm::GlassSubstitution => {
+            let target_surfaces: Vec<usize> = prescription.surfaces.iter().enumerate()
+                .take(n_surfaces.saturating_sub(1))
+                .filter(|(_, s)| !s.material_name.is_empty() && s.material_name.to_uppercase() != "AIR")
+                .map(|(i, _)| i)
+                .collect();
+
+            let config = GlassHammerConfig {
+                target_surfaces,
+                candidate_glasses: Vec::new(), // uses common optical glasses
+                max_cycles: cycles.min(5),
+                time_budget_secs: opt_state.time_budget_secs,
+                local_dls_config,
+            };
+            let optimizer = GlassHammerOptimizer::new(config);
+            optimizer.optimize(prescription, &vars, &mf, catalog, None)
+                .map_err(|e| format!("Glass Substitution error: {}", e))?
+        }
+    };
+
+    *prescription = result.optimized_prescription;
+    let improvement = if result.initial_merit > 1e-12 {
+        ((result.initial_merit - result.final_merit) / result.initial_merit) * 100.0
+    } else {
+        0.0
+    };
+
+    Ok(DlsRunSummary {
+        initial_merit: result.initial_merit,
+        final_merit: result.final_merit,
+        iterations_run: result.iterations,
+        converged: result.converged,
+        percent_improvement: improvement,
+    })
+}
+
+/// Runs a DLS optimization cycle on the prescription (legacy wrapper for backward compatibility).
+#[inline]
+pub fn execute_dls_cycle(
+    cycles: usize,
+    prescription: &mut OpticalPrescription,
+    editor_state: &LensEditorState,
+    opt_state: &OptimizationModalState,
+    catalog: &GlassCatalogDb,
+) -> Result<DlsRunSummary, String> {
+    execute_optimization_cycle(cycles, prescription, editor_state, opt_state, catalog)
 }
 
 /// Renders a crisp, technical square checkbox with an exact 1px academic border and label.
@@ -410,7 +561,70 @@ pub fn render_optimization_panel(
             });
 
             // -------------------------------------------------------------------
-            // 2. Merit Function Operands Card (Aligned, Square Checkboxes)
+            // 2. Algorithm Selector & Mode Selection (ComboBox)
+            // -------------------------------------------------------------------
+            let mode_frame = Frame::NONE
+                .fill(tokens.bg_control)
+                .stroke(tokens.border)
+                .corner_radius(CornerRadius::ZERO)
+                .inner_margin(Margin::same(10));
+
+            mode_frame.show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.vertical(|ui| {
+                    ui.label(
+                        RichText::new("OPTIMIZATION ALGORITHM")
+                            .monospace()
+                            .strong()
+                            .size(10.5)
+                            .color(tokens.text_primary),
+                    );
+                    ui.add_space(6.0);
+
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Method:").size(11.0).color(tokens.text_muted));
+                        let current_algo_label = match opt_state.algorithm {
+                            OptimizationAlgorithm::Dls => "Damped Least Squares (DLS)",
+                            OptimizationAlgorithm::Annealing => "Simulated Annealing (Hammer)",
+                            OptimizationAlgorithm::GlobalSearch => "Global Multi-Start Search",
+                            OptimizationAlgorithm::GlassSubstitution => "Glass Substitution (Hammer)",
+                        };
+
+                        egui::ComboBox::from_id_salt("opt_algo_select")
+                            .selected_text(
+                                RichText::new(current_algo_label)
+                                    .monospace()
+                                    .size(10.5)
+                                    .color(tokens.text_primary),
+                            )
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(
+                                    &mut opt_state.algorithm,
+                                    OptimizationAlgorithm::Dls,
+                                    "Damped Least Squares (DLS - Fast Local)",
+                                );
+                                ui.selectable_value(
+                                    &mut opt_state.algorithm,
+                                    OptimizationAlgorithm::Annealing,
+                                    "Simulated Annealing (Hammer - Global Thermal)",
+                                );
+                                ui.selectable_value(
+                                    &mut opt_state.algorithm,
+                                    OptimizationAlgorithm::GlobalSearch,
+                                    "Global Multi-Start Search (Random Trials)",
+                                );
+                                ui.selectable_value(
+                                    &mut opt_state.algorithm,
+                                    OptimizationAlgorithm::GlassSubstitution,
+                                    "Glass Substitution (Catalog Material Search)",
+                                );
+                            });
+                    });
+                });
+            });
+
+            // -------------------------------------------------------------------
+            // 3. Merit Function Operands & Physical Constraints Card
             // -------------------------------------------------------------------
             let operands_frame = Frame::NONE
                 .fill(tokens.bg_control)
@@ -422,7 +636,7 @@ pub fn render_optimization_panel(
                 ui.set_width(ui.available_width());
                 ui.vertical(|ui| {
                     ui.label(
-                        RichText::new("MERIT FUNCTION TARGETS")
+                        RichText::new("MERIT FUNCTION TARGETS & CONSTRAINTS")
                             .monospace()
                             .strong()
                             .size(10.5)
@@ -478,11 +692,71 @@ pub fn render_optimization_panel(
                                 .range(0.1..=5000.0),
                         );
                     });
+
+                    ui.add_space(8.0);
+
+                    // Operand 3: Min Center Thickness (MNCA)
+                    academic_square_checkbox_with_label(
+                        ui,
+                        &mut opt_state.min_center_thickness_enabled,
+                        "Min Center Thickness (MNCA)",
+                        tokens,
+                    );
+                    ui.add_space(2.0);
+                    ui.horizontal(|ui| {
+                        ui.add_space(21.0);
+                        ui.label(RichText::new("Min:").size(10.5).color(tokens.text_muted));
+                        ui.add_enabled(
+                            opt_state.min_center_thickness_enabled,
+                            DragValue::new(&mut opt_state.min_center_thickness_val)
+                                .speed(0.1)
+                                .range(0.1..=100.0)
+                                .suffix(" mm"),
+                        );
+                        ui.add_space(10.0);
+                        ui.label(RichText::new("Weight:").size(10.5).color(tokens.text_muted));
+                        ui.add_enabled(
+                            opt_state.min_center_thickness_enabled,
+                            DragValue::new(&mut opt_state.min_center_thickness_weight)
+                                .speed(1.0)
+                                .range(0.1..=5000.0),
+                        );
+                    });
+
+                    ui.add_space(8.0);
+
+                    // Operand 4: Min Edge Thickness (ETVA)
+                    academic_square_checkbox_with_label(
+                        ui,
+                        &mut opt_state.min_edge_thickness_enabled,
+                        "Min Edge Thickness (ETVA)",
+                        tokens,
+                    );
+                    ui.add_space(2.0);
+                    ui.horizontal(|ui| {
+                        ui.add_space(21.0);
+                        ui.label(RichText::new("Min:").size(10.5).color(tokens.text_muted));
+                        ui.add_enabled(
+                            opt_state.min_edge_thickness_enabled,
+                            DragValue::new(&mut opt_state.min_edge_thickness_val)
+                                .speed(0.1)
+                                .range(0.1..=100.0)
+                                .suffix(" mm"),
+                        );
+                        ui.add_space(10.0);
+                        ui.label(RichText::new("Weight:").size(10.5).color(tokens.text_muted));
+                        ui.add_enabled(
+                            opt_state.min_edge_thickness_enabled,
+                            DragValue::new(&mut opt_state.min_edge_thickness_weight)
+                                .speed(1.0)
+                                .range(0.1..=5000.0),
+                        );
+                    });
                 });
             });
 
             // -------------------------------------------------------------------
-            // 3. Algorithm Controls (Direct Numeric Inputs, No Slider)
+            // 4. Algorithm Parameter Controls (Direct Numeric Inputs, No Slider)
             // -------------------------------------------------------------------
             let algo_frame = Frame::NONE
                 .fill(tokens.bg_control)
@@ -493,8 +767,15 @@ pub fn render_optimization_panel(
             algo_frame.show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.vertical(|ui| {
+                    let header_text = match opt_state.algorithm {
+                        OptimizationAlgorithm::Dls => "DLS SOLVER CONTROLS",
+                        OptimizationAlgorithm::Annealing => "ANNEALING SOLVER CONTROLS",
+                        OptimizationAlgorithm::GlobalSearch => "GLOBAL SEARCH CONTROLS",
+                        OptimizationAlgorithm::GlassSubstitution => "GLASS HAMMER CONTROLS",
+                    };
+
                     ui.label(
-                        RichText::new("DLS ALGORITHM CONTROLS")
+                        RichText::new(header_text)
                             .monospace()
                             .strong()
                             .size(10.5)
@@ -502,33 +783,83 @@ pub fn render_optimization_panel(
                     );
                     ui.add_space(8.0);
 
-                    // Cycle Iterations DragValue (Clean numeric input, no slider)
-                    ui.horizontal(|ui| {
-                        ui.label(RichText::new("Cycle Iterations:").size(11.0).color(tokens.text_muted));
-                        ui.add(
-                            DragValue::new(&mut opt_state.iterations)
-                                .range(1..=100)
-                                .speed(1)
-                                .suffix(" cycles"),
-                        );
-                    });
+                    match opt_state.algorithm {
+                        OptimizationAlgorithm::Dls | OptimizationAlgorithm::Annealing => {
+                            // Cycle Iterations DragValue
+                            ui.horizontal(|ui| {
+                                ui.label(RichText::new("Cycle Iterations:").size(11.0).color(tokens.text_muted));
+                                ui.add(
+                                    DragValue::new(&mut opt_state.iterations)
+                                        .range(1..=100)
+                                        .speed(1)
+                                        .suffix(" cycles"),
+                                );
+                            });
 
-                    ui.add_space(4.0);
+                            ui.add_space(4.0);
 
-                    // Damping factor lambda
-                    ui.horizontal(|ui| {
-                        ui.label(RichText::new("Damping Factor λ:").size(11.0).color(tokens.text_muted));
-                        ui.add(
-                            DragValue::new(&mut opt_state.initial_damping)
-                                .speed(0.05)
-                                .range(0.001..=100.0),
-                        );
-                    });
+                            // Damping factor lambda
+                            ui.horizontal(|ui| {
+                                ui.label(RichText::new("Damping Factor λ:").size(11.0).color(tokens.text_muted));
+                                ui.add(
+                                    DragValue::new(&mut opt_state.initial_damping)
+                                        .speed(0.05)
+                                        .range(0.001..=100.0),
+                                );
+                            });
+                        }
+                        OptimizationAlgorithm::GlobalSearch => {
+                            ui.horizontal(|ui| {
+                                ui.label(RichText::new("Random Trials:").size(11.0).color(tokens.text_muted));
+                                ui.add(
+                                    DragValue::new(&mut opt_state.global_trials)
+                                        .range(5..=200)
+                                        .speed(1)
+                                        .suffix(" trials"),
+                                );
+                            });
+
+                            ui.add_space(4.0);
+
+                            ui.horizontal(|ui| {
+                                ui.label(RichText::new("Time Budget:").size(11.0).color(tokens.text_muted));
+                                ui.add(
+                                    DragValue::new(&mut opt_state.time_budget_secs)
+                                        .range(1.0..=120.0)
+                                        .speed(1.0)
+                                        .suffix(" s"),
+                                );
+                            });
+                        }
+                        OptimizationAlgorithm::GlassSubstitution => {
+                            ui.horizontal(|ui| {
+                                ui.label(RichText::new("Substitution Passes:").size(11.0).color(tokens.text_muted));
+                                ui.add(
+                                    DragValue::new(&mut opt_state.iterations)
+                                        .range(1..=10)
+                                        .speed(1)
+                                        .suffix(" passes"),
+                                );
+                            });
+
+                            ui.add_space(4.0);
+
+                            ui.horizontal(|ui| {
+                                ui.label(RichText::new("Time Budget:").size(11.0).color(tokens.text_muted));
+                                ui.add(
+                                    DragValue::new(&mut opt_state.time_budget_secs)
+                                        .range(1.0..=120.0)
+                                        .speed(1.0)
+                                        .suffix(" s"),
+                                );
+                            });
+                        }
+                    }
                 });
             });
 
             // -------------------------------------------------------------------
-            // 4. Convergence & Results Card (Lucide Vector Icons, No ASCII/Greek)
+            // 5. Convergence & Results Card (Lucide Vector Icons, No ASCII/Greek)
             // -------------------------------------------------------------------
             if let Some(ref summary) = opt_state.last_summary {
                 let res_frame = Frame::NONE
@@ -631,38 +962,48 @@ pub fn render_optimization_panel(
             }
 
             // -------------------------------------------------------------------
-            // 5. Action Buttons (Run DLS, Step, Revert) - Crisp & Legible When Disabled
+            // 6. Action Buttons (Run, Step, Revert) - Crisp & Legible When Disabled
             // -------------------------------------------------------------------
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
-                let has_targets = opt_state.min_rms_spot || opt_state.target_efl_enabled;
-                let can_run = var_count > 0 && has_targets;
+                let has_targets = opt_state.min_rms_spot
+                    || opt_state.target_efl_enabled
+                    || opt_state.min_center_thickness_enabled
+                    || opt_state.min_edge_thickness_enabled;
+                let can_run = (var_count > 0 || opt_state.algorithm == OptimizationAlgorithm::GlassSubstitution) && has_targets;
 
-                let run_tooltip = if var_count == 0 {
+                let run_tooltip = if var_count == 0 && opt_state.algorithm != OptimizationAlgorithm::GlassSubstitution {
                     "Cannot run: select variables with [V] in LENS DATA tab first"
                 } else if !has_targets {
-                    "Cannot run: check at least one target operand above (RMS Spot or Target EFL)"
+                    "Cannot run: check at least one target operand or constraint above"
                 } else {
-                    "Execute full DLS optimization cycles"
+                    "Execute optimization routine"
                 };
 
-                let step_tooltip = if var_count == 0 {
+                let step_tooltip = if var_count == 0 && opt_state.algorithm != OptimizationAlgorithm::GlassSubstitution {
                     "Cannot step: select variables with [V] in LENS DATA tab first"
                 } else if !has_targets {
-                    "Cannot step: check at least one target operand above (RMS Spot or Target EFL)"
+                    "Cannot step: check at least one target operand or constraint above"
                 } else {
-                    "Execute a single DLS step for incremental analysis"
+                    "Execute a single step for incremental analysis"
                 };
 
-                // Run DLS Button (Primary Action)
+                // Run Button (Primary Action)
                 let (run_bg, run_fg, run_stroke) = if can_run {
                     (tokens.accent, Color32::WHITE, tokens.border)
                 } else {
                     (tokens.bg_control, tokens.text_muted, tokens.border)
                 };
 
+                let run_label = match opt_state.algorithm {
+                    OptimizationAlgorithm::Dls => format!("Run DLS ({})", opt_state.iterations),
+                    OptimizationAlgorithm::Annealing => format!("Run Anneal ({})", opt_state.iterations),
+                    OptimizationAlgorithm::GlobalSearch => format!("Run Global ({})", opt_state.global_trials),
+                    OptimizationAlgorithm::GlassSubstitution => "Run Glass Search".to_string(),
+                };
+
                 let run_btn = Button::new(
-                    RichText::new(format!("Run DLS ({})", opt_state.iterations))
+                    RichText::new(run_label)
                         .monospace()
                         .strong()
                         .size(11.0)
@@ -679,7 +1020,7 @@ pub fn render_optimization_panel(
                             opt_state.original_prescription = Some(prescription.clone());
                         }
                         opt_state.history.push((prescription.clone(), opt_state.last_summary.clone()));
-                        match execute_dls_cycle(opt_state.iterations, prescription, editor_state, opt_state, catalog) {
+                        match execute_optimization_cycle(opt_state.iterations, prescription, editor_state, opt_state, catalog) {
                             Ok(summary) => {
                                 opt_state.last_summary = Some(summary);
                                 opt_state.status_message = None;
@@ -722,7 +1063,7 @@ pub fn render_optimization_panel(
                             opt_state.original_prescription = Some(prescription.clone());
                         }
                         opt_state.history.push((prescription.clone(), opt_state.last_summary.clone()));
-                        match execute_dls_cycle(1, prescription, editor_state, opt_state, catalog) {
+                        match execute_optimization_cycle(1, prescription, editor_state, opt_state, catalog) {
                             Ok(summary) => {
                                 opt_state.last_summary = Some(summary);
                                 opt_state.status_message = None;
@@ -892,6 +1233,9 @@ mod tests {
         assert_eq!(state.iterations, 10);
         assert!(state.min_rms_spot);
         assert!(state.target_efl_enabled);
+        assert!(state.min_center_thickness_enabled);
+        assert!(state.min_edge_thickness_enabled);
+        assert_eq!(state.algorithm, OptimizationAlgorithm::Dls);
     }
 
     #[test]
@@ -900,9 +1244,10 @@ mod tests {
         let mut editor_state = LensEditorState::default();
         editor_state.variable_radii.insert(0);
         editor_state.variable_thicknesses.insert(0);
+        editor_state.variable_conics.insert(0);
 
         let vars = build_variable_set(&editor_state, &presc);
-        assert_eq!(vars.num_active(), 2);
+        assert_eq!(vars.num_active(), 3);
     }
 
     #[test]
@@ -911,10 +1256,18 @@ mod tests {
         let mut opt_state = OptimizationModalState::default();
         opt_state.min_rms_spot = true;
         opt_state.target_efl_enabled = true;
+        opt_state.min_center_thickness_enabled = true;
+        opt_state.min_edge_thickness_enabled = true;
 
         let mf = build_merit_function(&presc, &opt_state);
-        // 1 RMS spot operand for field 0.0 + 1 Target EFL operand
-        assert_eq!(mf.len(), 2);
+        // 1 RMS spot operand for field 0.0 + 1 Target EFL operand + 1 MNCA (surface 0 glass) + 1 ETVA (surface 0 glass)
+        assert_eq!(mf.len(), 4);
+
+        // Disable thickness constraints to verify clean filtering
+        opt_state.min_center_thickness_enabled = false;
+        opt_state.min_edge_thickness_enabled = false;
+        let mf2 = build_merit_function(&presc, &opt_state);
+        assert_eq!(mf2.len(), 2);
     }
 
     #[test]
