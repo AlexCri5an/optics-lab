@@ -41,6 +41,8 @@ pub enum TopBarAction {
     LoadDoubleGauss,
     /// Load preset: Plano-Convex Singlet.
     LoadPlanoConvex,
+    /// Load preset: Aperture Shapes & Obscuration Demo.
+    LoadApertureDemo,
     /// Trigger raytracing simulation.
     RunRaytrace,
     /// Undo last edit.
@@ -223,6 +225,10 @@ pub fn render_topbar(
                         }
                         if ui.button("Plano-Convex Singlet").clicked() {
                             triggered_action = Some(TopBarAction::LoadPlanoConvex);
+                            ui.close();
+                        }
+                        if ui.button("Aperture Shapes Demo").clicked() {
+                            triggered_action = Some(TopBarAction::LoadApertureDemo);
                             ui.close();
                         }
                     });

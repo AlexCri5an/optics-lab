@@ -958,6 +958,29 @@ impl OpticsWorkbenchApp {
                     );
                 }
             }
+            TopBarAction::LoadApertureDemo => {
+                if let Ok(rx) = optics_zemax::presets::aperture_shapes_demo() {
+                    self.prescription = rx;
+                    self.current_file_path = None;
+                    self.is_dirty = false;
+                    self.topbar_state.current_file_name = "aperture_shapes_demo.zmx".to_string();
+                    self.topbar_state.is_dirty = false;
+                    self.undo_stack.clear();
+                    self.redo_stack.clear();
+                    self.lens_editor_state.clear_all_variables();
+                    self.optimization_state.reset_history();
+                    self.lens_editor_state.selected_surface = Some(3);
+                    self.analysis_state.selected_field_deg = 0.0;
+                    self.viewport_state.initialized = false;
+                    self.last_action_msg =
+                        "Loaded preset: Aperture Shapes & Obscuration Demo (Spaced Optical Train).".to_string();
+                    self.status_text = format!(
+                        "Surfaces: {} | EPD: {:.1} mm | Aperture Shapes Demo",
+                        self.prescription.surfaces.len(),
+                        self.prescription.entrance_pupil_diameter_mm
+                    );
+                }
+            }
             TopBarAction::Undo => {
                 if let Some(prev) = self.undo_stack.pop() {
                     let current_snapshot = AppUndoSnapshot {
