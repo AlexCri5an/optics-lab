@@ -398,14 +398,16 @@ impl OpticalPrescription {
             )?
             .with_vertex_z(current_z);
 
-            let asphere = if !surf.asphere_coefficients.is_empty()
+            let c = if surf.radius_mm.is_infinite() || surf.radius_mm.abs() < 1e-15 {
+                0.0
+            } else {
+                1.0 / surf.radius_mm
+            };
+
+            let asphere = if surf.profile.is_none()
+                && !surf.asphere_coefficients.is_empty()
                 && surf.asphere_coefficients.iter().any(|&c| c.abs() > 1e-30)
             {
-                let c = if surf.radius_mm.is_infinite() || surf.radius_mm.abs() < 1e-15 {
-                    0.0
-                } else {
-                    1.0 / surf.radius_mm
-                };
                 EvenAsphere::new(
                     c,
                     surf.conic_constant,
@@ -416,6 +418,37 @@ impl OpticalPrescription {
             } else {
                 None
             };
+
+            let resolved_profile = surf.profile.as_ref().map(|p| match p {
+                SurfaceProfile::ForbesQcon(q) => {
+                    let mut q = q.clone();
+                    q.curvature = c;
+                    q.conic_constant = surf.conic_constant;
+                    if q.r_max_mm <= 0.0 {
+                        q.r_max_mm = effective_semi_diam;
+                    }
+                    SurfaceProfile::ForbesQcon(q)
+                }
+                SurfaceProfile::ForbesQbfs(q) => {
+                    let mut q = q.clone();
+                    q.curvature = c;
+                    if q.r_max_mm <= 0.0 {
+                        q.r_max_mm = effective_semi_diam;
+                    }
+                    SurfaceProfile::ForbesQbfs(q)
+                }
+                SurfaceProfile::Zernike(z) => {
+                    let mut z = z.clone();
+                    z.curvature = c;
+                    z.conic_constant = surf.conic_constant;
+                    if z.norm_radius_mm <= 0.0 {
+                        z.norm_radius_mm = effective_semi_diam;
+                    }
+                    z.semi_diameter_mm = effective_semi_diam;
+                    SurfaceProfile::Zernike(z)
+                }
+                other => other.clone(),
+            });
 
             let grin_profile = if let Some(grin) = &surf.grin_profile {
                 Some(grin.clone())
@@ -452,7 +485,7 @@ impl OpticalPrescription {
                 surface_index: surf.surface_index,
                 conic,
                 asphere,
-                profile: surf.profile.clone(),
+                profile: resolved_profile,
                 coordinate_break: surf.coordinate_break.clone(),
                 global_transform,
                 grin_profile,
@@ -845,10 +878,10 @@ pub fn trace_sequential(
         // Transform ray to local frame where surface vertex is at z = 0
         let local_ray = trans.to_local_ray(&current_ray)?;
 
-        // Intersect local ray with conic, aspheric, or advanced profile
-        let local_hit = if let Some(asph) = &surf.asphere {
-            let (t, pt) = asph.intersect_ray(&local_ray, 0.0)?;
-            let normal = asph.normal(pt.x, pt.y)?;
+        // Intersect local ray with advanced profile, aspheric, or conic
+        let local_hit = if let Some(profile) = &surf.profile {
+            let (t, pt) = profile.intersect_ray(&local_ray, 0.0)?;
+            let normal = profile.normal(pt.x, pt.y)?;
             let is_front_face = local_ray.direction.dot(&normal) < 0.0;
             HitRecord {
                 t,
@@ -857,9 +890,9 @@ pub fn trace_sequential(
                 is_front_face,
                 surface_index: surf.surface_index,
             }
-        } else if let Some(profile) = &surf.profile {
-            let (t, pt) = profile.intersect_ray(&local_ray, 0.0)?;
-            let normal = profile.normal(pt.x, pt.y)?;
+        } else if let Some(asph) = &surf.asphere {
+            let (t, pt) = asph.intersect_ray(&local_ray, 0.0)?;
+            let normal = asph.normal(pt.x, pt.y)?;
             let is_front_face = local_ray.direction.dot(&normal) < 0.0;
             HitRecord {
                 t,
@@ -2803,5 +2836,164 @@ mod tests {
         assert!(t_bbar > 0.96, "BBAR triplet throughput should exceed 96%, got {:.3}", t_bbar);
         // Ideal AR => 1.0
         assert!((t_ideal - 1.0).abs() < 1e-6, "Ideal AR throughput should be 1.0, got {:.6}", t_ideal);
+    }
+
+    #[test]
+    fn test_sequential_trace_forbes_qcon_singlet() {
+        use crate::surface::ForbesQconSurface;
+        let cat = |_: &str| -> Result<Arc<dyn RefractiveIndex + Send + Sync>, OpticsError> {
+            Ok(Arc::new(crate::geometry::ConstantIndex(1.5168)) as Arc<dyn RefractiveIndex + Send + Sync>)
+        };
+        // Singlet with Forbes Q-con on front surface
+        let qcon = ForbesQconSurface::new(
+            1.0 / 50.0,
+            -0.5,
+            12.0,
+            vec![1e-3, -2e-4, 5e-5],
+        ).unwrap();
+
+        let prescription = OpticalPrescription {
+            name: "Forbes Q-con Singlet".to_string(),
+            entrance_pupil_diameter_mm: 10.0,
+            field_angles_deg: vec![0.0],
+            wavelengths_nm: vec![587.56],
+            primary_wavelength_index: 0,
+            surfaces: vec![
+                OpticalSurface {
+                    surface_index: 0,
+                    radius_mm: 50.0,
+                    conic_constant: -0.5,
+                    thickness_mm: 5.0,
+                    semi_diameter_mm: 12.0,
+                    material_name: "N-BK7".to_string(),
+                    is_stop: true,
+                    asphere_coefficients: Vec::new(),
+                    coordinate_break: None,
+                    grin_profile: None,
+                    profile: Some(SurfaceProfile::ForbesQcon(qcon)),
+                    aperture: None,
+                    coating: None,
+                },
+                OpticalSurface {
+                    surface_index: 1,
+                    radius_mm: -100.0,
+                    conic_constant: 0.0,
+                    thickness_mm: 45.0,
+                    semi_diameter_mm: 12.0,
+                    material_name: "AIR".to_string(),
+                    is_stop: false,
+                    asphere_coefficients: Vec::new(),
+                    coordinate_break: None,
+                    grin_profile: None,
+                    profile: None,
+                    aperture: None,
+                    coating: None,
+                },
+                OpticalSurface {
+                    surface_index: 2,
+                    radius_mm: f64::INFINITY,
+                    conic_constant: 0.0,
+                    thickness_mm: 0.0,
+                    semi_diameter_mm: 15.0,
+                    material_name: "AIR".to_string(),
+                    is_stop: false,
+                    asphere_coefficients: Vec::new(),
+                    coordinate_break: None,
+                    grin_profile: None,
+                    profile: None,
+                    aperture: None,
+                    coating: None,
+                },
+            ],
+        };
+
+        let resolved = prescription.resolve(&cat).unwrap();
+
+        // Trace marginal ray at y = 4.0 mm
+        let ray = Ray::new(
+            Vec3::new(0.0, 4.0, -10.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            587.56,
+            1.0,
+        ).unwrap();
+
+        let path = trace_sequential(&resolved, &ray).unwrap();
+        assert_eq!(path.hits.len(), 3);
+        // Verify intersection point on Forbes surface has non-zero sag
+        let hit0 = path.hits[0].point;
+        assert!(hit0.z > 0.0, "Forbes Qcon front sag should be > 0, got {}", hit0.z);
+        // Verify beam bends toward optical axis after refracting through positive singlet
+        let last_hit = path.hits[2].point;
+        assert!(last_hit.y < 4.0, "Ray should focus toward axis, got y = {}", last_hit.y);
+    }
+
+    #[test]
+    fn test_sequential_trace_zernike_sag_defocus() {
+        use crate::surface::ZernikeSagSurface;
+        let cat = |_: &str| -> Result<Arc<dyn RefractiveIndex + Send + Sync>, OpticsError> {
+            Ok(Arc::new(crate::geometry::ConstantIndex(1.5168)) as Arc<dyn RefractiveIndex + Send + Sync>)
+        };
+        // Flat surface with Zernike Defocus term (Z4)
+        let zernike = ZernikeSagSurface::new(
+            0.0,
+            0.0,
+            10.0,
+            vec![(4, 0.005)], // Positive defocus power
+            10.0,
+        ).unwrap();
+
+        let prescription = OpticalPrescription {
+            name: "Zernike Defocus Plate".to_string(),
+            entrance_pupil_diameter_mm: 10.0,
+            field_angles_deg: vec![0.0],
+            wavelengths_nm: vec![587.56],
+            primary_wavelength_index: 0,
+            surfaces: vec![
+                OpticalSurface {
+                    surface_index: 0,
+                    radius_mm: f64::INFINITY,
+                    conic_constant: 0.0,
+                    thickness_mm: 5.0,
+                    semi_diameter_mm: 10.0,
+                    material_name: "N-BK7".to_string(),
+                    is_stop: true,
+                    asphere_coefficients: Vec::new(),
+                    coordinate_break: None,
+                    grin_profile: None,
+                    profile: Some(SurfaceProfile::Zernike(zernike)),
+                    aperture: None,
+                    coating: None,
+                },
+                OpticalSurface {
+                    surface_index: 1,
+                    radius_mm: f64::INFINITY,
+                    conic_constant: 0.0,
+                    thickness_mm: 30.0,
+                    semi_diameter_mm: 10.0,
+                    material_name: "AIR".to_string(),
+                    is_stop: false,
+                    asphere_coefficients: Vec::new(),
+                    coordinate_break: None,
+                    grin_profile: None,
+                    profile: None,
+                    aperture: None,
+                    coating: None,
+                },
+            ],
+        };
+
+        let resolved = prescription.resolve(&cat).unwrap();
+        let ray = Ray::new(
+            Vec3::new(0.0, 3.0, -5.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            587.56,
+            1.0,
+        ).unwrap();
+
+        let path = trace_sequential(&resolved, &ray).unwrap();
+        assert_eq!(path.hits.len(), 2);
+        // Normal should deviate from (0, 0, -1) due to Z4 curvature
+        let norm0 = path.hits[0].normal;
+        assert!(norm0.y.abs() > 1e-6, "Zernike surface normal should have radial component, got {:?}", norm0);
     }
 }

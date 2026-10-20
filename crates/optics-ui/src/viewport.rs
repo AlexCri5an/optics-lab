@@ -1001,7 +1001,7 @@ fn get_refractive_index(glass: &str, wav_nm: f64) -> f64 {
     }
 }
 
-/// Samples 2D points (z, y) along a spherical or planar surface arc.
+/// Samples 2D points (z, y) along a spherical, aspheric, freeform, or planar surface arc.
 fn sample_surface_arc(surf: &OpticalSurface, z_vertex: f64, num_samples: usize) -> Vec<(f64, f64)> {
     let mut points = Vec::with_capacity(num_samples + 1);
     let semi_d = surf.semi_diameter_mm.max(0.1);
@@ -1011,19 +1011,36 @@ fn sample_surface_arc(surf: &OpticalSurface, z_vertex: f64, num_samples: usize) 
         let t = k as f64 / num_samples as f64;
         let y = -semi_d + 2.0 * semi_d * t; // from -semi_d to +semi_d
 
-        let z = if is_flat {
-            z_vertex
+        let sag = if let Some(profile) = &surf.profile {
+            profile.sag(0.0, y).unwrap_or(0.0)
+        } else if !surf.asphere_coefficients.is_empty() {
+            let r_abs = y.abs();
+            let c = if is_flat { 0.0 } else { 1.0 / surf.radius_mm };
+            let conic_sag = if c.abs() < 1e-15 {
+                0.0
+            } else {
+                let s = (1.0 - (1.0 + surf.conic_constant) * c * c * y * y).max(0.0).sqrt();
+                (c * y * y) / (1.0 + s)
+            };
+            let mut asph_sag = 0.0;
+            for (i, &a) in surf.asphere_coefficients.iter().enumerate() {
+                let power = 2 * (i + 2);
+                asph_sag += a * r_abs.powi(power as i32);
+            }
+            conic_sag + asph_sag
+        } else if is_flat {
+            0.0
         } else {
             let r = surf.radius_mm;
             let disc = r * r - y * y;
             if disc > 0.0 {
-                z_vertex + r - r.signum() * disc.sqrt()
+                r - r.signum() * disc.sqrt()
             } else {
-                z_vertex
+                0.0
             }
         };
 
-        points.push((z, y));
+        points.push((z_vertex + sag, y));
     }
 
     points

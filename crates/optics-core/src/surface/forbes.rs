@@ -50,6 +50,17 @@ pub struct ForbesQconSurface {
     pub coefficients: Vec<f64>,
 }
 
+impl Default for ForbesQconSurface {
+    fn default() -> Self {
+        Self {
+            curvature: 0.0,
+            conic_constant: 0.0,
+            r_max_mm: 10.0,
+            coefficients: vec![0.0, 0.0, 0.0],
+        }
+    }
+}
+
 impl ForbesQconSurface {
     /// Creates a new Forbes $Q_{\text{con}}$ asphere.
     ///
@@ -107,7 +118,7 @@ impl ForbesQconSurface {
         };
 
         let u = (r / self.r_max_mm).powi(2);
-        if u > 1.0 + 1e-12 {
+        if u > 1.25 {
             return Err(OpticsError::GeometryOutsideAperture);
         }
         let u_clamped = u.clamp(0.0, 1.0);
@@ -151,6 +162,16 @@ pub struct ForbesQbfsSurface {
     pub coefficients: Vec<f64>,
 }
 
+impl Default for ForbesQbfsSurface {
+    fn default() -> Self {
+        Self {
+            curvature: 0.0,
+            r_max_mm: 10.0,
+            coefficients: vec![0.0, 0.0, 0.0],
+        }
+    }
+}
+
 impl ForbesQbfsSurface {
     /// Creates a new Forbes $Q_{\text{bfs}}$ asphere.
     ///
@@ -189,13 +210,17 @@ impl ForbesQbfsSurface {
             (c * r2) / (1.0 + radicand.max(0.0).sqrt())
         };
 
-        let u = (r / self.r_max_mm).powi(2).clamp(0.0, 1.0);
+        let u = (r / self.r_max_mm).powi(2);
+        if u > 1.25 {
+            return Err(OpticsError::GeometryOutsideAperture);
+        }
+        let u_clamped = u.clamp(0.0, 1.0);
         let mut q_sum = 0.0;
         for (m, &b_m) in self.coefficients.iter().enumerate() {
-            q_sum += b_m * eval_q_con(m, u);
+            q_sum += b_m * eval_q_con(m, u_clamped);
         }
 
-        let departure = u * (1.0 - u) * q_sum;
+        let departure = u_clamped * (1.0 - u_clamped) * q_sum;
         Ok(sphere_sag + departure)
     }
 

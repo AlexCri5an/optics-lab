@@ -14,8 +14,8 @@ use egui::{
     ScrollArea, TextEdit, Ui, Vec2,
 };
 use optics_core::surface::{
-    Aperture, ApertureShape, BiconicSurface, CoordinateBreak, GrinProfile, SurfaceProfile,
-    ToroidalSurface,
+    Aperture, ApertureShape, BiconicSurface, CoordinateBreak, ForbesQbfsSurface, ForbesQconSurface,
+    GrinProfile, SurfaceProfile, ToroidalSurface, ZernikeSagSurface,
 };
 use optics_core::{OpticalPrescription, OpticalSurface, SurfaceCoating};
 use optics_glass::GlassCatalogDb;
@@ -568,7 +568,14 @@ fn render_surface_card(
         // -------------------------------------------------------------------
         let is_biconic = matches!(surf.profile, Some(SurfaceProfile::Biconic(_)));
         let is_toroidal = matches!(surf.profile, Some(SurfaceProfile::Toroidal(_)));
-        let has_asph = surf.profile.is_none() && (!surf.asphere_coefficients.is_empty() || surf.conic_constant.abs() > 1e-9);
+        let is_asph = match &surf.profile {
+            Some(SurfaceProfile::ForbesQcon(_))
+            | Some(SurfaceProfile::ForbesQbfs(_))
+            | Some(SurfaceProfile::Zernike(_))
+            | Some(SurfaceProfile::EvenAsphere(_)) => true,
+            None => !surf.asphere_coefficients.is_empty() || surf.conic_constant.abs() > 1e-9,
+            _ => false,
+        };
         let has_grin = surf.grin_profile.is_some();
         let has_cb = surf.coordinate_break.is_some();
 
@@ -583,16 +590,26 @@ fn render_surface_card(
             ui.spacing_mut().item_spacing = Vec2::new(pill_gap, 0.0);
 
             // 1. Asph (Exclusive Sag Profile)
-            let asph_resp = feature_pill(ui, "Asph", has_asph, tokens.plot_tangential, pill_w, tokens)
-                .on_hover_text("Even Asphere Profile\nConic constant (k) and polynomial even coefficients (A4, A6...)\nExclusive with Bic and Tor.");
+            let asph_resp = feature_pill(ui, "Asph", is_asph, tokens.plot_tangential, pill_w, tokens)
+                .on_hover_text("Asphere & Freeform Profile\nEven aspheric, Forbes Q-con/Q-bfs orthogonal polynomials, or Zernike sag\nExclusive with Bic and Tor.");
             if asph_resp.clicked() {
-                if has_asph {
+                if is_asph {
                     surf.conic_constant = 0.0;
                     surf.asphere_coefficients.clear();
+                    surf.profile = None;
                     ui.data_mut(|d| {
                         d.remove_temp::<String>(Id::new(("surf_conic_k", idx)));
                         d.remove_temp::<String>(Id::new(("surf_asph_a4", idx)));
                         d.remove_temp::<String>(Id::new(("surf_asph_a6", idx)));
+                        d.remove_temp::<String>(Id::new(("surf_forbes_rmax", idx)));
+                        d.remove_temp::<String>(Id::new(("surf_forbes_a0", idx)));
+                        d.remove_temp::<String>(Id::new(("surf_forbes_a1", idx)));
+                        d.remove_temp::<String>(Id::new(("surf_forbes_a2", idx)));
+                        d.remove_temp::<String>(Id::new(("surf_forbes_b0", idx)));
+                        d.remove_temp::<String>(Id::new(("surf_forbes_b1", idx)));
+                        d.remove_temp::<String>(Id::new(("surf_zern_norm_r", idx)));
+                        d.remove_temp::<String>(Id::new(("surf_zern_z4", idx)));
+                        d.remove_temp::<String>(Id::new(("surf_zern_z11", idx)));
                     });
                 } else {
                     surf.asphere_coefficients = vec![0.0, 0.0];
@@ -673,7 +690,7 @@ fn render_surface_card(
 
         // 1. Expanded Asphere Card
         let mut remove_asph = false;
-        if has_asph {
+        if is_asph {
             ui.add_space(4.0);
             Frame::NONE
                 .fill(tokens.bg_canvas)
@@ -682,7 +699,53 @@ fn render_surface_card(
                 .inner_margin(Margin::symmetric(10, 7))
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new("Even Asphere Profile").size(10.5).strong().color(tokens.plot_tangential));
+                        let current_asph_type_name = match &surf.profile {
+                            Some(SurfaceProfile::ForbesQcon(_)) => "Forbes Q-con",
+                            Some(SurfaceProfile::ForbesQbfs(_)) => "Forbes Q-bfs",
+                            Some(SurfaceProfile::Zernike(_)) => "Zernike Sag",
+                            _ => "Even Asphere",
+                        };
+
+                        egui::ComboBox::from_id_salt(("surf_asph_type_cb", idx))
+                            .selected_text(RichText::new(current_asph_type_name).size(10.5).strong().color(tokens.plot_tangential))
+                            .width(110.0)
+                            .show_ui(ui, |ui| {
+                                if ui.selectable_label(matches!(surf.profile, None | Some(SurfaceProfile::EvenAsphere(_))), "Even Asphere").clicked() {
+                                    surf.profile = None;
+                                    if surf.asphere_coefficients.is_empty() {
+                                        surf.asphere_coefficients = vec![0.0, 0.0];
+                                    }
+                                    modified = true;
+                                }
+                                if ui.selectable_label(matches!(surf.profile, Some(SurfaceProfile::ForbesQcon(_))), "Forbes Q-con").clicked() {
+                                    let c = if surf.radius_mm.is_infinite() || surf.radius_mm.abs() < 1e-15 { 0.0 } else { 1.0 / surf.radius_mm };
+                                    let r_max = surf.semi_diameter_mm.max(1.0);
+                                    surf.profile = Some(SurfaceProfile::ForbesQcon(
+                                        ForbesQconSurface::new(c, surf.conic_constant, r_max, vec![0.0, 0.0, 0.0]).unwrap_or_default(),
+                                    ));
+                                    surf.asphere_coefficients.clear();
+                                    modified = true;
+                                }
+                                if ui.selectable_label(matches!(surf.profile, Some(SurfaceProfile::ForbesQbfs(_))), "Forbes Q-bfs").clicked() {
+                                    let c = if surf.radius_mm.is_infinite() || surf.radius_mm.abs() < 1e-15 { 0.0 } else { 1.0 / surf.radius_mm };
+                                    let r_max = surf.semi_diameter_mm.max(1.0);
+                                    surf.profile = Some(SurfaceProfile::ForbesQbfs(
+                                        ForbesQbfsSurface::new(c, r_max, vec![0.0, 0.0, 0.0]).unwrap_or_default(),
+                                    ));
+                                    surf.asphere_coefficients.clear();
+                                    modified = true;
+                                }
+                                if ui.selectable_label(matches!(surf.profile, Some(SurfaceProfile::Zernike(_))), "Zernike Sag").clicked() {
+                                    let c = if surf.radius_mm.is_infinite() || surf.radius_mm.abs() < 1e-15 { 0.0 } else { 1.0 / surf.radius_mm };
+                                    let norm_r = surf.semi_diameter_mm.max(1.0);
+                                    surf.profile = Some(SurfaceProfile::Zernike(
+                                        ZernikeSagSurface::new(c, surf.conic_constant, norm_r, vec![(4, 0.0), (11, 0.0)], norm_r).unwrap_or_default(),
+                                    ));
+                                    surf.asphere_coefficients.clear();
+                                    modified = true;
+                                }
+                            });
+
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                             if lucide_small_icon_button(ui, LucideIcon::X, "Remove Asphere", tokens).clicked() {
                                 remove_asph = true;
@@ -691,35 +754,134 @@ fn render_surface_card(
                         });
                     });
                     ui.add_space(3.0);
-                    // Single row: Conic (k): [ ... ] A4: [ ... ] A6: [ ... ]
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing = Vec2::new(5.0, 0.0);
-                        ui.label(RichText::new("Conic (k):").size(10.0).color(tokens.text_muted));
-                        if float_input(ui, Id::new(("surf_conic_k", idx)), &mut surf.conic_constant, 40.0) {
-                            modified = true;
+
+                    match &mut surf.profile {
+                        Some(SurfaceProfile::ForbesQcon(qcon)) => {
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing = Vec2::new(5.0, 0.0);
+                                ui.label(RichText::new("rmax:").size(10.0).color(tokens.text_muted));
+                                if float_input(ui, Id::new(("surf_forbes_rmax", idx)), &mut qcon.r_max_mm, 42.0) {
+                                    modified = true;
+                                }
+                                ui.label(RichText::new("k:").size(10.0).color(tokens.text_muted));
+                                if float_input(ui, Id::new(("surf_conic_k", idx)), &mut surf.conic_constant, 40.0) {
+                                    qcon.conic_constant = surf.conic_constant;
+                                    modified = true;
+                                }
+                                ui.label(RichText::new("a0:").size(10.0).color(tokens.text_muted));
+                                if !qcon.coefficients.is_empty() && float_input(ui, Id::new(("surf_forbes_a0", idx)), &mut qcon.coefficients[0], 44.0) {
+                                    modified = true;
+                                }
+                            });
+                            ui.add_space(2.0);
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing = Vec2::new(5.0, 0.0);
+                                if qcon.coefficients.len() > 1 {
+                                    ui.label(RichText::new("a1:").size(10.0).color(tokens.text_muted));
+                                    if float_input(ui, Id::new(("surf_forbes_a1", idx)), &mut qcon.coefficients[1], 44.0) {
+                                        modified = true;
+                                    }
+                                }
+                                if qcon.coefficients.len() > 2 {
+                                    ui.label(RichText::new("a2:").size(10.0).color(tokens.text_muted));
+                                    if float_input(ui, Id::new(("surf_forbes_a2", idx)), &mut qcon.coefficients[2], 44.0) {
+                                        modified = true;
+                                    }
+                                }
+                            });
                         }
-                        if !surf.asphere_coefficients.is_empty() {
-                            ui.label(RichText::new("A4:").size(10.0).color(tokens.text_muted));
-                            if float_input(ui, Id::new(("surf_asph_a4", idx)), &mut surf.asphere_coefficients[0], 48.0) {
-                                modified = true;
-                            }
+                        Some(SurfaceProfile::ForbesQbfs(qbfs)) => {
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing = Vec2::new(5.0, 0.0);
+                                ui.label(RichText::new("rmax:").size(10.0).color(tokens.text_muted));
+                                if float_input(ui, Id::new(("surf_forbes_rmax", idx)), &mut qbfs.r_max_mm, 42.0) {
+                                    modified = true;
+                                }
+                                ui.label(RichText::new("b0:").size(10.0).color(tokens.text_muted));
+                                if !qbfs.coefficients.is_empty() && float_input(ui, Id::new(("surf_forbes_b0", idx)), &mut qbfs.coefficients[0], 44.0) {
+                                    modified = true;
+                                }
+                                if qbfs.coefficients.len() > 1 {
+                                    ui.label(RichText::new("b1:").size(10.0).color(tokens.text_muted));
+                                    if float_input(ui, Id::new(("surf_forbes_b1", idx)), &mut qbfs.coefficients[1], 44.0) {
+                                        modified = true;
+                                    }
+                                }
+                            });
                         }
-                        if surf.asphere_coefficients.len() > 1 {
-                            ui.label(RichText::new("A6:").size(10.0).color(tokens.text_muted));
-                            if float_input(ui, Id::new(("surf_asph_a6", idx)), &mut surf.asphere_coefficients[1], 48.0) {
-                                modified = true;
-                            }
+                        Some(SurfaceProfile::Zernike(zern)) => {
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing = Vec2::new(5.0, 0.0);
+                                ui.label(RichText::new("Norm R:").size(10.0).color(tokens.text_muted));
+                                if float_input(ui, Id::new(("surf_zern_norm_r", idx)), &mut zern.norm_radius_mm, 42.0) {
+                                    zern.semi_diameter_mm = zern.norm_radius_mm;
+                                    modified = true;
+                                }
+                                ui.label(RichText::new("k:").size(10.0).color(tokens.text_muted));
+                                if float_input(ui, Id::new(("surf_conic_k", idx)), &mut surf.conic_constant, 40.0) {
+                                    zern.conic_constant = surf.conic_constant;
+                                    modified = true;
+                                }
+                            });
+                            ui.add_space(2.0);
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing = Vec2::new(5.0, 0.0);
+                                if !zern.coefficients.is_empty() {
+                                    ui.label(RichText::new("Z4 (Def):").size(10.0).color(tokens.text_muted));
+                                    if float_input(ui, Id::new(("surf_zern_z4", idx)), &mut zern.coefficients[0].1, 46.0) {
+                                        modified = true;
+                                    }
+                                }
+                                if zern.coefficients.len() > 1 {
+                                    ui.label(RichText::new("Z11 (Sph):").size(10.0).color(tokens.text_muted));
+                                    if float_input(ui, Id::new(("surf_zern_z11", idx)), &mut zern.coefficients[1].1, 46.0) {
+                                        modified = true;
+                                    }
+                                }
+                            });
                         }
-                    });
+                        _ => {
+                            // Classic Even Asphere
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing = Vec2::new(5.0, 0.0);
+                                ui.label(RichText::new("Conic (k):").size(10.0).color(tokens.text_muted));
+                                if float_input(ui, Id::new(("surf_conic_k", idx)), &mut surf.conic_constant, 40.0) {
+                                    modified = true;
+                                }
+                                if !surf.asphere_coefficients.is_empty() {
+                                    ui.label(RichText::new("A4:").size(10.0).color(tokens.text_muted));
+                                    if float_input(ui, Id::new(("surf_asph_a4", idx)), &mut surf.asphere_coefficients[0], 48.0) {
+                                        modified = true;
+                                    }
+                                }
+                                if surf.asphere_coefficients.len() > 1 {
+                                    ui.label(RichText::new("A6:").size(10.0).color(tokens.text_muted));
+                                    if float_input(ui, Id::new(("surf_asph_a6", idx)), &mut surf.asphere_coefficients[1], 48.0) {
+                                        modified = true;
+                                    }
+                                }
+                            });
+                        }
+                    }
                 });
         }
         if remove_asph {
             surf.conic_constant = 0.0;
             surf.asphere_coefficients.clear();
+            surf.profile = None;
             ui.data_mut(|d| {
                 d.remove_temp::<String>(Id::new(("surf_conic_k", idx)));
                 d.remove_temp::<String>(Id::new(("surf_asph_a4", idx)));
                 d.remove_temp::<String>(Id::new(("surf_asph_a6", idx)));
+                d.remove_temp::<String>(Id::new(("surf_forbes_rmax", idx)));
+                d.remove_temp::<String>(Id::new(("surf_forbes_a0", idx)));
+                d.remove_temp::<String>(Id::new(("surf_forbes_a1", idx)));
+                d.remove_temp::<String>(Id::new(("surf_forbes_a2", idx)));
+                d.remove_temp::<String>(Id::new(("surf_forbes_b0", idx)));
+                d.remove_temp::<String>(Id::new(("surf_forbes_b1", idx)));
+                d.remove_temp::<String>(Id::new(("surf_zern_norm_r", idx)));
+                d.remove_temp::<String>(Id::new(("surf_zern_z4", idx)));
+                d.remove_temp::<String>(Id::new(("surf_zern_z11", idx)));
             });
         }
 

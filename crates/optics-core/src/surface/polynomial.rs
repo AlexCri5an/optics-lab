@@ -36,6 +36,17 @@ pub struct XyPolynomialSurface {
     pub semi_diameter_mm: f64,
 }
 
+impl Default for XyPolynomialSurface {
+    fn default() -> Self {
+        Self {
+            curvature: 0.0,
+            conic_constant: 0.0,
+            terms: Vec::new(),
+            semi_diameter_mm: 10.0,
+        }
+    }
+}
+
 impl XyPolynomialSurface {
     /// Creates a new XY polynomial surface with validated parameters.
     ///
@@ -162,6 +173,18 @@ pub struct ZernikeSagSurface {
     pub coefficients: Vec<(usize, f64)>,
     /// Clear semi-diameter in millimeters.
     pub semi_diameter_mm: f64,
+}
+
+impl Default for ZernikeSagSurface {
+    fn default() -> Self {
+        Self {
+            curvature: 0.0,
+            conic_constant: 0.0,
+            norm_radius_mm: 10.0,
+            coefficients: vec![(4, 0.0), (11, 0.0)],
+            semi_diameter_mm: 10.0,
+        }
+    }
 }
 
 impl ZernikeSagSurface {
