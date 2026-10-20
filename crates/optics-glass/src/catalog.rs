@@ -121,6 +121,69 @@ impl GlassCatalogDb {
 
             let vd = raw.vd.unwrap_or(50.0);
 
+            // Populate standard internal transmittance tables (Schott / Ohara standards)
+            // for classic glasses where optical_glasses.json only has dispersion coefficients.
+            let (internal_transmittance, test_thickness_mm) = match raw.name.to_uppercase().as_str() {
+                "N-BK7" | "BK7" => (
+                    vec![
+                        (300.0, 0.050),
+                        (320.0, 0.400),
+                        (350.0, 0.720),
+                        (400.0, 0.992),
+                        (550.0, 0.998),
+                        (700.0, 0.998),
+                        (1060.0, 0.997),
+                        (1530.0, 0.995),
+                    ],
+                    10.0,
+                ),
+                "SF11" => (
+                    vec![
+                        (370.0, 0.080),
+                        (380.0, 0.220),
+                        (400.0, 0.530),
+                        (550.0, 0.996),
+                        (700.0, 0.997),
+                        (1060.0, 0.998),
+                    ],
+                    10.0,
+                ),
+                "N-SF11" => (
+                    vec![
+                        (370.0, 0.150),
+                        (380.0, 0.380),
+                        (400.0, 0.815),
+                        (550.0, 0.992),
+                        (700.0, 0.995),
+                        (1060.0, 0.997),
+                    ],
+                    10.0,
+                ),
+                "F2" | "N-F2" => (
+                    vec![
+                        (350.0, 0.250),
+                        (370.0, 0.750),
+                        (400.0, 0.994),
+                        (550.0, 0.999),
+                        (700.0, 0.999),
+                        (1060.0, 0.998),
+                    ],
+                    10.0,
+                ),
+                "LITHOSIL-Q" | "FUSED SILICA" | "SILICA" => (
+                    vec![
+                        (200.0, 0.920),
+                        (250.0, 0.985),
+                        (300.0, 0.995),
+                        (400.0, 0.998),
+                        (550.0, 0.999),
+                        (700.0, 0.999),
+                    ],
+                    10.0,
+                ),
+                _ => (Vec::new(), 10.0),
+            };
+
             let material = GlassMaterial {
                 name: raw.name.clone(),
                 catalog,
@@ -128,8 +191,8 @@ impl GlassCatalogDb {
                 vd,
                 dispersion,
                 thermal: None,
-                internal_transmittance: Vec::new(),
-                test_thickness_mm: 10.0,
+                internal_transmittance,
+                test_thickness_mm,
             };
 
             glasses_by_name.insert(raw.name.to_uppercase(), material);

@@ -399,7 +399,14 @@ impl GlassMaterial {
                 c: [0.0136068604, 0.0615960463, 121.922711],
             },
             thermal: None,
-            internal_transmittance: Vec::new(),
+            internal_transmittance: vec![
+                (370.0, 0.080),
+                (380.0, 0.220),
+                (400.0, 0.530),
+                (550.0, 0.996),
+                (700.0, 0.997),
+                (1060.0, 0.998),
+            ],
             test_thickness_mm: 10.0,
         }
     }
@@ -417,7 +424,14 @@ impl GlassMaterial {
                 c: [0.013188707, 0.0623068142, 155.23629],
             },
             thermal: None,
-            internal_transmittance: Vec::new(),
+            internal_transmittance: vec![
+                (370.0, 0.150),
+                (380.0, 0.380),
+                (400.0, 0.815),
+                (550.0, 0.992),
+                (700.0, 0.995),
+                (1060.0, 0.997),
+            ],
             test_thickness_mm: 10.0,
         }
     }
@@ -435,7 +449,14 @@ impl GlassMaterial {
                 c: [0.00997743871, 0.0470450767, 111.886764],
             },
             thermal: None,
-            internal_transmittance: Vec::new(),
+            internal_transmittance: vec![
+                (350.0, 0.250),
+                (370.0, 0.750),
+                (400.0, 0.994),
+                (550.0, 0.999),
+                (700.0, 0.999),
+                (1060.0, 0.998),
+            ],
             test_thickness_mm: 10.0,
         }
     }
@@ -453,7 +474,14 @@ impl GlassMaterial {
                 c: [0.00449192312, 0.0132812976, 95.8899878],
             },
             thermal: None,
-            internal_transmittance: Vec::new(),
+            internal_transmittance: vec![
+                (200.0, 0.920),
+                (250.0, 0.985),
+                (300.0, 0.995),
+                (400.0, 0.998),
+                (550.0, 0.999),
+                (700.0, 0.999),
+            ],
             test_thickness_mm: 10.0,
         }
     }
