@@ -33,7 +33,10 @@ pub mod thin_film;
 pub mod types;
 
 // Re-export primary types and functions at the crate root
-pub use aiming::{Conjugate, RayAimingMode, VignettingFactors, WavelengthSet, trace_aimed_ray};
+pub use aiming::{
+    Conjugate, PolarizedRayTraceResult, RayAimingMode, SurfacePolarizationRecord,
+    VignettingFactors, WavelengthSet, trace_aimed_ray, trace_polarized_ray,
+};
 pub use analysis::{
     FieldCurves, FieldPointAnalysis, FootprintDiagram, FootprintPoint, GhostAnalysis,
     GhostReflection, LongitudinalAberrationPoint, MtfCurve, MtfPoint, OpdFanData, OpdFanPoint,

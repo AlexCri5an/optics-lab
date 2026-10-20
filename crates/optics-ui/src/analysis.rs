@@ -37,6 +37,8 @@ pub enum AnalysisTab {
     MtfCurve,
     /// First-order Gaussian cardinal constants.
     ParaxialCardinal,
+    /// Polarization ray tracing, Stokes vector, DoP, and polarization ellipse.
+    Polarization,
 }
 
 /// State of the interactive optical analysis panel.
@@ -52,6 +54,8 @@ pub struct AnalysisPanelState {
     pub spot_zoom: f32,
     /// Whether to display the theoretical diffraction Airy disk circle.
     pub show_airy_disk: bool,
+    /// Input polarization state for polarization tracing: 0 = Unpolarized, 1 = Linear Horizontal (s), 2 = Linear Vertical (p), 3 = Linear 45°, 4 = Circular Right (RCP).
+    pub polarization_input_mode: usize,
 }
 
 impl Default for AnalysisPanelState {
@@ -62,6 +66,7 @@ impl Default for AnalysisPanelState {
             spot_rings: 5,
             spot_zoom: 3.0,
             show_airy_disk: true,
+            polarization_input_mode: 3, // Default Linear 45° to see s/p differential
         }
     }
 }
@@ -184,6 +189,9 @@ pub fn render_analysis_panel(
             AnalysisTab::ParaxialCardinal => {
                 render_cardinal_view(ui, paraxial.as_ref(), prescription, primary_wl, tokens);
             }
+            AnalysisTab::Polarization => {
+                render_polarization_view(ui, &resolved, prescription, primary_wl, state, tokens);
+            }
         });
 }
 
@@ -271,6 +279,7 @@ fn render_analysis_tabs(ui: &mut Ui, state: &mut AnalysisPanelState, tokens: &Op
         (AnalysisTab::SeidelAberrations, "Seidel", LucideIcon::Activity),
         (AnalysisTab::MtfCurve, "MTF", LucideIcon::SlidersHorizontal),
         (AnalysisTab::ParaxialCardinal, "Cardinal", LucideIcon::Maximize2),
+        (AnalysisTab::Polarization, "Polar", LucideIcon::Compass),
     ];
 
     let total_w = ui.available_width();
@@ -1168,6 +1177,247 @@ fn render_cardinal_view(
                     }
                 });
         });
+}
+
+/// Renders the complete Polarization Ray Tracing & Polarimetric Analysis view.
+fn render_polarization_view(
+    ui: &mut Ui,
+    resolved: &ResolvedPrescription,
+    prescription: &OpticalPrescription,
+    primary_wl: f64,
+    state: &mut AnalysisPanelState,
+    tokens: &OpticsTokens,
+) {
+    use optics_core::polarization::JonesVector;
+    use optics_core::aiming::trace_polarized_ray;
+    use optics_core::types::{Field, Pupil, Ray, Vec3, Wavelength};
+
+    ui.vertical(|ui| {
+        // -------------------------------------------------------------------
+        // 1. Polarization State Control Bar
+        // -------------------------------------------------------------------
+        Frame::NONE
+            .fill(tokens.bg_control)
+            .stroke(tokens.border)
+            .corner_radius(CornerRadius::ZERO)
+            .inner_margin(egui::Margin::symmetric(10, 8))
+            .show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = Vec2::new(6.0, 3.0);
+                    ui.label(RichText::new("Input Polarization:").strong().size(11.0).color(tokens.text_primary));
+
+                    let modes = [
+                        (1, "Linear Horizontal (s)"),
+                        (2, "Linear Vertical (p)"),
+                        (3, "Linear +45°"),
+                        (4, "Circular Right (RCP)"),
+                    ];
+
+                    for (m_idx, label) in modes {
+                        let selected = state.polarization_input_mode == m_idx;
+                        if ui.selectable_label(selected, label).clicked() {
+                            state.polarization_input_mode = m_idx;
+                        }
+                    }
+                });
+
+                ui.add_space(4.0);
+
+                // Field Selector
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
+                    ui.label(RichText::new("Field Angle:").size(10.5).color(tokens.text_muted));
+                    for &f in &prescription.field_angles_deg {
+                        let is_sel = (state.selected_field_deg - f).abs() < 1e-4;
+                        let lbl = if f == 0.0 { "0.0° (On-Axis)".to_string() } else { format!("{:.1}°", f) };
+                        if ui.selectable_label(is_sel, lbl).clicked() {
+                            state.selected_field_deg = f;
+                        }
+                    }
+                });
+            });
+
+        ui.add_space(8.0);
+
+        // -------------------------------------------------------------------
+        // 2. Perform Real Polarized Ray Trace
+        // -------------------------------------------------------------------
+        let input_jones = match state.polarization_input_mode {
+            1 => JonesVector::linear_horizontal(),
+            2 => JonesVector::linear_vertical(),
+            4 => JonesVector::circular_right(),
+            _ => JonesVector::linear_45(),
+        };
+
+        // Aim marginal / chief ray at selected field
+        let chief_ray_res = optics_core::aiming::trace_aimed_ray(
+            resolved,
+            Field::AngleDegrees { x: 0.0, y: state.selected_field_deg },
+            Pupil::new(0.0, 0.707).unwrap_or_else(|_| Pupil::new(0.0, 0.0).unwrap()),
+            Wavelength::from_nanometers(primary_wl).unwrap_or(Wavelength::D_LINE),
+            optics_core::RayAimingMode::RealIterative,
+        );
+
+        let chief_ray = match chief_ray_res {
+            Ok(r) => r,
+            Err(_) => {
+                // Fallback straight on-axis ray
+                Ray::new(
+                    Vec3::new(0.0, 0.0, -10.0),
+                    Vec3::new(0.0, 0.0, 1.0),
+                    primary_wl,
+                    1.0,
+                ).unwrap()
+            }
+        };
+
+        let pol_result = match trace_polarized_ray(resolved, &chief_ray, input_jones) {
+            Ok(res) => res,
+            Err(err) => {
+                ui.label(RichText::new(format!("Polarized trace error: {}", err)).color(tokens.warning));
+                return;
+            }
+        };
+
+        // -------------------------------------------------------------------
+        // 3. Polarimetric KPI Header Grid (Throughput, DoP, Orientation, Ellipticity)
+        // -------------------------------------------------------------------
+        Frame::NONE
+            .fill(tokens.bg_control)
+            .stroke(tokens.border)
+            .corner_radius(CornerRadius::ZERO)
+            .inner_margin(egui::Margin::symmetric(10, 8))
+            .show(ui, |ui| {
+                ui.columns(4, |cols| {
+                    cols[0].vertical_centered(|ui| {
+                        ui.label(RichText::new("Throughput").size(10.0).monospace().color(tokens.text_muted));
+                        ui.label(RichText::new(format!("{:.1}%", pol_result.throughput * 100.0)).size(13.0).strong().monospace().color(tokens.accent));
+                    });
+                    cols[1].vertical_centered(|ui| {
+                        ui.label(RichText::new("DoP").size(10.0).monospace().color(tokens.text_muted));
+                        ui.label(RichText::new(format!("{:.2}", pol_result.dop)).size(13.0).strong().monospace().color(tokens.text_primary));
+                    });
+                    cols[2].vertical_centered(|ui| {
+                        ui.label(RichText::new("Azimuth (ψ)").size(10.0).monospace().color(tokens.text_muted));
+                        ui.label(RichText::new(format!("{:+.1}°", pol_result.orientation_deg)).size(13.0).strong().monospace().color(tokens.text_primary));
+                    });
+                    cols[3].vertical_centered(|ui| {
+                        ui.label(RichText::new("Ellipticity (χ)").size(10.0).monospace().color(tokens.text_muted));
+                        ui.label(RichText::new(format!("{:+.1}°", pol_result.ellipticity_deg)).size(13.0).strong().monospace().color(tokens.text_primary));
+                    });
+                });
+            });
+
+        ui.add_space(8.0);
+
+        // -------------------------------------------------------------------
+        // 4. Polarization Ellipse 2D Diagram
+        // -------------------------------------------------------------------
+        Frame::NONE
+            .fill(tokens.bg_canvas)
+            .stroke(tokens.border)
+            .corner_radius(CornerRadius::ZERO)
+            .inner_margin(egui::Margin::symmetric(8, 8))
+            .show(ui, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.label(RichText::new("POLARIZATION ELLIPSE (TRANSVERSE ELECTRIC FIELD)").size(10.5).strong().monospace().color(tokens.text_primary));
+                });
+                ui.add_space(4.0);
+
+                let canvas_size = Vec2::new(ui.available_width(), 160.0);
+                let (response, painter) = ui.allocate_painter(canvas_size, egui::Sense::hover());
+                let center = response.rect.center();
+                let scale: f64 = 60.0;
+
+                // Axes
+                painter.line_segment(
+                    [Pos2::new((center.x as f64 - scale * 1.15) as f32, center.y), Pos2::new((center.x as f64 + scale * 1.15) as f32, center.y)],
+                    tokens.border,
+                );
+                painter.line_segment(
+                    [Pos2::new(center.x, (center.y as f64 - scale * 1.15) as f32), Pos2::new(center.x, (center.y as f64 + scale * 1.15) as f32)],
+                    tokens.border,
+                );
+
+                // Draw analytical electric field ellipse trajectory E(t) = [Re(Ex * e^iwt), Re(Ey * e^iwt)]
+                let steps = 72;
+                let mut pts = Vec::with_capacity(steps + 1);
+                let ex = pol_result.final_jones.ex;
+                let ey = pol_result.final_jones.ey;
+
+                let max_amp = (ex.norm_sq() + ey.norm_sq()).sqrt().max(1e-12);
+                let norm_scale = scale / max_amp.max(1.0);
+
+                for i in 0..=steps {
+                    let theta = (i as f64) * std::f64::consts::TAU / (steps as f64);
+                    let cos_t = theta.cos();
+                    let sin_t = theta.sin();
+                    let e_x = ex.re * cos_t - ex.im * sin_t;
+                    let e_y = ey.re * cos_t - ey.im * sin_t;
+
+                    let px = center.x as f64 + e_x * norm_scale;
+                    let py = center.y as f64 - e_y * norm_scale; // -y for screen coords
+                    pts.push(Pos2::new(px as f32, py as f32));
+                }
+
+                for window in pts.windows(2) {
+                    painter.line_segment([window[0], window[1]], Stroke::new(1.8, tokens.accent));
+                }
+
+                // Orientation axis line
+                let psi = pol_result.orientation_deg.to_radians();
+                let major_r = scale * 0.95;
+                let axis_p1 = Pos2::new(
+                    (center.x as f64 - major_r * psi.cos()) as f32,
+                    (center.y as f64 + major_r * psi.sin()) as f32,
+                );
+                let axis_p2 = Pos2::new(
+                    (center.x as f64 + major_r * psi.cos()) as f32,
+                    (center.y as f64 - major_r * psi.sin()) as f32,
+                );
+                painter.line_segment([axis_p1, axis_p2], Stroke::new(1.0, Color32::from_rgb(180, 140, 50)));
+            });
+
+        ui.add_space(8.0);
+
+        // -------------------------------------------------------------------
+        // 5. Surface-by-Surface Polarimetric Breakdown Table
+        // -------------------------------------------------------------------
+        Frame::NONE
+            .fill(tokens.bg_panel)
+            .stroke(tokens.border)
+            .corner_radius(CornerRadius::ZERO)
+            .inner_margin(egui::Margin::symmetric(10, 8))
+            .show(ui, |ui| {
+                ui.label(RichText::new("SURFACE POLARIZATION CONTRIBUTIONS").strong().size(11.0).color(tokens.text_primary));
+                ui.add_space(4.0);
+
+                Grid::new("polarization_table_grid")
+                    .num_columns(6)
+                    .striped(true)
+                    .spacing([12.0, 5.0])
+                    .show(ui, |ui| {
+                        // Headers
+                        ui.label(RichText::new("Surf").size(10.0).monospace().color(tokens.text_muted));
+                        ui.label(RichText::new("AOI (°)").size(10.0).monospace().color(tokens.text_muted));
+                        ui.label(RichText::new("Ts (%)").size(10.0).monospace().color(tokens.text_muted));
+                        ui.label(RichText::new("Tp (%)").size(10.0).monospace().color(tokens.text_muted));
+                        ui.label(RichText::new("Diattenuation").size(10.0).monospace().color(tokens.text_muted));
+                        ui.label(RichText::new("Phase Shift Δ").size(10.0).monospace().color(tokens.text_muted));
+                        ui.end_row();
+
+                        for rec in &pol_result.surface_records {
+                            ui.label(RichText::new(format!("S{}", rec.surface_index)).size(10.5).monospace().color(tokens.text_primary));
+                            ui.label(RichText::new(format!("{:.1}°", rec.incident_angle_deg)).size(10.5).monospace().color(tokens.text_primary));
+                            ui.label(RichText::new(format!("{:.1}%", rec.ts * 100.0)).size(10.5).monospace().color(tokens.accent));
+                            ui.label(RichText::new(format!("{:.1}%", rec.tp * 100.0)).size(10.5).monospace().color(tokens.text_primary));
+                            ui.label(RichText::new(format!("{:.3}", rec.diattenuation)).size(10.5).monospace().color(tokens.text_primary));
+                            ui.label(RichText::new(format!("{:+.1}°", rec.phase_shift_deg)).size(10.5).monospace().color(tokens.text_muted));
+                            ui.end_row();
+                        }
+                    });
+            });
+    });
 }
 
 #[cfg(test)]

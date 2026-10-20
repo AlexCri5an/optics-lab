@@ -81,6 +81,8 @@ pub struct LensEditorState {
     pub variable_thicknesses: BTreeSet<usize>,
     /// Currently open autocomplete surface index in the Lens Data Editor.
     pub autocomplete_surface: Option<usize>,
+    /// Ray aiming mode (Paraxial vs Real Iterative for wide-angle/fisheye lenses).
+    pub ray_aiming_mode: optics_core::RayAimingMode,
 }
 
 impl Default for LensEditorState {
@@ -97,6 +99,7 @@ impl Default for LensEditorState {
             variable_radii: BTreeSet::new(),
             variable_thicknesses: BTreeSet::new(),
             autocomplete_surface: None,
+            ray_aiming_mode: optics_core::RayAimingMode::Paraxial,
         }
     }
 }
@@ -1931,6 +1934,33 @@ fn render_specification_card(
                             prescription.field_angles_deg.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
                             modified = true;
                         }
+                    }
+                });
+
+                ui.add_space(5.0);
+
+                // --- Section C: Ray Aiming (Pupil Aiming) ---
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("RAY AIMING (PUPIL):").strong().size(10.5).color(tokens.text_primary));
+                });
+
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing = Vec2::new(4.0, 0.0);
+                    let is_paraxial = state.ray_aiming_mode == optics_core::RayAimingMode::Paraxial;
+                    let is_real = state.ray_aiming_mode == optics_core::RayAimingMode::RealIterative;
+
+                    if ui.selectable_label(is_paraxial, "Paraxial (Fast)")
+                        .on_hover_text("Linear entrance pupil projection.\nFastest evaluation; ideal for standard lenses with mild pupil aberration.")
+                        .clicked()
+                    {
+                        state.ray_aiming_mode = optics_core::RayAimingMode::Paraxial;
+                    }
+
+                    if ui.selectable_label(is_real, "Real Iterative (Wide-Angle)")
+                        .on_hover_text("Damped Gauss-Newton Newton-Raphson iteration directly onto the physical aperture stop.\nAccurately handles pupil spherical aberration in fisheye and wide-angle lenses.")
+                        .clicked()
+                    {
+                        state.ray_aiming_mode = optics_core::RayAimingMode::RealIterative;
                     }
                 });
             }

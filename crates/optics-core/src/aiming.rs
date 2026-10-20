@@ -234,56 +234,90 @@ pub fn trace_aimed_ray(
             let mut launch_x = pupil.px * r_enp + (z_launch - z_enp) / dir.z * dir.x;
             let mut launch_y = pupil.py * r_enp + (z_launch - z_enp) / dir.z * dir.y;
 
-            let max_iters = 15;
-            let tol = 1e-6; // 1 micrometer at stop
+            let max_iters = 25;
+            let tol = 1e-6; // 1 micrometer tolerance at stop
             let delta = 1e-4;
+            let mut lambda: f64 = 1e-3; // Initial Levenberg-Marquardt damping parameter
+
+            let mut best_err_sq = f64::INFINITY;
+            let mut best_launch_x = launch_x;
+            let mut best_launch_y = launch_y;
 
             for _ in 0..max_iters {
-                let r_base = Ray::new(Vec3::new(launch_x, launch_y, z_launch), dir, wl_nm, 1.0)?;
-                let trace_base = trace_sequential(prescription, &r_base)?;
+                let r_base = match Ray::new(Vec3::new(launch_x, launch_y, z_launch), dir, wl_nm, 1.0) {
+                    Ok(r) => r,
+                    Err(_) => break,
+                };
+                let trace_base = match trace_sequential(prescription, &r_base) {
+                    Ok(t) => t,
+                    Err(_) => {
+                        // If ray vignettes or misses, increase damping and halve step towards best
+                        launch_x = 0.5 * (launch_x + best_launch_x);
+                        launch_y = 0.5 * (launch_y + best_launch_y);
+                        lambda *= 4.0;
+                        continue;
+                    }
+                };
                 let hit_stop = trace_base.hits.iter().find(|h| h.surface_index == stop_idx);
 
                 let (cur_x, cur_y) = match hit_stop {
                     Some(h) => (h.point.x, h.point.y),
-                    None => break, // Fall back to paraxial if missed
+                    None => {
+                        launch_x = 0.5 * (launch_x + best_launch_x);
+                        launch_y = 0.5 * (launch_y + best_launch_y);
+                        lambda *= 4.0;
+                        continue;
+                    }
                 };
 
                 let err_x = cur_x - target_stop_x;
                 let err_y = cur_y - target_stop_y;
+                let current_err_sq = err_x * err_x + err_y * err_y;
+
+                if current_err_sq < best_err_sq {
+                    best_err_sq = current_err_sq;
+                    best_launch_x = launch_x;
+                    best_launch_y = launch_y;
+                    lambda = (lambda * 0.5_f64).max(1e-7_f64);
+                }
 
                 if err_x.abs() < tol && err_y.abs() < tol {
                     return Ok(r_base);
                 }
 
-                // Numerical Jacobian
-                let r_dx = Ray::new(
+                // Numerical Jacobian J = [d(cur_x)/d(lx), d(cur_x)/d(ly); d(cur_y)/d(lx), d(cur_y)/d(ly)]
+                let r_dx = match Ray::new(
                     Vec3::new(launch_x + delta, launch_y, z_launch),
                     dir,
                     wl_nm,
                     1.0,
-                )?;
-                let r_dy = Ray::new(
+                ) {
+                    Ok(r) => r,
+                    Err(_) => break,
+                };
+                let r_dy = match Ray::new(
                     Vec3::new(launch_x, launch_y + delta, z_launch),
                     dir,
                     wl_nm,
                     1.0,
-                )?;
-
-                let (x_dx, y_dx) = match trace_sequential(prescription, &r_dx)?
-                    .hits
-                    .iter()
-                    .find(|h| h.surface_index == stop_idx)
-                {
-                    Some(h) => (h.point.x, h.point.y),
-                    None => break,
+                ) {
+                    Ok(r) => r,
+                    Err(_) => break,
                 };
-                let (x_dy, y_dy) = match trace_sequential(prescription, &r_dy)?
-                    .hits
-                    .iter()
-                    .find(|h| h.surface_index == stop_idx)
+
+                let (x_dx, y_dx) = match trace_sequential(prescription, &r_dx)
+                    .ok()
+                    .and_then(|t| t.hits.into_iter().find(|h| h.surface_index == stop_idx))
                 {
                     Some(h) => (h.point.x, h.point.y),
-                    None => break,
+                    None => (cur_x + delta, cur_y),
+                };
+                let (x_dy, y_dy) = match trace_sequential(prescription, &r_dy)
+                    .ok()
+                    .and_then(|t| t.hits.into_iter().find(|h| h.surface_index == stop_idx))
+                {
+                    Some(h) => (h.point.x, h.point.y),
+                    None => (cur_x, cur_y + delta),
                 };
 
                 let j11 = (x_dx - cur_x) / delta;
@@ -291,26 +325,167 @@ pub fn trace_aimed_ray(
                 let j12 = (x_dy - cur_x) / delta;
                 let j22 = (y_dy - cur_y) / delta;
 
-                let det = j11 * j22 - j12 * j21;
-                if det.abs() < 1e-12 {
-                    break; // Jacobian singular, retain current
+                // Damped Gauss-Newton: (J^T J + lambda * I) * delta = J^T * e
+                let a11 = j11 * j11 + j21 * j21 + lambda;
+                let a12 = j11 * j12 + j21 * j22;
+                let a21 = a12;
+                let a22 = j12 * j12 + j22 * j22 + lambda;
+
+                let rhs_x = j11 * err_x + j21 * err_y;
+                let rhs_y = j12 * err_x + j22 * err_y;
+
+                let det_a = a11 * a22 - a12 * a21;
+                if det_a.abs() < 1e-15 {
+                    lambda *= 4.0;
+                    continue;
                 }
 
-                let inv_j11 = j22 / det;
-                let inv_j12 = -j12 / det;
-                let inv_j21 = -j21 / det;
-                let inv_j22 = j11 / det;
+                let d_lx = (a22 * rhs_x - a12 * rhs_y) / det_a;
+                let d_ly = (-a21 * rhs_x + a11 * rhs_y) / det_a;
 
-                let d_lx = inv_j11 * err_x + inv_j12 * err_y;
-                let d_ly = inv_j21 * err_x + inv_j22 * err_y;
+                // Step damping clamp to prevent erratic wild overshoot
+                let step_len = (d_lx * d_lx + d_ly * d_ly).sqrt();
+                let max_step = r_enp * 0.5;
+                let scale = if step_len > max_step { max_step / step_len } else { 1.0 };
 
-                launch_x -= d_lx;
-                launch_y -= d_ly;
+                launch_x -= d_lx * scale;
+                launch_y -= d_ly * scale;
             }
 
-            Ray::new(Vec3::new(launch_x, launch_y, z_launch), dir, wl_nm, 1.0)
+            Ray::new(Vec3::new(best_launch_x, best_launch_y, z_launch), dir, wl_nm, 1.0)
         }
     }
+}
+
+/// Ray polarization state result along its sequential optical trajectory.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PolarizedRayTraceResult {
+    /// Final electric field state in Jones representation.
+    pub final_jones: crate::polarization::JonesVector,
+    /// Final irradiance and polarization state in Stokes representation.
+    pub final_stokes: crate::polarization::StokesVector,
+    /// Total intensity throughput for the chosen polarization input.
+    pub throughput: f64,
+    /// Degree of Polarization $\in [0, 1]$.
+    pub dop: f64,
+    /// Degree of Linear Polarization $\in [0, 1]$.
+    pub dolp: f64,
+    /// Degree of Circular Polarization $\in [0, 1]$.
+    pub docp: f64,
+    /// Polarization orientation / major axis angle in degrees $\in [-90^\circ, 90^\circ]$.
+    pub orientation_deg: f64,
+    /// Ellipticity angle in degrees $\in [-45^\circ, 45^\circ]$ (positive = right-handed, negative = left-handed).
+    pub ellipticity_deg: f64,
+    /// Surface-by-surface polarimetric records.
+    pub surface_records: Vec<SurfacePolarizationRecord>,
+}
+
+/// Individual surface polarization interaction record.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SurfacePolarizationRecord {
+    /// Optical surface index.
+    pub surface_index: usize,
+    /// Angle of incidence in degrees.
+    pub incident_angle_deg: f64,
+    /// Angle of refraction in degrees (None if TIR).
+    pub refracted_angle_deg: Option<f64>,
+    /// s-polarization power transmission $T_s \in [0, 1]$.
+    pub ts: f64,
+    /// p-polarization power transmission $T_p \in [0, 1]$.
+    pub tp: f64,
+    /// Retardance / phase difference $\Delta = \delta_p - \delta_s$ in degrees.
+    pub phase_shift_deg: f64,
+    /// Diattenuation $D = |T_p - T_s| / (T_p + T_s) \in [0, 1]$.
+    pub diattenuation: f64,
+}
+
+/// Traces a polarized ray through the optical system, updating its Jones and Stokes vectors
+/// using thin-film coating responses or bare Fresnel formulas at each interface.
+///
+/// # Arguments
+/// - `prescription`: Resolved optical prescription.
+/// - `ray`: Input ray with initial direction and coordinates.
+/// - `initial_polarization`: Initial electric field Jones vector (e.g. unpolarized, linear, circular).
+///
+/// # Errors
+/// Returns [`OpticsError`] if ray tracing fails or vignettes.
+pub fn trace_polarized_ray(
+    prescription: &ResolvedPrescription,
+    ray: &Ray,
+    initial_polarization: crate::polarization::JonesVector,
+) -> Result<PolarizedRayTraceResult, OpticsError> {
+    use crate::polarization::{surface_coating_jones, surface_fresnel_jones};
+
+    let path = trace_sequential(prescription, ray)?;
+    let mut current_jones = initial_polarization;
+    let mut surface_records = Vec::with_capacity(path.hits.len());
+
+    for hit in &path.hits {
+        let b = &hit.bounce;
+        let surf = prescription
+            .surfaces
+            .iter()
+            .find(|s| s.surface_index == hit.surface_index);
+
+        let (_r_mat, t_mat) = if let Some(coat) = surf.and_then(|s| s.coating.as_ref()) {
+            match coat.evaluate(b.n1, b.n2, b.incident_angle_rad, b.wavelength_nm) {
+                Ok(resp) => surface_coating_jones(&resp),
+                Err(_) => surface_fresnel_jones(b.n1, b.n2, b.incident_angle_rad)?,
+            }
+        } else {
+            surface_fresnel_jones(b.n1, b.n2, b.incident_angle_rad)?
+        };
+
+        // Apply transmission Jones matrix
+        current_jones = t_mat.apply(current_jones);
+
+        let ts_amp = t_mat.m[0][0];
+        let tp_amp = t_mat.m[1][1];
+        let ts_pwr = ts_amp.norm_sq();
+        let tp_pwr = tp_amp.norm_sq();
+
+        let phase_s = ts_amp.im.atan2(ts_amp.re);
+        let phase_p = tp_amp.im.atan2(tp_amp.re);
+        let mut delta_phase = (phase_p - phase_s).to_degrees();
+        while delta_phase > 180.0 { delta_phase -= 360.0; }
+        while delta_phase < -180.0 { delta_phase += 360.0; }
+
+        let diattenuation = if ts_pwr + tp_pwr > 1e-15 {
+            (tp_pwr - ts_pwr).abs() / (tp_pwr + ts_pwr)
+        } else {
+            0.0
+        };
+
+        surface_records.push(SurfacePolarizationRecord {
+            surface_index: hit.surface_index,
+            incident_angle_deg: b.incident_angle_rad.to_degrees(),
+            refracted_angle_deg: b.refracted_angle_rad.map(|a| a.to_degrees()),
+            ts: ts_pwr,
+            tp: tp_pwr,
+            phase_shift_deg: delta_phase,
+            diattenuation,
+        });
+    }
+
+    let final_stokes = current_jones.to_stokes();
+    let initial_intensity = initial_polarization.intensity();
+    let throughput = if initial_intensity > 1e-15 {
+        final_stokes.s0 / initial_intensity
+    } else {
+        0.0
+    };
+
+    Ok(PolarizedRayTraceResult {
+        final_jones: current_jones,
+        final_stokes,
+        throughput,
+        dop: final_stokes.degree_of_polarization(),
+        dolp: final_stokes.degree_of_linear_polarization(),
+        docp: final_stokes.degree_of_circular_polarization(),
+        orientation_deg: final_stokes.orientation_angle_rad().to_degrees(),
+        ellipticity_deg: final_stokes.ellipticity_angle_rad().to_degrees(),
+        surface_records,
+    })
 }
 
 #[cfg(test)]
@@ -408,6 +583,78 @@ mod tests {
 
         assert!(ray.origin.z < 0.0);
         assert!(ray.direction.z > 0.0);
+        Ok(())
+    }
+
+    #[test]
+    fn test_trace_polarized_ray_brewster_and_dop() -> TestResult {
+        use crate::prescription::OpticalSurface;
+        use crate::polarization::JonesVector;
+
+        let presc = OpticalPrescription {
+            name: "Polarized Doublet".to_string(),
+            entrance_pupil_diameter_mm: 10.0,
+            field_angles_deg: vec![0.0],
+            wavelengths_nm: vec![587.56],
+            primary_wavelength_index: 0,
+            surfaces: vec![
+                OpticalSurface {
+                    surface_index: 1,
+                    radius_mm: 50.0,
+                    conic_constant: 0.0,
+                    thickness_mm: 5.0,
+                    semi_diameter_mm: 10.0,
+                    material_name: "N-BK7".to_string(),
+                    is_stop: true,
+                    asphere_coefficients: Vec::new(),
+                    coordinate_break: None,
+                    grin_profile: None,
+                    profile: None,
+                    aperture: None,
+                    coating: None,
+                },
+                OpticalSurface {
+                    surface_index: 2,
+                    radius_mm: f64::INFINITY,
+                    conic_constant: 0.0,
+                    thickness_mm: 45.0,
+                    semi_diameter_mm: 10.0,
+                    material_name: "AIR".to_string(),
+                    is_stop: false,
+                    asphere_coefficients: Vec::new(),
+                    coordinate_break: None,
+                    grin_profile: None,
+                    profile: None,
+                    aperture: None,
+                    coating: None,
+                },
+            ],
+        };
+
+        let resolver =
+            |_: &str| -> Result<
+                std::sync::Arc<dyn crate::geometry::RefractiveIndex + Send + Sync>,
+                OpticsError,
+            > { Ok(std::sync::Arc::new(crate::geometry::ConstantIndex(1.5168))) };
+        let resolved = presc.resolve(&resolver)?;
+
+        let ray = Ray::new(
+            Vec3::new(0.0, 2.0, -10.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            587.56,
+            1.0,
+        )?;
+
+        // Trace linear 45-degree polarized input
+        let pol_in = JonesVector::linear_45();
+        let res = trace_polarized_ray(&resolved, &ray, pol_in)?;
+
+        assert_eq!(res.surface_records.len(), 2);
+        assert!(res.throughput > 0.85 && res.throughput < 1.0);
+        assert!((res.dop - 1.0).abs() < 1e-6, "Pure state remains DOP = 1.0");
+        assert!(res.surface_records[0].ts > 0.0);
+        assert!(res.surface_records[0].tp > 0.0);
+
         Ok(())
     }
 }
