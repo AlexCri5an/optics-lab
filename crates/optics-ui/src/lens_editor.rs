@@ -79,6 +79,8 @@ pub struct LensEditorState {
     pub variable_radii: BTreeSet<usize>,
     /// Surface indices whose axial thickness is marked as variable for optimization.
     pub variable_thicknesses: BTreeSet<usize>,
+    /// Surface indices whose conic constant (k) is marked as variable for optimization.
+    pub variable_conics: BTreeSet<usize>,
     /// Currently open autocomplete surface index in the Lens Data Editor.
     pub autocomplete_surface: Option<usize>,
     /// Ray aiming mode (Paraxial vs Real Iterative for wide-angle/fisheye lenses).
@@ -98,6 +100,7 @@ impl Default for LensEditorState {
             glass_search_query: String::new(),
             variable_radii: BTreeSet::new(),
             variable_thicknesses: BTreeSet::new(),
+            variable_conics: BTreeSet::new(),
             autocomplete_surface: None,
             ray_aiming_mode: optics_core::RayAimingMode::Paraxial,
         }
@@ -105,16 +108,17 @@ impl Default for LensEditorState {
 }
 
 impl LensEditorState {
-    /// Count of total active variables (radii + thicknesses).
+    /// Count of total active variables (radii + thicknesses + conics).
     #[must_use]
     pub fn total_variable_count(&self) -> usize {
-        self.variable_radii.len() + self.variable_thicknesses.len()
+        self.variable_radii.len() + self.variable_thicknesses.len() + self.variable_conics.len()
     }
 
     /// Clears all variable flags.
     pub fn clear_all_variables(&mut self) {
         self.variable_radii.clear();
         self.variable_thicknesses.clear();
+        self.variable_conics.clear();
     }
 }
 
@@ -190,6 +194,11 @@ pub fn render_lens_editor(
                     .iter()
                     .map(|&i| if i >= insert_at { i + 1 } else { i })
                     .collect();
+                state.variable_conics = state
+                    .variable_conics
+                    .iter()
+                    .map(|&i| if i >= insert_at { i + 1 } else { i })
+                    .collect();
                 state.selected_surface = None;
                 modified = true;
             }
@@ -208,7 +217,7 @@ pub fn render_lens_editor(
                             .strong()
                             .size(10.5)
                             .color(tokens.accent),
-                    ).on_hover_text(format!("Active optimization variables: {} radii, {} thicknesses", state.variable_radii.len(), state.variable_thicknesses.len()));
+                    ).on_hover_text(format!("Active optimization variables: {} radii, {} thicknesses, {} conics", state.variable_radii.len(), state.variable_thicknesses.len(), state.variable_conics.len()));
                     ui.separator();
                 }
 
@@ -270,6 +279,7 @@ pub fn render_lens_editor(
                         reindex_surfaces(prescription);
                         state.variable_radii.remove(&del_idx);
                         state.variable_thicknesses.remove(&del_idx);
+                        state.variable_conics.remove(&del_idx);
                         state.variable_radii = state
                             .variable_radii
                             .iter()
@@ -277,6 +287,11 @@ pub fn render_lens_editor(
                             .collect();
                         state.variable_thicknesses = state
                             .variable_thicknesses
+                            .iter()
+                            .map(|&i| if i > del_idx { i - 1 } else { i })
+                            .collect();
+                        state.variable_conics = state
+                            .variable_conics
                             .iter()
                             .map(|&i| if i > del_idx { i - 1 } else { i })
                             .collect();
@@ -766,6 +781,14 @@ fn render_surface_card(
                                 if float_input(ui, Id::new(("surf_forbes_rmax", idx)), &mut qcon.r_max_mm, 42.0) {
                                     modified = true;
                                 }
+                                let is_k_var = state.variable_conics.contains(&idx);
+                                if render_variable_badge(ui, is_k_var, "Conic", tokens) {
+                                    if is_k_var {
+                                        state.variable_conics.remove(&idx);
+                                    } else {
+                                        state.variable_conics.insert(idx);
+                                    }
+                                }
                                 ui.label(RichText::new("k:").size(10.0).color(tokens.text_muted));
                                 if float_input(ui, Id::new(("surf_conic_k", idx)), &mut surf.conic_constant, 40.0) {
                                     qcon.conic_constant = surf.conic_constant;
@@ -820,6 +843,14 @@ fn render_surface_card(
                                     zern.semi_diameter_mm = zern.norm_radius_mm;
                                     modified = true;
                                 }
+                                let is_k_var = state.variable_conics.contains(&idx);
+                                if render_variable_badge(ui, is_k_var, "Conic", tokens) {
+                                    if is_k_var {
+                                        state.variable_conics.remove(&idx);
+                                    } else {
+                                        state.variable_conics.insert(idx);
+                                    }
+                                }
                                 ui.label(RichText::new("k:").size(10.0).color(tokens.text_muted));
                                 if float_input(ui, Id::new(("surf_conic_k", idx)), &mut surf.conic_constant, 40.0) {
                                     zern.conic_constant = surf.conic_constant;
@@ -847,6 +878,14 @@ fn render_surface_card(
                             // Classic Even Asphere
                             ui.horizontal(|ui| {
                                 ui.spacing_mut().item_spacing = Vec2::new(5.0, 0.0);
+                                let is_k_var = state.variable_conics.contains(&idx);
+                                if render_variable_badge(ui, is_k_var, "Conic", tokens) {
+                                    if is_k_var {
+                                        state.variable_conics.remove(&idx);
+                                    } else {
+                                        state.variable_conics.insert(idx);
+                                    }
+                                }
                                 ui.label(RichText::new("Conic (k):").size(10.0).color(tokens.text_muted));
                                 if float_input(ui, Id::new(("surf_conic_k", idx)), &mut surf.conic_constant, 40.0) {
                                     modified = true;
@@ -872,6 +911,7 @@ fn render_surface_card(
             surf.conic_constant = 0.0;
             surf.asphere_coefficients.clear();
             surf.profile = None;
+            state.variable_conics.remove(&idx);
             ui.data_mut(|d| {
                 d.remove_temp::<String>(Id::new(("surf_conic_k", idx)));
                 d.remove_temp::<String>(Id::new(("surf_asph_a4", idx)));
