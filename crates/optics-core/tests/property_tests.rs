@@ -337,6 +337,7 @@ fn test_prop_lagrange_invariant_conservation() -> TestResult {
                     coordinate_break: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                 },
                 OpticalSurface {
                     surface_index: 1,
@@ -350,6 +351,7 @@ fn test_prop_lagrange_invariant_conservation() -> TestResult {
                     coordinate_break: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                 },
             ],
         };
@@ -433,6 +435,7 @@ fn test_prop_project_workspace_serialization_roundtrip() -> TestResult {
                 coordinate_break: None,
                 grin_profile: None,
                 profile: None,
+                aperture: None,
             });
         }
 

@@ -14,7 +14,8 @@ use egui::{
     ScrollArea, TextEdit, Ui, Vec2,
 };
 use optics_core::surface::{
-    BiconicSurface, CoordinateBreak, GrinProfile, SurfaceProfile, ToroidalSurface,
+    Aperture, ApertureShape, BiconicSurface, CoordinateBreak, GrinProfile, SurfaceProfile,
+    ToroidalSurface,
 };
 use optics_core::{OpticalPrescription, OpticalSurface};
 use optics_glass::GlassCatalogDb;
@@ -165,6 +166,7 @@ pub fn render_lens_editor(
                     coordinate_break: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                 };
 
                 if insert_at < prescription.surfaces.len() {
@@ -452,6 +454,50 @@ fn render_surface_card(
                     modified = true;
                 }
                 ui.label(RichText::new("mm").size(10.0).color(tokens.text_muted));
+
+                // Aperture Shape selector
+                let shape_name = match &surf.aperture {
+                    None => "Circ",
+                    Some(ap) => match &ap.shape {
+                        ApertureShape::Circular { .. } => if ap.is_obscuration { "Obs-Circ" } else { "Circ" },
+                        ApertureShape::Rectangular { .. } => if ap.is_obscuration { "Obs-Rect" } else { "Rect" },
+                        ApertureShape::Elliptical { .. } => if ap.is_obscuration { "Obs-Elli" } else { "Elli" },
+                        ApertureShape::Annular { .. } => "Annular",
+                        ApertureShape::Polygonal { .. } => "Poly",
+                    },
+                };
+                let has_custom_ap = surf.aperture.is_some();
+                egui::ComboBox::from_id_salt(("surf_ap_shape_cb", idx))
+                    .selected_text(
+                        RichText::new(shape_name)
+                            .size(10.0)
+                            .color(if has_custom_ap { tokens.plot_axial } else { tokens.text_muted })
+                    )
+                    .width(52.0)
+                    .show_ui(ui, |ui| {
+                        if ui.selectable_label(!has_custom_ap, "Circular (Standard)").clicked() {
+                            surf.aperture = None;
+                            modified = true;
+                        }
+                        let is_rect = matches!(surf.aperture.as_ref().map(|a| &a.shape), Some(ApertureShape::Rectangular { .. }));
+                        if ui.selectable_label(is_rect, "Rectangular").clicked() {
+                            let h = surf.semi_diameter_mm;
+                            surf.aperture = Some(Aperture::rectangular(h, h * 0.6));
+                            modified = true;
+                        }
+                        let is_elli = matches!(surf.aperture.as_ref().map(|a| &a.shape), Some(ApertureShape::Elliptical { .. }));
+                        if ui.selectable_label(is_elli, "Elliptical").clicked() {
+                            let h = surf.semi_diameter_mm;
+                            surf.aperture = Some(Aperture::elliptical(h, h * 0.6));
+                            modified = true;
+                        }
+                        let is_annular = matches!(surf.aperture.as_ref().map(|a| &a.shape), Some(ApertureShape::Annular { .. }));
+                        if ui.selectable_label(is_annular, "Annular (Obscuration)").clicked() {
+                            let h = surf.semi_diameter_mm;
+                            surf.aperture = Some(Aperture::annular(h * 0.3, h));
+                            modified = true;
+                        }
+                    });
             });
         });
 
@@ -861,6 +907,116 @@ fn render_surface_card(
         }
         if remove_grin {
             surf.grin_profile = None;
+        }
+
+        // 6. Expanded Custom Aperture Shape & Obscuration Card
+        let mut remove_aperture = false;
+        if let Some(ap) = &mut surf.aperture {
+            ui.add_space(4.0);
+            Frame::NONE
+                .fill(tokens.bg_canvas)
+                .stroke(egui::Stroke::new(1.0, tokens.plot_axial.gamma_multiply(0.45)))
+                .corner_radius(CornerRadius::same(5))
+                .inner_margin(Margin::symmetric(10, 7))
+                .show(ui, |ui| {
+                    let title = match &ap.shape {
+                        ApertureShape::Circular { .. } => "Circular Aperture Boundary",
+                        ApertureShape::Rectangular { .. } => "Rectangular Aperture Boundary",
+                        ApertureShape::Elliptical { .. } => "Elliptical Aperture Boundary",
+                        ApertureShape::Annular { .. } => "Annular Aperture (Central Obscuration)",
+                        ApertureShape::Polygonal { .. } => "Polygonal Aperture Boundary",
+                    };
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(title).size(10.5).strong().color(tokens.plot_axial));
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            if lucide_small_icon_button(ui, LucideIcon::X, "Reset to Standard Circular", tokens).clicked() {
+                                remove_aperture = true;
+                                modified = true;
+                            }
+                        });
+                    });
+                    ui.add_space(3.0);
+
+                    // Shape-specific dimension inputs
+                    match &mut ap.shape {
+                        ApertureShape::Rectangular { half_width_mm, half_height_mm } => {
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
+                                ui.label(RichText::new("Half-W (X):").size(10.0).color(tokens.text_muted));
+                                if float_input(ui, Id::new(("surf_ap_hw", idx)), half_width_mm, 42.0) {
+                                    modified = true;
+                                }
+                                ui.label(RichText::new("Half-H (Y):").size(10.0).color(tokens.text_muted));
+                                if float_input(ui, Id::new(("surf_ap_hh", idx)), half_height_mm, 42.0) {
+                                    modified = true;
+                                }
+                                ui.label(RichText::new("mm").size(10.0).color(tokens.text_muted));
+                            });
+                        }
+                        ApertureShape::Elliptical { semi_axis_x_mm, semi_axis_y_mm } => {
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
+                                ui.label(RichText::new("Semi-X:").size(10.0).color(tokens.text_muted));
+                                if float_input(ui, Id::new(("surf_ap_ax", idx)), semi_axis_x_mm, 42.0) {
+                                    modified = true;
+                                }
+                                ui.label(RichText::new("Semi-Y:").size(10.0).color(tokens.text_muted));
+                                if float_input(ui, Id::new(("surf_ap_ay", idx)), semi_axis_y_mm, 42.0) {
+                                    modified = true;
+                                }
+                                ui.label(RichText::new("mm").size(10.0).color(tokens.text_muted));
+                            });
+                        }
+                        ApertureShape::Annular { inner_radius_mm, outer_radius_mm } => {
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
+                                ui.label(RichText::new("Inner R:").size(10.0).color(tokens.text_muted));
+                                if float_input(ui, Id::new(("surf_ap_inr", idx)), inner_radius_mm, 42.0) {
+                                    modified = true;
+                                }
+                                ui.label(RichText::new("Outer R:").size(10.0).color(tokens.text_muted));
+                                if float_input(ui, Id::new(("surf_ap_outr", idx)), outer_radius_mm, 42.0) {
+                                    modified = true;
+                                }
+                                ui.label(RichText::new("mm").size(10.0).color(tokens.text_muted));
+                            });
+                        }
+                        ApertureShape::Circular { radius_mm } => {
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
+                                ui.label(RichText::new("Radius:").size(10.0).color(tokens.text_muted));
+                                if float_input(ui, Id::new(("surf_ap_cr", idx)), radius_mm, 46.0) {
+                                    modified = true;
+                                }
+                                ui.label(RichText::new("mm").size(10.0).color(tokens.text_muted));
+                            });
+                        }
+                        ApertureShape::Polygonal { vertices } => {
+                            ui.label(RichText::new(format!("Polygon with {} vertices", vertices.len())).size(10.0).color(tokens.text_muted));
+                        }
+                    }
+
+                    ui.add_space(2.0);
+                    // Decenter and Obscuration toggles
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
+                        ui.label(RichText::new("Decenter:").size(10.0).color(tokens.text_muted));
+                        ui.label(RichText::new("dx").size(10.0).color(tokens.text_muted));
+                        if float_input(ui, Id::new(("surf_ap_dx", idx)), &mut ap.decenter_x_mm, 36.0) {
+                            modified = true;
+                        }
+                        ui.label(RichText::new("dy").size(10.0).color(tokens.text_muted));
+                        if float_input(ui, Id::new(("surf_ap_dy", idx)), &mut ap.decenter_y_mm, 36.0) {
+                            modified = true;
+                        }
+                        if ui.checkbox(&mut ap.is_obscuration, RichText::new("Obscuration").size(10.0).color(tokens.text_primary)).on_hover_text("Baffle/Obscuration mode: blocks rays inside the boundary and transmits outside").changed() {
+                            modified = true;
+                        }
+                    });
+                });
+        }
+        if remove_aperture {
+            surf.aperture = None;
         }
     });
 

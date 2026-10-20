@@ -475,13 +475,36 @@ fn draw_prescription_elements(
             );
         } else if surf.is_stop {
             // Standard Optical CAD Aperture Stop: Physical Mechanical Diaphragm
-            // Outer blades mount to local lens barrel; center aperture (-semi_d .. +semi_d) is 100% OPEN!
+            // Outer blades mount to local lens barrel; center aperture is open according to physical aperture
             let outer_y = get_stop_outer_y(prescription, i);
-            let inner_y = surf.semi_diameter_mm.max(0.2);
+
+            let (top_clear_y, bot_clear_y) = if let Some(ap) = &surf.aperture {
+                match &ap.shape {
+                    optics_core::surface::ApertureShape::Rectangular { half_height_mm, .. } => {
+                        (ap.decenter_y_mm + half_height_mm, ap.decenter_y_mm - half_height_mm)
+                    }
+                    optics_core::surface::ApertureShape::Elliptical { semi_axis_y_mm, .. } => {
+                        (ap.decenter_y_mm + semi_axis_y_mm, ap.decenter_y_mm - semi_axis_y_mm)
+                    }
+                    optics_core::surface::ApertureShape::Annular { outer_radius_mm, .. } => {
+                        (ap.decenter_y_mm + outer_radius_mm, ap.decenter_y_mm - outer_radius_mm)
+                    }
+                    optics_core::surface::ApertureShape::Circular { radius_mm } => {
+                        (ap.decenter_y_mm + radius_mm, ap.decenter_y_mm - radius_mm)
+                    }
+                    optics_core::surface::ApertureShape::Polygonal { .. } => {
+                        let r = surf.semi_diameter_mm.max(0.2);
+                        (r, -r)
+                    }
+                }
+            } else {
+                let r = surf.semi_diameter_mm.max(0.2);
+                (r, -r)
+            };
 
             let top_outer = to_screen(z_vert, outer_y);
-            let top_inner = to_screen(z_vert, inner_y);
-            let bot_inner = to_screen(z_vert, -inner_y);
+            let top_inner = to_screen(z_vert, top_clear_y);
+            let bot_inner = to_screen(z_vert, bot_clear_y);
             let bot_outer = to_screen(z_vert, -outer_y);
 
             let stop_stroke = Stroke::new(2.2, tokens.warning);
@@ -515,6 +538,28 @@ fn draw_prescription_elements(
                 [Pos2::new(bot_outer.x - 4.0, bot_outer.y), Pos2::new(bot_outer.x + 4.0, bot_outer.y)],
                 stop_stroke,
             );
+        }
+
+        // Central Obscuration / Spider disc visualization (e.g. Cassegrain secondary mirror or central baffle)
+        if let Some(ap) = &surf.aperture {
+            let (has_central_block, block_r) = match &ap.shape {
+                optics_core::surface::ApertureShape::Annular { inner_radius_mm, .. } => (true, *inner_radius_mm),
+                optics_core::surface::ApertureShape::Circular { radius_mm } if ap.is_obscuration => (true, *radius_mm),
+                optics_core::surface::ApertureShape::Rectangular { half_height_mm, .. } if ap.is_obscuration => (true, *half_height_mm),
+                optics_core::surface::ApertureShape::Elliptical { semi_axis_y_mm, .. } if ap.is_obscuration => (true, *semi_axis_y_mm),
+                _ => (false, 0.0),
+            };
+
+            if has_central_block && block_r > 0.05 {
+                let obs_top = to_screen(z_vert, ap.decenter_y_mm + block_r);
+                let obs_bot = to_screen(z_vert, ap.decenter_y_mm - block_r);
+                let obs_stroke = Stroke::new(3.0, tokens.text_muted.gamma_multiply(0.85));
+                painter.line_segment([obs_top, obs_bot], obs_stroke);
+
+                let tick_w = 4.0;
+                painter.line_segment([Pos2::new(obs_top.x - tick_w, obs_top.y), Pos2::new(obs_top.x + tick_w, obs_top.y)], obs_stroke);
+                painter.line_segment([Pos2::new(obs_bot.x - tick_w, obs_bot.y), Pos2::new(obs_bot.x + tick_w, obs_bot.y)], obs_stroke);
+            }
         }
     }
 }

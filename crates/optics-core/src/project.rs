@@ -232,6 +232,7 @@ mod tests {
                     coordinate_break: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                 },
                 crate::prescription::OpticalSurface {
                     surface_index: 2,
@@ -245,6 +246,7 @@ mod tests {
                     coordinate_break: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                 },
             ],
         };

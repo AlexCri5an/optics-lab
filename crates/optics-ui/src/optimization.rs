@@ -863,6 +863,7 @@ mod tests {
                     coordinate_break: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                 },
                 OpticalSurface {
                     surface_index: 1,
@@ -876,6 +877,7 @@ mod tests {
                     coordinate_break: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                 },
             ],
         }

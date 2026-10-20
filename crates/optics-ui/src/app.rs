@@ -663,6 +663,7 @@ impl OpticsWorkbenchApp {
                             coordinate_break: None,
                             grin_profile: None,
                             profile: None,
+                            aperture: None,
                         },
                         optics_core::OpticalSurface {
                             surface_index: 2,
@@ -676,6 +677,7 @@ impl OpticsWorkbenchApp {
                             coordinate_break: None,
                             grin_profile: None,
                             profile: None,
+                            aperture: None,
                         },
                         optics_core::OpticalSurface {
                             surface_index: 3,
@@ -689,6 +691,7 @@ impl OpticsWorkbenchApp {
                             coordinate_break: None,
                             grin_profile: None,
                             profile: None,
+                            aperture: None,
                         },
                     ],
                 };

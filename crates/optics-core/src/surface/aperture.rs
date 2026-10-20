@@ -82,6 +82,61 @@ impl Aperture {
         }
     }
 
+    /// Creates a rectangular aperture centered on the optical axis.
+    #[must_use]
+    pub const fn rectangular(half_width_mm: f64, half_height_mm: f64) -> Self {
+        Self {
+            shape: ApertureShape::Rectangular {
+                half_width_mm,
+                half_height_mm,
+            },
+            decenter_x_mm: 0.0,
+            decenter_y_mm: 0.0,
+            is_obscuration: false,
+        }
+    }
+
+    /// Creates an elliptical aperture centered on the optical axis.
+    #[must_use]
+    pub const fn elliptical(semi_axis_x_mm: f64, semi_axis_y_mm: f64) -> Self {
+        Self {
+            shape: ApertureShape::Elliptical {
+                semi_axis_x_mm,
+                semi_axis_y_mm,
+            },
+            decenter_x_mm: 0.0,
+            decenter_y_mm: 0.0,
+            is_obscuration: false,
+        }
+    }
+
+    /// Returns the maximum radial distance from the coordinate origin to the outer boundary.
+    #[must_use]
+    pub fn max_radial_extent(&self) -> f64 {
+        let shape_extent = match &self.shape {
+            ApertureShape::Circular { radius_mm } => *radius_mm,
+            ApertureShape::Rectangular {
+                half_width_mm,
+                half_height_mm,
+            } => (half_width_mm * half_width_mm + half_height_mm * half_height_mm).sqrt(),
+            ApertureShape::Elliptical {
+                semi_axis_x_mm,
+                semi_axis_y_mm,
+            } => semi_axis_x_mm.max(*semi_axis_y_mm),
+            ApertureShape::Annular {
+                outer_radius_mm, ..
+            } => *outer_radius_mm,
+            ApertureShape::Polygonal { vertices } => vertices
+                .iter()
+                .map(|(x, y)| (x * x + y * y).sqrt())
+                .fold(0.0_f64, f64::max),
+        };
+        let decenter_offset = (self.decenter_x_mm * self.decenter_x_mm
+            + self.decenter_y_mm * self.decenter_y_mm)
+            .sqrt();
+        shape_extent + decenter_offset
+    }
+
     /// Tests whether point $(x, y)$ in surface coordinates transmits through this aperture.
     ///
     /// # Errors
@@ -201,6 +256,33 @@ mod tests {
         };
         assert!(tri.transmits(2.0, 2.0)?);
         assert!(!tri.transmits(8.0, 8.0)?);
+        Ok(())
+    }
+
+    #[test]
+    fn test_aperture_max_radial_extent_and_elliptical() -> TestResult {
+        let circ = Aperture::circular(12.0);
+        assert!((circ.max_radial_extent() - 12.0).abs() < 1e-12);
+
+        let rect = Aperture::rectangular(3.0, 4.0);
+        assert!((rect.max_radial_extent() - 5.0).abs() < 1e-12);
+
+        let ellip = Aperture::elliptical(8.0, 6.0);
+        assert!(ellip.transmits(8.0, 0.0)?);
+        assert!(ellip.transmits(0.0, 6.0)?);
+        assert!(!ellip.transmits(8.0, 0.1)?);
+        assert!((ellip.max_radial_extent() - 8.0).abs() < 1e-12);
+
+        let dec_rect = Aperture {
+            shape: ApertureShape::Rectangular {
+                half_width_mm: 3.0,
+                half_height_mm: 4.0,
+            },
+            decenter_x_mm: 5.0,
+            decenter_y_mm: 0.0,
+            is_obscuration: false,
+        };
+        assert!((dec_rect.max_radial_extent() - 10.0).abs() < 1e-12);
         Ok(())
     }
 }

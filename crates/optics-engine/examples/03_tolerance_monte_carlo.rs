@@ -39,6 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 coordinate_break: None,
                 grin_profile: None,
                 profile: None,
+                aperture: None,
             },
             OpticalSurface {
                 surface_index: 1,
@@ -52,6 +53,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 coordinate_break: None,
                 grin_profile: None,
                 profile: None,
+                aperture: None,
             },
             OpticalSurface {
                 surface_index: 2,
@@ -65,6 +67,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 coordinate_break: None,
                 grin_profile: None,
                 profile: None,
+                aperture: None,
             },
         ],
     };

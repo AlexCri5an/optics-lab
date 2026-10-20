@@ -21,8 +21,8 @@ use crate::fresnel::fresnel_unpolarized;
 use crate::geometry::{Air, RefractiveIndex};
 use crate::snell::snell_refract;
 use crate::surface::{
-    BiconicSurface, CoordinateBreak, EvenAsphere, GrinProfile, SurfaceProfile, SurfaceTransform,
-    ToroidalSurface,
+    Aperture, BiconicSurface, CoordinateBreak, EvenAsphere, GrinProfile,
+    SurfaceProfile, SurfaceTransform, ToroidalSurface,
 };
 use crate::types::{BounceEvent, HitRecord, Ray, RayBounce, Vec3};
 
@@ -99,6 +99,10 @@ pub struct OpticalSurface {
     /// Optional surface profile override (Biconic, Toroidal, Freeform, etc.).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profile: Option<SurfaceProfile>,
+    /// Optional physical aperture shape (Circular, Rectangular, Elliptical, Annular, Polygonal).
+    /// If None, standard circular aperture with `semi_diameter_mm` is used.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aperture: Option<Aperture>,
 }
 
 impl Default for OpticalSurface {
@@ -115,6 +119,7 @@ impl Default for OpticalSurface {
             coordinate_break: None,
             grin_profile: None,
             profile: None,
+            aperture: None,
         }
     }
 }
@@ -251,6 +256,8 @@ pub struct ResolvedSurface {
     pub global_transform: Option<SurfaceTransform>,
     /// Optional gradient-index (GRIN) inhomogeneous refractive index profile.
     pub grin_profile: Option<GrinProfile>,
+    /// Optional physical aperture shape and obscuration boundary.
+    pub aperture: Option<Aperture>,
     /// Axial thickness to next surface vertex in millimeters.
     pub thickness_mm: f64,
     /// Material in the space following this surface.
@@ -259,6 +266,25 @@ pub struct ResolvedSurface {
     pub material_name: String,
     /// Whether this surface is the aperture stop.
     pub is_stop: bool,
+}
+
+impl Default for ResolvedSurface {
+    fn default() -> Self {
+        Self {
+            surface_index: 0,
+            conic: ConicSurface::plane(10.0).unwrap(),
+            asphere: None,
+            profile: None,
+            coordinate_break: None,
+            global_transform: None,
+            grin_profile: None,
+            aperture: None,
+            thickness_mm: 0.0,
+            material: Arc::new(crate::geometry::Air),
+            material_name: "AIR".to_string(),
+            is_stop: false,
+        }
+    }
 }
 
 impl ResolvedSurface {
@@ -347,10 +373,20 @@ impl OpticalPrescription {
 
             let global_transform = Some(SurfaceTransform::new(current_origin, current_rotation));
 
+            let effective_semi_diam = if let Some(ap) = &surf.aperture {
+                if !ap.is_obscuration {
+                    ap.max_radial_extent().max(surf.semi_diameter_mm)
+                } else {
+                    surf.semi_diameter_mm
+                }
+            } else {
+                surf.semi_diameter_mm
+            };
+
             let conic = ConicSurface::from_radius(
                 surf.radius_mm,
                 surf.conic_constant,
-                surf.semi_diameter_mm,
+                effective_semi_diam,
             )?
             .with_vertex_z(current_z);
 
@@ -366,7 +402,7 @@ impl OpticalPrescription {
                     c,
                     surf.conic_constant,
                     surf.asphere_coefficients.clone(),
-                    surf.semi_diameter_mm,
+                    effective_semi_diam,
                 )
                 .ok()
             } else {
@@ -412,6 +448,7 @@ impl OpticalPrescription {
                 coordinate_break: surf.coordinate_break.clone(),
                 global_transform,
                 grin_profile,
+                aperture: surf.aperture.clone(),
                 thickness_mm: surf.thickness_mm,
                 material,
                 material_name: surf.material_name.clone(),
@@ -772,14 +809,6 @@ pub fn trace_sequential(
         // Intersect local ray with conic, aspheric, or advanced profile
         let local_hit = if let Some(asph) = &surf.asphere {
             let (t, pt) = asph.intersect_ray(&local_ray, 0.0)?;
-            let r = (pt.x * pt.x + pt.y * pt.y).sqrt();
-            if r > surf.conic.semi_diam_mm {
-                return Err(OpticsError::RayVignetted {
-                    surface_index: surf.surface_index,
-                    r,
-                    max_r: surf.conic.semi_diam_mm,
-                });
-            }
             let normal = asph.normal(pt.x, pt.y)?;
             let is_front_face = local_ray.direction.dot(&normal) < 0.0;
             HitRecord {
@@ -791,14 +820,6 @@ pub fn trace_sequential(
             }
         } else if let Some(profile) = &surf.profile {
             let (t, pt) = profile.intersect_ray(&local_ray, 0.0)?;
-            let r = (pt.x * pt.x + pt.y * pt.y).sqrt();
-            if r > surf.conic.semi_diam_mm {
-                return Err(OpticsError::RayVignetted {
-                    surface_index: surf.surface_index,
-                    r,
-                    max_r: surf.conic.semi_diam_mm,
-                });
-            }
             let normal = profile.normal(pt.x, pt.y)?;
             let is_front_face = local_ray.direction.dot(&normal) < 0.0;
             HitRecord {
@@ -812,6 +833,25 @@ pub fn trace_sequential(
             let local_conic = surf.conic.with_vertex_z(0.0);
             intersect_conic(&local_ray, &local_conic, surf.surface_index)?
         };
+
+        // Validate physical aperture transmission (checks custom shape, obscuration, or circular semi-diameter)
+        let hit_r = (local_hit.point.x * local_hit.point.x + local_hit.point.y * local_hit.point.y).sqrt();
+        if let Some(aperture) = &surf.aperture {
+            let transmits = aperture.transmits(local_hit.point.x, local_hit.point.y)?;
+            if !transmits {
+                return Err(OpticsError::RayVignetted {
+                    surface_index: surf.surface_index,
+                    r: hit_r,
+                    max_r: surf.conic.semi_diam_mm,
+                });
+            }
+        } else if hit_r > surf.conic.semi_diam_mm {
+            return Err(OpticsError::RayVignetted {
+                surface_index: surf.surface_index,
+                r: hit_r,
+                max_r: surf.conic.semi_diam_mm,
+            });
+        }
 
         // Snell refraction across dielectric interface in local frame
         let local_refracted_dir = snell_refract(local_ray.direction, local_hit.normal, current_n, next_n)?;
@@ -966,6 +1006,7 @@ mod tests {
                     global_transform: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                     thickness_mm: 1e-6, // Tiny thickness approaching thin-lens limit
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -979,6 +1020,7 @@ mod tests {
                     global_transform: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1023,6 +1065,7 @@ mod tests {
                     global_transform: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                     thickness_mm: d,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -1036,6 +1079,7 @@ mod tests {
                     global_transform: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1082,6 +1126,7 @@ mod tests {
                     global_transform: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                     thickness_mm: d,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -1095,6 +1140,7 @@ mod tests {
                     global_transform: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1128,6 +1174,7 @@ mod tests {
                     global_transform: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                     thickness_mm: 4.0,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass1".to_string(),
@@ -1143,6 +1190,7 @@ mod tests {
                     global_transform: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                     thickness_mm: 2.0,
                     material: Arc::new(MockIndex(1.52)),
                     material_name: "Glass2".to_string(),
@@ -1158,6 +1206,7 @@ mod tests {
                     global_transform: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1215,6 +1264,7 @@ mod tests {
                     global_transform: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                     thickness_mm: d,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -1228,6 +1278,7 @@ mod tests {
                     global_transform: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1251,6 +1302,7 @@ mod tests {
                     global_transform: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                     thickness_mm: d,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -1264,6 +1316,7 @@ mod tests {
                     global_transform: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1301,6 +1354,7 @@ mod tests {
                     global_transform: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                     thickness_mm: d,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -1314,6 +1368,7 @@ mod tests {
                     global_transform: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1380,6 +1435,7 @@ mod tests {
                     global_transform: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                     thickness_mm: d,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -1393,6 +1449,7 @@ mod tests {
                     global_transform: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1469,6 +1526,7 @@ mod tests {
                     global_transform: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                     thickness_mm: d,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -1484,6 +1542,7 @@ mod tests {
                     global_transform: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1546,6 +1605,7 @@ mod tests {
                     global_transform: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                     thickness_mm: d,
                     material: Arc::new(MockDispersiveIndex),
                     material_name: "DispersiveGlass".to_string(),
@@ -1559,6 +1619,7 @@ mod tests {
                     global_transform: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1618,6 +1679,7 @@ mod tests {
                     global_transform: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                     thickness_mm: 5.0,
                     material: Arc::new(MockIndex(1.5)),
                     material_name: "Glass".to_string(),
@@ -1633,6 +1695,7 @@ mod tests {
                     global_transform: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1690,6 +1753,7 @@ mod tests {
                     global_transform: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                     thickness_mm: d,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -1703,6 +1767,7 @@ mod tests {
                     global_transform: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1739,6 +1804,7 @@ mod tests {
                     global_transform: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                     thickness_mm: d,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -1752,6 +1818,7 @@ mod tests {
                     global_transform: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1827,6 +1894,7 @@ mod tests {
                     coordinate_break: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                 },
                 OpticalSurface {
                     surface_index: 2,
@@ -1840,6 +1908,7 @@ mod tests {
                     coordinate_break: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                 },
             ],
         };
@@ -1867,6 +1936,7 @@ mod tests {
                     coordinate_break: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                 },
                 OpticalSurface {
                     surface_index: 2,
@@ -1880,6 +1950,7 @@ mod tests {
                     coordinate_break: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                 },
             ],
         };
@@ -1967,6 +2038,7 @@ mod tests {
                     }),
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                 },
                 OpticalSurface {
                     surface_index: 2,
@@ -1980,6 +2052,7 @@ mod tests {
                     coordinate_break: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                 },
             ],
         };
@@ -2048,6 +2121,7 @@ mod tests {
                     coordinate_break: None,
                     grin_profile: Some(GrinProfile::Radial { n0: 1.6, a: 0.01 }),
                     profile: None,
+                    aperture: None,
                 },
                 // Surface 2: Exit flat face into air
                 OpticalSurface {
@@ -2062,6 +2136,7 @@ mod tests {
                     coordinate_break: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                 },
             ],
         };
@@ -2129,6 +2204,7 @@ mod tests {
                     profile: Some(SurfaceProfile::Biconic(
                         BiconicSurface::from_radii(50.0, 0.0, 100.0, 0.0, 12.0).unwrap(),
                     )),
+                    aperture: None,
                 },
                 OpticalSurface {
                     surface_index: 2,
@@ -2142,6 +2218,7 @@ mod tests {
                     coordinate_break: None,
                     grin_profile: None,
                     profile: None,
+                    aperture: None,
                 },
             ],
         };
@@ -2202,5 +2279,280 @@ mod tests {
             exit_ray_x.direction.x,
             exit_ray_y.direction.y
         );
+    }
+
+    #[test]
+    fn test_sequential_rectangular_aperture_corner_transmission_and_edge_clipping() {
+        // Singlet with a rectangular aperture on front surface: half_w = 10.0 mm, half_h = 6.0 mm.
+        // Corner diagonal extent = sqrt(100 + 36) = 11.6619 mm.
+        // Nominal semi_diameter_mm is 10.0 mm (which would falsely clip the corner if not for effective_semi_diam).
+        let rx = OpticalPrescription {
+            name: "Rectangular Aperture Singlet".to_string(),
+            entrance_pupil_diameter_mm: 25.0,
+            field_angles_deg: vec![0.0],
+            wavelengths_nm: vec![587.56],
+            primary_wavelength_index: 0,
+            surfaces: vec![
+                OpticalSurface {
+                    surface_index: 1,
+                    radius_mm: 100.0,
+                    conic_constant: 0.0,
+                    thickness_mm: 5.0,
+                    semi_diameter_mm: 10.0,
+                    material_name: "GLASS".to_string(),
+                    is_stop: true,
+                    asphere_coefficients: Vec::new(),
+                    coordinate_break: None,
+                    grin_profile: None,
+                    profile: None,
+                    aperture: Some(Aperture::rectangular(10.0, 6.0)),
+                },
+                OpticalSurface {
+                    surface_index: 2,
+                    radius_mm: f64::INFINITY,
+                    conic_constant: 0.0,
+                    thickness_mm: 0.0,
+                    semi_diameter_mm: 20.0,
+                    material_name: "AIR".to_string(),
+                    is_stop: false,
+                    asphere_coefficients: Vec::new(),
+                    coordinate_break: None,
+                    grin_profile: None,
+                    profile: None,
+                    aperture: None,
+                },
+            ],
+        };
+
+        let resolver = |_mat: &str| -> Result<Arc<dyn RefractiveIndex + Send + Sync>, OpticsError> {
+            Ok(Arc::new(crate::geometry::Air))
+        };
+        let resolved = rx.resolve(&resolver).unwrap();
+
+        // 1. Ray near the corner at (9.5, 5.5): r = sqrt(9.5^2 + 5.5^2) = 10.977 mm > 10.0 mm
+        // Must PASS because it is strictly within |x| <= 10.0 and |y| <= 6.0!
+        let ray_corner = Ray::new(
+            Vec3::new(9.5, 5.5, -5.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            587.56,
+            1.0,
+        )
+        .unwrap();
+        assert!(trace_sequential(&resolved, &ray_corner).is_ok(), "Corner ray within rectangle must transmit");
+
+        // 2. Ray at (10.5, 0.0): outside in X (|x| > 10.0) -> must vignette
+        let ray_x_out = Ray::new(
+            Vec3::new(10.5, 0.0, -5.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            587.56,
+            1.0,
+        )
+        .unwrap();
+        match trace_sequential(&resolved, &ray_x_out) {
+            Err(OpticsError::RayVignetted { surface_index, .. }) => assert_eq!(surface_index, 1),
+            other => panic!("Expected RayVignetted, got {:?}", other),
+        }
+
+        // 3. Ray at (0.0, 6.5): outside in Y (|y| > 6.0) -> must vignette
+        let ray_y_out = Ray::new(
+            Vec3::new(0.0, 6.5, -5.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            587.56,
+            1.0,
+        )
+        .unwrap();
+        match trace_sequential(&resolved, &ray_y_out) {
+            Err(OpticsError::RayVignetted { surface_index, .. }) => assert_eq!(surface_index, 1),
+            other => panic!("Expected RayVignetted, got {:?}", other),
+        }
+
+        // 4. Ray at (9.5, 6.5): inside X bound but outside Y bound -> must vignette
+        let ray_corner_out = Ray::new(
+            Vec3::new(9.5, 6.5, -5.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            587.56,
+            1.0,
+        )
+        .unwrap();
+        assert!(matches!(trace_sequential(&resolved, &ray_corner_out), Err(OpticsError::RayVignetted { .. })));
+    }
+
+    #[test]
+    fn test_sequential_cassegrain_annular_obscuration_clipping() {
+        // Annular pupil with central obscuration (e.g. Cassegrain secondary mirror):
+        // Inner obscuration radius r_min = 3.0 mm, outer clear radius r_max = 10.0 mm.
+        let rx = OpticalPrescription {
+            name: "Cassegrain Annular Pupil".to_string(),
+            entrance_pupil_diameter_mm: 20.0,
+            field_angles_deg: vec![0.0],
+            wavelengths_nm: vec![587.56],
+            primary_wavelength_index: 0,
+            surfaces: vec![
+                OpticalSurface {
+                    surface_index: 1,
+                    radius_mm: f64::INFINITY,
+                    conic_constant: 0.0,
+                    thickness_mm: 10.0,
+                    semi_diameter_mm: 10.0,
+                    material_name: "AIR".to_string(),
+                    is_stop: true,
+                    asphere_coefficients: Vec::new(),
+                    coordinate_break: None,
+                    grin_profile: None,
+                    profile: None,
+                    aperture: Some(Aperture::annular(3.0, 10.0)),
+                },
+                OpticalSurface {
+                    surface_index: 2,
+                    radius_mm: f64::INFINITY,
+                    conic_constant: 0.0,
+                    thickness_mm: 0.0,
+                    semi_diameter_mm: 15.0,
+                    material_name: "AIR".to_string(),
+                    is_stop: false,
+                    asphere_coefficients: Vec::new(),
+                    coordinate_break: None,
+                    grin_profile: None,
+                    profile: None,
+                    aperture: None,
+                },
+            ],
+        };
+
+        let resolver = |_mat: &str| -> Result<Arc<dyn RefractiveIndex + Send + Sync>, OpticsError> {
+            Ok(Arc::new(crate::geometry::Air))
+        };
+        let resolved = rx.resolve(&resolver).unwrap();
+
+        // 1. On-axis ray (r = 0.0): blocked by central obscuration
+        let ray_on_axis = Ray::new(
+            Vec3::new(0.0, 0.0, -5.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            587.56,
+            1.0,
+        )
+        .unwrap();
+        assert!(matches!(trace_sequential(&resolved, &ray_on_axis), Err(OpticsError::RayVignetted { .. })));
+
+        // 2. Off-axis ray inside hole (r = 2.0 mm < 3.0 mm): blocked
+        let ray_hole = Ray::new(
+            Vec3::new(0.0, 2.0, -5.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            587.56,
+            1.0,
+        )
+        .unwrap();
+        assert!(matches!(trace_sequential(&resolved, &ray_hole), Err(OpticsError::RayVignetted { .. })));
+
+        // 3. Ray within annular clear transmission zone (r = 6.0 mm: 3.0 <= r <= 10.0): transmits!
+        let ray_ring = Ray::new(
+            Vec3::new(0.0, 6.0, -5.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            587.56,
+            1.0,
+        )
+        .unwrap();
+        assert!(trace_sequential(&resolved, &ray_ring).is_ok(), "Annular clear ring must transmit");
+
+        // 4. Ray outside outer radius (r = 11.0 mm > 10.0 mm): blocked
+        let ray_outer = Ray::new(
+            Vec3::new(0.0, 11.0, -5.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            587.56,
+            1.0,
+        )
+        .unwrap();
+        assert!(matches!(trace_sequential(&resolved, &ray_outer), Err(OpticsError::RayVignetted { .. })));
+    }
+
+    #[test]
+    fn test_sequential_decentered_elliptical_aperture() {
+        // Elliptical aperture: semi_x = 8.0 mm, semi_y = 4.0 mm, decentered by (+2.0, -1.0) mm
+        let mut ap = Aperture::elliptical(8.0, 4.0);
+        ap.decenter_x_mm = 2.0;
+        ap.decenter_y_mm = -1.0;
+
+        let rx = OpticalPrescription {
+            name: "Decentered Elliptical Aperture".to_string(),
+            entrance_pupil_diameter_mm: 20.0,
+            field_angles_deg: vec![0.0],
+            wavelengths_nm: vec![587.56],
+            primary_wavelength_index: 0,
+            surfaces: vec![
+                OpticalSurface {
+                    surface_index: 1,
+                    radius_mm: f64::INFINITY,
+                    conic_constant: 0.0,
+                    thickness_mm: 5.0,
+                    semi_diameter_mm: 15.0,
+                    material_name: "AIR".to_string(),
+                    is_stop: true,
+                    asphere_coefficients: Vec::new(),
+                    coordinate_break: None,
+                    grin_profile: None,
+                    profile: None,
+                    aperture: Some(ap),
+                },
+                OpticalSurface {
+                    surface_index: 2,
+                    radius_mm: f64::INFINITY,
+                    conic_constant: 0.0,
+                    thickness_mm: 0.0,
+                    semi_diameter_mm: 15.0,
+                    material_name: "AIR".to_string(),
+                    is_stop: false,
+                    asphere_coefficients: Vec::new(),
+                    coordinate_break: None,
+                    grin_profile: None,
+                    profile: None,
+                    aperture: None,
+                },
+            ],
+        };
+
+        let resolver = |_mat: &str| -> Result<Arc<dyn RefractiveIndex + Send + Sync>, OpticsError> {
+            Ok(Arc::new(crate::geometry::Air))
+        };
+        let resolved = rx.resolve(&resolver).unwrap();
+
+        // 1. Ray hitting the center of the aperture at (2.0, -1.0): transmits
+        let ray_center = Ray::new(
+            Vec3::new(2.0, -1.0, -5.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            587.56,
+            1.0,
+        )
+        .unwrap();
+        assert!(trace_sequential(&resolved, &ray_center).is_ok());
+
+        // 2. Ray at nominal origin (0.0, 0.0): local = (-2, 1) => (-2/8)^2 + (1/4)^2 = 1/16 + 1/16 = 1/8 <= 1: transmits
+        let ray_origin = Ray::new(
+            Vec3::new(0.0, 0.0, -5.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            587.56,
+            1.0,
+        )
+        .unwrap();
+        assert!(trace_sequential(&resolved, &ray_origin).is_ok());
+
+        // 3. Ray at (2.0 + 7.5, -1.0) = (9.5, -1.0): local_x = 7.5 <= 8.0: transmits
+        let ray_edge_in = Ray::new(
+            Vec3::new(9.5, -1.0, -5.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            587.56,
+            1.0,
+        )
+        .unwrap();
+        assert!(trace_sequential(&resolved, &ray_edge_in).is_ok());
+
+        // 4. Ray at (2.0 + 8.5, -1.0) = (10.5, -1.0): local_x = 8.5 > 8.0: vignetted
+        let ray_edge_out = Ray::new(
+            Vec3::new(10.5, -1.0, -5.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            587.56,
+            1.0,
+        )
+        .unwrap();
+        assert!(matches!(trace_sequential(&resolved, &ray_edge_out), Err(OpticsError::RayVignetted { .. })));
     }
 }

@@ -791,6 +791,7 @@ mod tests {
                         coordinate_break: None,
                         grin_profile: None,
                         profile: None,
+                        aperture: None,
                     },
                     optics_core::OpticalSurface {
                         surface_index: 2,
@@ -804,6 +805,7 @@ mod tests {
                         coordinate_break: None,
                         grin_profile: None,
                         profile: None,
+                        aperture: None,
                     },
                     optics_core::OpticalSurface {
                         surface_index: 3,
@@ -817,6 +819,7 @@ mod tests {
                         coordinate_break: None,
                         grin_profile: None,
                         profile: None,
+                        aperture: None,
                     },
                     optics_core::OpticalSurface {
                         surface_index: 4,
@@ -830,6 +833,7 @@ mod tests {
                         coordinate_break: None,
                         grin_profile: None,
                         profile: None,
+                        aperture: None,
                     },
                 ],
             };
