@@ -443,6 +443,28 @@ fn draw_prescription_elements(
         }
     }
 
+    // 2.6 Draw optical thin-film coating accent overlay on coated optical surfaces
+    for (i, surf) in prescription.surfaces.iter().enumerate() {
+        let is_image_plane = i == prescription.surfaces.len().saturating_sub(1);
+        if !is_image_plane && !surf.is_stop {
+            if let Some(ref coat) = surf.coating {
+                let z_vert = z_vertices[i];
+                let pts = sample_surface_arc(surf, z_vert, 28);
+                let coat_color = match coat {
+                    optics_core::SurfaceCoating::HighReflectanceMirror => tokens.warning,
+                    _ => tokens.plot_tangential,
+                };
+                let coat_stroke = egui::Stroke::new(1.8, coat_color.gamma_multiply(0.85));
+                for window in pts.windows(2) {
+                    painter.line_segment(
+                        [to_screen(window[0].0, window[0].1), to_screen(window[1].0, window[1].1)],
+                        coat_stroke,
+                    );
+                }
+            }
+        }
+    }
+
     // 3. Draw Mechanical Aperture Stop (Diaphragm) & Image Plane (Detector)
     let total_surfaces = prescription.surfaces.len();
 

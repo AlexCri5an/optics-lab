@@ -36,6 +36,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 grin_profile: None,
                 profile: None,
                 aperture: None,
+                    coating: None,
             },
             OpticalSurface {
                 surface_index: 1,
@@ -50,6 +51,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 grin_profile: None,
                 profile: None,
                 aperture: None,
+                    coating: None,
             },
         ],
     };

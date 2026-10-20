@@ -233,6 +233,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                 },
                 crate::prescription::OpticalSurface {
                     surface_index: 2,
@@ -247,6 +248,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                 },
             ],
         };

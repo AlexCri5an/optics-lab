@@ -792,6 +792,7 @@ mod tests {
                         grin_profile: None,
                         profile: None,
                         aperture: None,
+                    coating: None,
                     },
                     optics_core::OpticalSurface {
                         surface_index: 2,
@@ -806,6 +807,7 @@ mod tests {
                         grin_profile: None,
                         profile: None,
                         aperture: None,
+                    coating: None,
                     },
                     optics_core::OpticalSurface {
                         surface_index: 3,
@@ -820,6 +822,7 @@ mod tests {
                         grin_profile: None,
                         profile: None,
                         aperture: None,
+                    coating: None,
                     },
                     optics_core::OpticalSurface {
                         surface_index: 4,
@@ -834,6 +837,7 @@ mod tests {
                         grin_profile: None,
                         profile: None,
                         aperture: None,
+                    coating: None,
                     },
                 ],
             };

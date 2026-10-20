@@ -338,6 +338,7 @@ fn test_prop_lagrange_invariant_conservation() -> TestResult {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                 },
                 OpticalSurface {
                     surface_index: 1,
@@ -352,6 +353,7 @@ fn test_prop_lagrange_invariant_conservation() -> TestResult {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                 },
             ],
         };
@@ -436,6 +438,7 @@ fn test_prop_project_workspace_serialization_roundtrip() -> TestResult {
                 grin_profile: None,
                 profile: None,
                 aperture: None,
+                    coating: None,
             });
         }
 

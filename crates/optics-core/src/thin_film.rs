@@ -329,6 +329,139 @@ impl Coating {
     }
 }
 
+/// High-level surface coating specification applied to an optical interface.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum SurfaceCoating {
+    /// Idealized 100% Anti-Reflection coating ($R = 0\%, T = 100\%$).
+    IdealAr,
+    /// Standard single-layer Magnesium Fluoride ($\text{MgF}_2$, $n \approx 1.38$) $\lambda/4$ coating.
+    MgF2 {
+        /// Center design wavelength in nanometers (standard 550.0 nm).
+        design_wavelength_nm: f64,
+    },
+    /// High-performance 4-layer Broadband Anti-Reflection (BBAR) dielectric stack for 400–700 nm.
+    BroadbandAr,
+    /// High-reflectance dielectric mirror coating ($R \ge 99.9\%, T \le 0.1\%$).
+    HighReflectanceMirror,
+    /// Explicit user-defined multi-layer thin film stack.
+    Custom(Coating),
+}
+
+impl SurfaceCoating {
+    /// Creates a standard MgF2 single-layer quarter-wave AR coating at 550.0 nm.
+    #[must_use]
+    pub const fn mgf2_default() -> Self {
+        Self::MgF2 {
+            design_wavelength_nm: 550.0,
+        }
+    }
+
+    /// Converts this high-level coating specification to a concrete [`Coating`] model.
+    #[must_use]
+    pub fn to_coating(&self, _n_substrate: f64) -> Coating {
+        match self {
+            Self::IdealAr => Coating::IdealAr,
+            Self::MgF2 {
+                design_wavelength_nm,
+            } => {
+                let n_mgf2 = 1.38;
+                let d_nm = design_wavelength_nm / (4.0 * n_mgf2);
+                Coating::Multilayer {
+                    layers: vec![ThinFilmLayer::dielectric(n_mgf2, d_nm)],
+                }
+            }
+            Self::BroadbandAr => {
+                // 4-layer BBAR dielectric stack (outermost layer incident medium to substrate):
+                // Layer 4 (SiO2, n=1.46, 88.0 nm)
+                // Layer 3 (TiO2, n=2.30, 112.0 nm)
+                // Layer 2 (SiO2, n=1.46, 32.0 nm)
+                // Layer 1 (TiO2, n=2.30, 15.0 nm)
+                Coating::Multilayer {
+                    layers: vec![
+                        ThinFilmLayer::dielectric(1.46, 88.0),
+                        ThinFilmLayer::dielectric(2.30, 112.0),
+                        ThinFilmLayer::dielectric(1.46, 32.0),
+                        ThinFilmLayer::dielectric(2.30, 15.0),
+                    ],
+                }
+            }
+            Self::HighReflectanceMirror => {
+                // 15-layer dielectric quarter-wave Bragg reflector (TiO2 n=2.30, SiO2 n=1.46) at 550nm
+                Coating::bragg_mirror(2.30, 1.46, 7, 550.0)
+            }
+            Self::Custom(c) => c.clone(),
+        }
+    }
+
+    /// Evaluates the coating response using the Transfer-Matrix Method (TMM).
+    ///
+    /// # Errors
+    /// Returns [`OpticsError::InvalidParameter`] if inputs are invalid.
+    pub fn evaluate(
+        &self,
+        n_incident: f64,
+        n_substrate: f64,
+        angle_incident_rad: f64,
+        wavelength_nm: f64,
+    ) -> Result<CoatingResponse, OpticsError> {
+        let mut coating = self.to_coating(n_substrate);
+        // When light propagates from a dense medium (e.g. glass) to a rare medium (e.g. air),
+        // the physical coating stack is deposited on the dense substrate with its outermost layer facing air.
+        // In TMM layer sequence (incident -> exit), the stack must be traversed in reverse order.
+        if n_incident > n_substrate {
+            if let Coating::Multilayer { ref mut layers } = coating {
+                layers.reverse();
+            }
+        }
+        coating.evaluate(n_incident, n_substrate, angle_incident_rad, wavelength_nm)
+    }
+
+    /// Short technical display label.
+    #[must_use]
+    pub const fn label(&self) -> &'static str {
+        match self {
+            Self::IdealAr => "Ideal AR",
+            Self::MgF2 { .. } => "MgF2 (λ/4)",
+            Self::BroadbandAr => "BBAR (Multi)",
+            Self::HighReflectanceMirror => "Mirror (99.9%)",
+            Self::Custom(_) => "Custom Stack",
+        }
+    }
+
+    /// Parses a Zemax OpticStudio coating name (e.g. `AR`, `MGF2`, `BBAR`, `MIRROR`, `NONE`).
+    #[must_use]
+    pub fn from_zemax_name(name: &str) -> Option<Self> {
+        let clean = name.trim().to_uppercase();
+        if clean.is_empty() || clean == "NONE" || clean == "UNCOATED" {
+            return None;
+        }
+        if clean == "MGF2" || clean.contains("MGF2") {
+            Some(Self::mgf2_default())
+        } else if clean == "BBAR" || clean == "HE-NE" || clean.contains("BBAR") {
+            Some(Self::BroadbandAr)
+        } else if clean == "MIRROR" || clean.contains("REFL") || clean == "HR" {
+            Some(Self::HighReflectanceMirror)
+        } else if clean == "AR" || clean.contains("AR_") || clean.contains("AR") {
+            Some(Self::IdealAr)
+        } else {
+            // Default unknown coating to Ideal AR for conservative estimation
+            Some(Self::IdealAr)
+        }
+    }
+
+    /// Formats the coating name for Zemax OpticStudio export.
+    #[must_use]
+    pub fn to_zemax_name(&self) -> &'static str {
+        match self {
+            Self::IdealAr => "AR",
+            Self::MgF2 { .. } => "MGF2",
+            Self::BroadbandAr => "BBAR",
+            Self::HighReflectanceMirror => "MIRROR",
+            Self::Custom(_) => "CUSTOM",
+        }
+    }
+}
+
 /// Evaluates characteristic matrix multiplication for multilayer thin films.
 fn evaluate_tmm_multilayer(
     n_incident: f64,

@@ -76,7 +76,7 @@ pub use tessellate::{
     prescription_to_trimesh, prescription_to_trimesh_with_materials, tessellate_conic_surface,
     tessellate_lens_rim,
 };
-pub use thin_film::{Coating, CoatingResponse, Complex, ThinFilmLayer};
+pub use thin_film::{Coating, CoatingResponse, Complex, SurfaceCoating, ThinFilmLayer};
 pub use types::{
     BounceEvent, Field, HitRecord, Pupil, Ray, RayBounce, SurfaceId, Vec3, Wavelength,
 };

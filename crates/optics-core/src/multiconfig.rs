@@ -426,6 +426,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                 },
                 OpticalSurface {
                     surface_index: 2,
@@ -440,6 +441,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                 },
                 OpticalSurface {
                     surface_index: 3,
@@ -454,6 +456,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                 },
             ],
         };

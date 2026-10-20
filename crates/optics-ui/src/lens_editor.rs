@@ -17,7 +17,7 @@ use optics_core::surface::{
     Aperture, ApertureShape, BiconicSurface, CoordinateBreak, GrinProfile, SurfaceProfile,
     ToroidalSurface,
 };
-use optics_core::{OpticalPrescription, OpticalSurface};
+use optics_core::{OpticalPrescription, OpticalSurface, SurfaceCoating};
 use optics_glass::GlassCatalogDb;
 
 use crate::glass_browser::MaterialVendorFilter;
@@ -167,6 +167,7 @@ pub fn render_lens_editor(
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                 };
 
                 if insert_at < prescription.surfaces.len() {
@@ -495,6 +496,46 @@ fn render_surface_card(
                         if ui.selectable_label(is_annular, "Annular (Obscuration)").clicked() {
                             let h = surf.semi_diameter_mm;
                             surf.aperture = Some(Aperture::annular(h * 0.3, h));
+                            modified = true;
+                        }
+                    });
+
+                // Optical Coating Selector
+                let coat_label = match &surf.coating {
+                    None => "Uncoated",
+                    Some(c) => c.label(),
+                };
+                let has_coat = surf.coating.is_some();
+                egui::ComboBox::from_id_salt(("surf_coating_cb", idx))
+                    .selected_text(
+                        RichText::new(coat_label)
+                            .size(10.0)
+                            .color(if has_coat { tokens.plot_tangential } else { tokens.text_muted }),
+                    )
+                    .width(62.0)
+                    .show_ui(ui, |ui| {
+                        if ui.selectable_label(surf.coating.is_none(), "Uncoated").clicked() {
+                            surf.coating = None;
+                            modified = true;
+                        }
+                        let is_mgf2 = matches!(surf.coating, Some(SurfaceCoating::MgF2 { .. }));
+                        if ui.selectable_label(is_mgf2, "MgF2 (λ/4 AR)").clicked() {
+                            surf.coating = Some(SurfaceCoating::mgf2_default());
+                            modified = true;
+                        }
+                        let is_bbar = matches!(surf.coating, Some(SurfaceCoating::BroadbandAr));
+                        if ui.selectable_label(is_bbar, "Broadband AR (BBAR)").clicked() {
+                            surf.coating = Some(SurfaceCoating::BroadbandAr);
+                            modified = true;
+                        }
+                        let is_mirror = matches!(surf.coating, Some(SurfaceCoating::HighReflectanceMirror));
+                        if ui.selectable_label(is_mirror, "Mirror (99.9% Refl)").clicked() {
+                            surf.coating = Some(SurfaceCoating::HighReflectanceMirror);
+                            modified = true;
+                        }
+                        let is_ideal = matches!(surf.coating, Some(SurfaceCoating::IdealAr));
+                        if ui.selectable_label(is_ideal, "Ideal AR (100% Trans)").clicked() {
+                            surf.coating = Some(SurfaceCoating::IdealAr);
                             modified = true;
                         }
                     });
@@ -1017,6 +1058,82 @@ fn render_surface_card(
         }
         if remove_aperture {
             surf.aperture = None;
+        }
+
+        // 7. Expanded Optical Coating Sub-Card
+        let mut remove_coating = false;
+        if let Some(ref mut coat) = surf.coating {
+            ui.add_space(4.0);
+            Frame::NONE
+                .fill(tokens.bg_canvas)
+                .stroke(egui::Stroke::new(1.0, tokens.plot_tangential.gamma_multiply(0.45)))
+                .corner_radius(CornerRadius::same(5))
+                .inner_margin(Margin::symmetric(10, 7))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            RichText::new(format!("Thin-Film Coating: {}", coat.label()))
+                                .size(10.5)
+                                .strong()
+                                .color(tokens.plot_tangential),
+                        );
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            if lucide_small_icon_button(ui, LucideIcon::X, "Reset to Uncoated", tokens).clicked() {
+                                remove_coating = true;
+                                modified = true;
+                            }
+                        });
+                    });
+                    ui.add_space(3.0);
+
+                    match coat {
+                        SurfaceCoating::MgF2 {
+                            design_wavelength_nm,
+                        } => {
+                            let d_nm = *design_wavelength_nm / (4.0 * 1.38);
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
+                                ui.label(RichText::new("Design λ:").size(10.0).color(tokens.text_muted));
+                                if float_input(ui, Id::new(("surf_coat_wl", idx)), design_wavelength_nm, 44.0) {
+                                    modified = true;
+                                }
+                                ui.label(RichText::new("nm").size(10.0).color(tokens.text_muted));
+                                ui.label(RichText::new(format!("(n=1.38, d={:.1} nm)", d_nm)).size(9.5).color(tokens.text_muted));
+                            });
+                        }
+                        SurfaceCoating::BroadbandAr => {
+                            ui.label(
+                                RichText::new("4-layer multi-dielectric stack (TiO2 / SiO2) - R < 0.5% visible")
+                                    .size(9.5)
+                                    .color(tokens.text_muted),
+                            );
+                        }
+                        SurfaceCoating::HighReflectanceMirror => {
+                            ui.label(
+                                RichText::new("15-layer quarter-wave Bragg dielectric stack - R > 99.8% (Mirror)")
+                                    .size(9.5)
+                                    .color(tokens.text_muted),
+                            );
+                        }
+                        SurfaceCoating::IdealAr => {
+                            ui.label(
+                                RichText::new("Ideal anti-reflection coating (R = 0.0%, T = 100.0%)")
+                                    .size(9.5)
+                                    .color(tokens.text_muted),
+                            );
+                        }
+                        SurfaceCoating::Custom(_) => {
+                            ui.label(
+                                RichText::new("Custom multi-layer dielectric stack")
+                                    .size(9.5)
+                                    .color(tokens.text_muted),
+                            );
+                        }
+                    }
+                });
+        }
+        if remove_coating {
+            surf.coating = None;
         }
     });
 

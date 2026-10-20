@@ -24,6 +24,7 @@ use crate::surface::{
     Aperture, BiconicSurface, CoordinateBreak, EvenAsphere, GrinProfile,
     SurfaceProfile, SurfaceTransform, ToroidalSurface,
 };
+use crate::thin_film::SurfaceCoating;
 use crate::types::{BounceEvent, HitRecord, Ray, RayBounce, Vec3};
 
 /// Custom serde helper to losslessly serialize/deserialize `f64::INFINITY` in JSON.
@@ -103,6 +104,9 @@ pub struct OpticalSurface {
     /// If None, standard circular aperture with `semi_diameter_mm` is used.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub aperture: Option<Aperture>,
+    /// Optional thin-film optical coating (Uncoated, MgF2 quarter-wave, BBAR, High-Reflectance Mirror, etc.).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coating: Option<SurfaceCoating>,
 }
 
 impl Default for OpticalSurface {
@@ -120,6 +124,7 @@ impl Default for OpticalSurface {
             grin_profile: None,
             profile: None,
             aperture: None,
+            coating: None,
         }
     }
 }
@@ -258,6 +263,8 @@ pub struct ResolvedSurface {
     pub grin_profile: Option<GrinProfile>,
     /// Optional physical aperture shape and obscuration boundary.
     pub aperture: Option<Aperture>,
+    /// Optional thin-film optical coating.
+    pub coating: Option<SurfaceCoating>,
     /// Axial thickness to next surface vertex in millimeters.
     pub thickness_mm: f64,
     /// Material in the space following this surface.
@@ -279,6 +286,7 @@ impl Default for ResolvedSurface {
             global_transform: None,
             grin_profile: None,
             aperture: None,
+            coating: None,
             thickness_mm: 0.0,
             material: Arc::new(crate::geometry::Air),
             material_name: "AIR".to_string(),
@@ -449,6 +457,7 @@ impl OpticalPrescription {
                 global_transform,
                 grin_profile,
                 aperture: surf.aperture.clone(),
+                coating: surf.coating.clone(),
                 thickness_mm: surf.thickness_mm,
                 material,
                 material_name: surf.material_name.clone(),
@@ -467,6 +476,36 @@ impl OpticalPrescription {
             primary_wavelength_index: self.primary_wavelength_index,
             surfaces: resolved_surfaces,
         })
+    }
+
+    /// Computes total on-axis unpolarized optical throughput ($\prod T_i \in [0, 1]$) at the specified wavelength.
+    ///
+    /// # Errors
+    /// Returns [`OpticsError`] if resolution or ray tracing fails.
+    pub fn optical_throughput(
+        &self,
+        wavelength_nm: f64,
+        catalog: &dyn MaterialResolver,
+    ) -> Result<f64, OpticsError> {
+        let resolved = self.resolve(catalog)?;
+        resolved.optical_throughput(wavelength_nm)
+    }
+}
+
+impl ResolvedPrescription {
+    /// Computes total on-axis unpolarized optical throughput ($\prod T_i \in [0, 1]$) at the specified wavelength.
+    ///
+    /// # Errors
+    /// Returns [`OpticsError`] if ray tracing fails.
+    pub fn optical_throughput(&self, wavelength_nm: f64) -> Result<f64, OpticsError> {
+        let ray = Ray::new(
+            Vec3::new(0.0, 0.0, -10.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            wavelength_nm,
+            1.0,
+        )?;
+        let path = trace_sequential(self, &ray)?;
+        Ok(path.cumulative_throughput)
     }
 }
 
@@ -863,9 +902,26 @@ pub fn trace_sequential(
 
         points.push(global_point);
 
-        // Fresnel coefficients
+        // Fresnel & Thin-Film Coating coefficients
         let cos_theta_i = (-local_ray.direction.dot(&local_hit.normal)).clamp(0.0, 1.0);
-        let (r_total, t_total) = fresnel_unpolarized(cos_theta_i, current_n, next_n);
+        let theta_i_rad = cos_theta_i.acos();
+        let (r_total, t_total, rs, rp) = if let Some(coat) = &surf.coating {
+            match coat.evaluate(current_n, next_n, theta_i_rad, current_ray.wavelength_nm) {
+                Ok(resp) => (
+                    resp.unpolarized_reflectance(),
+                    resp.unpolarized_transmittance(),
+                    resp.reflectance_s,
+                    resp.reflectance_p,
+                ),
+                Err(_) => {
+                    let (r, t) = fresnel_unpolarized(cos_theta_i, current_n, next_n);
+                    (r, t, r, r)
+                }
+            }
+        } else {
+            let (r, t) = fresnel_unpolarized(cos_theta_i, current_n, next_n);
+            (r, t, r, r)
+        };
         let cos_theta_t = (-local_refracted_dir.dot(&local_hit.normal)).clamp(0.0, 1.0);
 
         cumulative_throughput *= t_total;
@@ -879,10 +935,10 @@ pub fn trace_sequential(
             refracted_dir: Some(global_refracted_dir),
             n1: current_n,
             n2: next_n,
-            incident_angle_rad: cos_theta_i.acos(),
+            incident_angle_rad: theta_i_rad,
             refracted_angle_rad: Some(cos_theta_t.acos()),
-            rs: r_total, // unpolarized average
-            rp: r_total,
+            rs,
+            rp,
             r_total,
             t_total,
             event: BounceEvent::Refract,
@@ -1007,6 +1063,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                     thickness_mm: 1e-6, // Tiny thickness approaching thin-lens limit
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -1021,6 +1078,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1066,6 +1124,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                     thickness_mm: d,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -1080,6 +1139,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1127,6 +1187,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                     thickness_mm: d,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -1141,6 +1202,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1175,6 +1237,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                     thickness_mm: 4.0,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass1".to_string(),
@@ -1191,6 +1254,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                     thickness_mm: 2.0,
                     material: Arc::new(MockIndex(1.52)),
                     material_name: "Glass2".to_string(),
@@ -1207,6 +1271,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1265,6 +1330,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                     thickness_mm: d,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -1279,6 +1345,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1303,6 +1370,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                     thickness_mm: d,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -1317,6 +1385,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1355,6 +1424,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                     thickness_mm: d,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -1369,6 +1439,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1436,6 +1507,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                     thickness_mm: d,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -1450,6 +1522,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1527,6 +1600,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                     thickness_mm: d,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -1543,6 +1617,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1606,6 +1681,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                     thickness_mm: d,
                     material: Arc::new(MockDispersiveIndex),
                     material_name: "DispersiveGlass".to_string(),
@@ -1620,6 +1696,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1680,6 +1757,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                     thickness_mm: 5.0,
                     material: Arc::new(MockIndex(1.5)),
                     material_name: "Glass".to_string(),
@@ -1696,6 +1774,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1754,6 +1833,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                     thickness_mm: d,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -1768,6 +1848,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1805,6 +1886,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                     thickness_mm: d,
                     material: Arc::new(MockIndex(n)),
                     material_name: "Glass".to_string(),
@@ -1819,6 +1901,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                     thickness_mm: 0.0,
                     material: Arc::new(Air),
                     material_name: "AIR".to_string(),
@@ -1895,6 +1978,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                 },
                 OpticalSurface {
                     surface_index: 2,
@@ -1909,6 +1993,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                 },
             ],
         };
@@ -1937,6 +2022,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                 },
                 OpticalSurface {
                     surface_index: 2,
@@ -1951,6 +2037,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                 },
             ],
         };
@@ -2039,6 +2126,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                 },
                 OpticalSurface {
                     surface_index: 2,
@@ -2053,6 +2141,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                 },
             ],
         };
@@ -2122,6 +2211,7 @@ mod tests {
                     grin_profile: Some(GrinProfile::Radial { n0: 1.6, a: 0.01 }),
                     profile: None,
                     aperture: None,
+                    coating: None,
                 },
                 // Surface 2: Exit flat face into air
                 OpticalSurface {
@@ -2137,6 +2227,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                 },
             ],
         };
@@ -2205,6 +2296,7 @@ mod tests {
                         BiconicSurface::from_radii(50.0, 0.0, 100.0, 0.0, 12.0).unwrap(),
                     )),
                     aperture: None,
+                    coating: None,
                 },
                 OpticalSurface {
                     surface_index: 2,
@@ -2219,6 +2311,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                 },
             ],
         };
@@ -2306,6 +2399,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: Some(Aperture::rectangular(10.0, 6.0)),
+                    coating: None,
                 },
                 OpticalSurface {
                     surface_index: 2,
@@ -2320,6 +2414,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                 },
             ],
         };
@@ -2401,6 +2496,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: Some(Aperture::annular(3.0, 10.0)),
+                    coating: None,
                 },
                 OpticalSurface {
                     surface_index: 2,
@@ -2415,6 +2511,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                 },
             ],
         };
@@ -2492,6 +2589,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: Some(ap),
+                    coating: None,
                 },
                 OpticalSurface {
                     surface_index: 2,
@@ -2506,6 +2604,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                 },
             ],
         };
@@ -2554,5 +2653,155 @@ mod tests {
         )
         .unwrap();
         assert!(matches!(trace_sequential(&resolved, &ray_edge_out), Err(OpticsError::RayVignetted { .. })));
+    }
+
+    #[test]
+    fn test_uncoated_vs_mgf2_vs_bbar_transmission() {
+        let cat = |mat: &str| -> Result<Arc<dyn RefractiveIndex + Send + Sync>, OpticsError> {
+            if mat == "GLASS" {
+                Ok(Arc::new(crate::geometry::ConstantIndex(1.52)) as Arc<dyn RefractiveIndex + Send + Sync>)
+            } else {
+                Ok(Arc::new(Air) as Arc<dyn RefractiveIndex + Send + Sync>)
+            }
+        };
+        let make_rx = |coat: Option<SurfaceCoating>| OpticalPrescription {
+            name: "Coating Single Interface".to_string(),
+            entrance_pupil_diameter_mm: 10.0,
+            field_angles_deg: vec![0.0],
+            wavelengths_nm: vec![550.0],
+            primary_wavelength_index: 0,
+            surfaces: vec![
+                OpticalSurface {
+                    surface_index: 1,
+                    radius_mm: f64::INFINITY,
+                    conic_constant: 0.0,
+                    thickness_mm: 5.0,
+                    semi_diameter_mm: 10.0,
+                    material_name: "GLASS".to_string(),
+                    is_stop: true,
+                    asphere_coefficients: Vec::new(),
+                    coordinate_break: None,
+                    grin_profile: None,
+                    profile: None,
+                    aperture: None,
+                    coating: coat,
+                },
+                OpticalSurface {
+                    surface_index: 2,
+                    radius_mm: f64::INFINITY,
+                    conic_constant: 0.0,
+                    thickness_mm: 0.0,
+                    semi_diameter_mm: 10.0,
+                    material_name: "AIR".to_string(),
+                    is_stop: false,
+                    asphere_coefficients: Vec::new(),
+                    coordinate_break: None,
+                    grin_profile: None,
+                    profile: None,
+                    aperture: None,
+                    coating: Some(SurfaceCoating::IdealAr), // Ideal exit surface
+                },
+            ],
+        };
+
+        let ray = Ray::new(Vec3::new(0.0, 0.0, -5.0), Vec3::new(0.0, 0.0, 1.0), 550.0, 1.0).unwrap();
+
+        // 1. Uncoated: n1=1.0, n2=1.52 => R = ((1.52-1)/(1.52+1))^2 = 0.04258, T = 0.95742
+        let res_uncoated = make_rx(None).resolve(&cat).unwrap();
+        let path_uncoated = trace_sequential(&res_uncoated, &ray).unwrap();
+        let t_uncoated = path_uncoated.hits[0].bounce.t_total;
+        assert!((t_uncoated - 0.9574).abs() < 0.002, "Expected T ≈ 0.9574, got {}", t_uncoated);
+
+        // 2. MgF2 (λ/4 at 550nm): R = ((1.52 - 1.38^2)/(1.52 + 1.38^2))^2 ≈ 0.0126, T ≈ 0.9874
+        let res_mgf2 = make_rx(Some(SurfaceCoating::mgf2_default())).resolve(&cat).unwrap();
+        let path_mgf2 = trace_sequential(&res_mgf2, &ray).unwrap();
+        let t_mgf2 = path_mgf2.hits[0].bounce.t_total;
+        assert!(t_mgf2 > t_uncoated, "MgF2 must transmit more light than uncoated");
+        assert!((t_mgf2 - 0.987).abs() < 0.005, "Expected T ≈ 0.987, got {}", t_mgf2);
+
+        // 3. Broadband AR: multi-layer stack provides T > 0.995 (R < 0.5%)
+        let res_bbar = make_rx(Some(SurfaceCoating::BroadbandAr)).resolve(&cat).unwrap();
+        let path_bbar = trace_sequential(&res_bbar, &ray).unwrap();
+        let t_bbar = path_bbar.hits[0].bounce.t_total;
+        assert!(t_bbar > t_mgf2, "BBAR must transmit more light than single-layer MgF2");
+        assert!(t_bbar > 0.992, "BBAR must have T > 99.2%, got {}", t_bbar);
+
+        // 4. Ideal AR: T = 1.0, R = 0.0
+        let res_ideal = make_rx(Some(SurfaceCoating::IdealAr)).resolve(&cat).unwrap();
+        let path_ideal = trace_sequential(&res_ideal, &ray).unwrap();
+        let t_ideal = path_ideal.hits[0].bounce.t_total;
+        assert!((t_ideal - 1.0).abs() < 1e-9, "Ideal AR must have T = 1.0, got {}", t_ideal);
+    }
+
+    #[test]
+    fn test_sequential_triplet_throughput_boost() {
+        let cat = |mat: &str| -> Result<Arc<dyn RefractiveIndex + Send + Sync>, OpticsError> {
+            if mat == "GLASS" {
+                Ok(Arc::new(crate::geometry::ConstantIndex(1.52)) as Arc<dyn RefractiveIndex + Send + Sync>)
+            } else {
+                Ok(Arc::new(Air) as Arc<dyn RefractiveIndex + Send + Sync>)
+            }
+        };
+        // 3 elements (6 air-glass interfaces)
+        let make_triplet = |coat: Option<SurfaceCoating>| {
+            let mut surfs = Vec::new();
+            for i in 1..=6 {
+                let is_air_gap = i % 2 == 0;
+                surfs.push(OpticalSurface {
+                    surface_index: i,
+                    radius_mm: if is_air_gap { -50.0 } else { 50.0 },
+                    conic_constant: 0.0,
+                    thickness_mm: if is_air_gap { 5.0 } else { 3.0 },
+                    semi_diameter_mm: 15.0,
+                    material_name: if is_air_gap { "AIR".to_string() } else { "GLASS".to_string() },
+                    is_stop: i == 3,
+                    asphere_coefficients: Vec::new(),
+                    coordinate_break: None,
+                    grin_profile: None,
+                    profile: None,
+                    aperture: None,
+                    coating: coat.clone(),
+                });
+            }
+            // Image surface
+            surfs.push(OpticalSurface {
+                surface_index: 7,
+                radius_mm: f64::INFINITY,
+                conic_constant: 0.0,
+                thickness_mm: 0.0,
+                semi_diameter_mm: 20.0,
+                material_name: "AIR".to_string(),
+                is_stop: false,
+                asphere_coefficients: Vec::new(),
+                coordinate_break: None,
+                grin_profile: None,
+                profile: None,
+                aperture: None,
+                coating: None,
+            });
+
+            OpticalPrescription {
+                name: "Triplet Train".to_string(),
+                entrance_pupil_diameter_mm: 10.0,
+                field_angles_deg: vec![0.0],
+                wavelengths_nm: vec![550.0],
+                primary_wavelength_index: 0,
+                surfaces: surfs,
+            }
+        };
+
+        let t_uncoated = make_triplet(None).optical_throughput(550.0, &cat).unwrap();
+        let t_mgf2 = make_triplet(Some(SurfaceCoating::mgf2_default())).optical_throughput(550.0, &cat).unwrap();
+        let t_bbar = make_triplet(Some(SurfaceCoating::BroadbandAr)).optical_throughput(550.0, &cat).unwrap();
+        let t_ideal = make_triplet(Some(SurfaceCoating::IdealAr)).optical_throughput(550.0, &cat).unwrap();
+
+        // 6 interfaces of ~0.957 each => 0.957^6 ≈ 0.77
+        assert!(t_uncoated < 0.80, "Uncoated triplet throughput should be < 80%, got {:.3}", t_uncoated);
+        // 6 interfaces of ~0.987 each => 0.987^6 ≈ 0.925
+        assert!(t_mgf2 > 0.90, "MgF2 triplet throughput should exceed 90%, got {:.3}", t_mgf2);
+        // 6 interfaces of BBAR => > 96%
+        assert!(t_bbar > 0.96, "BBAR triplet throughput should exceed 96%, got {:.3}", t_bbar);
+        // Ideal AR => 1.0
+        assert!((t_ideal - 1.0).abs() < 1e-6, "Ideal AR throughput should be 1.0, got {:.6}", t_ideal);
     }
 }

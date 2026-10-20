@@ -56,6 +56,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                 },
                 OpticalSurface {
                     surface_index: 1,
@@ -70,6 +71,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                 },
             ],
         }
@@ -270,6 +272,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                 },
                 // Cemented interface (F2 flint)
                 OpticalSurface {
@@ -285,6 +288,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                 },
                 // Back surface to air
                 OpticalSurface {
@@ -300,6 +304,7 @@ mod tests {
                     grin_profile: None,
                     profile: None,
                     aperture: None,
+                    coating: None,
                 },
             ],
         };

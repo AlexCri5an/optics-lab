@@ -664,6 +664,7 @@ impl OpticsWorkbenchApp {
                             grin_profile: None,
                             profile: None,
                             aperture: None,
+                    coating: None,
                         },
                         optics_core::OpticalSurface {
                             surface_index: 2,
@@ -678,6 +679,7 @@ impl OpticsWorkbenchApp {
                             grin_profile: None,
                             profile: None,
                             aperture: None,
+                    coating: None,
                         },
                         optics_core::OpticalSurface {
                             surface_index: 3,
@@ -692,6 +694,7 @@ impl OpticsWorkbenchApp {
                             grin_profile: None,
                             profile: None,
                             aperture: None,
+                    coating: None,
                         },
                     ],
                 };
