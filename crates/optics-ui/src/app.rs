@@ -1103,7 +1103,19 @@ impl OpticsWorkbenchApp {
                 self.topbar_state.left_panel_open = true;
                 self.lens_editor_state.active_tab = LeftPanelTab::Optimizer;
                 self.optimization_state.init_if_needed(&self.prescription, &self.catalog);
-                self.last_action_msg = "Switched to DLS Optimizer tab.".to_string();
+                self.last_action_msg = "Switched to Optimizer tab.".to_string();
+            }
+            TopBarAction::OpenOptimizationAlgorithm(algo) => {
+                self.topbar_state.left_panel_open = true;
+                self.lens_editor_state.active_tab = LeftPanelTab::Optimizer;
+                self.optimization_state.init_if_needed(&self.prescription, &self.catalog);
+                self.optimization_state.algorithm = algo;
+                self.last_action_msg = format!("Switched to Optimizer tab ({:?}).", algo);
+            }
+            TopBarAction::ShowPolarization => {
+                self.topbar_state.right_panel_open = true;
+                self.analysis_state.active_tab = crate::analysis::AnalysisTab::Polarization;
+                self.last_action_msg = "Analysis: Switched to Polarization Ray Tracing & Stokes tab.".to_string();
             }
         }
     }

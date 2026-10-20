@@ -73,8 +73,12 @@ pub enum TopBarAction {
     ToggleTheme,
     /// Open About modal dialog.
     OpenAbout,
-    /// Open DLS Optical Optimization dialog hub.
+    /// Open Optical Optimization dialog hub.
     OpenOptimization,
+    /// Open Optical Optimization with a specific algorithm pre-selected.
+    OpenOptimizationAlgorithm(crate::optimization::OptimizationAlgorithm),
+    /// Show Polarization Ray Tracing tab in right analysis panel.
+    ShowPolarization,
 }
 
 /// State for the TopBar component.
@@ -266,11 +270,40 @@ pub fn render_topbar(
                         triggered_action = Some(TopBarAction::ShowCardinal);
                         ui.close();
                     }
+                    if ui.button("Polarization Ray Tracing & Stokes").clicked() {
+                        triggered_action = Some(TopBarAction::ShowPolarization);
+                        ui.close();
+                    }
                 });
 
                 ui.menu_button("Optimize", |ui| {
-                    if ui.button("DLS Automatic Optimization Hub").clicked() {
+                    if ui.button("Optimization Hub (All Engines)").clicked() {
                         triggered_action = Some(TopBarAction::OpenOptimization);
+                        ui.close();
+                    }
+                    ui.separator();
+                    if ui.button("Local DLS / Levenberg-Marquardt").clicked() {
+                        triggered_action = Some(TopBarAction::OpenOptimizationAlgorithm(
+                            crate::optimization::OptimizationAlgorithm::Dls,
+                        ));
+                        ui.close();
+                    }
+                    if ui.button("Simulated Annealing (Hammer)").clicked() {
+                        triggered_action = Some(TopBarAction::OpenOptimizationAlgorithm(
+                            crate::optimization::OptimizationAlgorithm::Annealing,
+                        ));
+                        ui.close();
+                    }
+                    if ui.button("Global Search (Multi-Start)").clicked() {
+                        triggered_action = Some(TopBarAction::OpenOptimizationAlgorithm(
+                            crate::optimization::OptimizationAlgorithm::GlobalSearch,
+                        ));
+                        ui.close();
+                    }
+                    if ui.button("Glass Substitution (Catalog 646)").clicked() {
+                        triggered_action = Some(TopBarAction::OpenOptimizationAlgorithm(
+                            crate::optimization::OptimizationAlgorithm::GlassSubstitution,
+                        ));
                         ui.close();
                     }
                 });
@@ -369,7 +402,7 @@ pub fn render_topbar(
             if lucide_toolbar_button(ui, raytrace_icon, raytrace_tooltip, state.raytrace_running, tokens).clicked() {
                 triggered_action = Some(TopBarAction::RunRaytrace);
             }
-            if lucide_toolbar_button(ui, LucideIcon::Wand2, "Automatic Optimization Engine (DLS)", false, tokens).clicked() {
+            if lucide_toolbar_button(ui, LucideIcon::Wand2, "Automatic Optimization Engine (DLS, Anneal, Global, Glass)", false, tokens).clicked() {
                 triggered_action = Some(TopBarAction::OpenOptimization);
             }
 
