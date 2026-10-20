@@ -551,6 +551,31 @@ pub fn render_materials_panel(
                             ui.label(RichText::new(thermal_desc).size(11.0).color(tokens.text_primary));
                         });
                     });
+
+                    // Line 4: Internal Transmittance Table tau(lambda) for standard 10mm and 25mm thickness
+                    let t10_400 = g.transmittance_for_thickness(400.0, 10.0);
+                    let t10_550 = g.transmittance_for_thickness(550.0, 10.0);
+                    let t25_400 = g.transmittance_for_thickness(400.0, 25.0);
+                    let t25_550 = g.transmittance_for_thickness(550.0, 25.0);
+
+                    ui.horizontal_wrapped(|ui| {
+                        ui.spacing_mut().item_spacing = Vec2::new(12.0, 2.0);
+                        ui.label(RichText::new("τ(10mm):").strong().size(10.5).color(tokens.text_muted));
+                        ui.label(
+                            RichText::new(format!("400nm: {:.1}%, 550nm: {:.1}%", t10_400 * 100.0, t10_550 * 100.0))
+                                .monospace()
+                                .size(10.5)
+                                .color(tokens.text_primary),
+                        );
+
+                        ui.label(RichText::new("τ(25mm):").strong().size(10.5).color(tokens.text_muted));
+                        ui.label(
+                            RichText::new(format!("400nm: {:.1}%, 550nm: {:.1}%", t25_400 * 100.0, t25_550 * 100.0))
+                                .monospace()
+                                .size(10.5)
+                                .color(tokens.text_primary),
+                        );
+                    });
                 } else {
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing = Vec2::new(8.0, 0.0);

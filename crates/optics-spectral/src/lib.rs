@@ -12,6 +12,7 @@ pub mod color;
 pub mod dispersion;
 pub mod hero;
 pub mod sellmeier;
+pub mod sources;
 pub mod thermal;
 
 pub use abbe::{
@@ -31,6 +32,10 @@ pub use hero::{
     DynamicHeroSpectrum, HeroBundle4, HeroSpectrum, hero_sample_wavelengths, sample_hero_bundle,
 };
 pub use sellmeier::{cauchy_dispersion, sellmeier_formula_1, sellmeier_formula_2};
+pub use sources::{
+    CADMIUM_LINES, HELIUM_LINES, HYDROGEN_LINES, MERCURY_LINES, NEON_LINES, SODIUM_LINES,
+    SpectralLamp, SpectralLine, StandardColorTemp, planck_normalized_spd, planck_spectral_radiance,
+};
 pub use thermal::{
     SchottThermalModel, edlen_air_refractive_index, internal_transmittance_to_absorption_coeff,
     ray_path_transmittance,

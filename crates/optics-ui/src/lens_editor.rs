@@ -1830,25 +1830,100 @@ fn render_specification_card(
                     }
                 });
 
-                // Presets wrapped row
+                // Fraunhofer & Laser Presets wrapped row
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing = Vec2::new(4.0, 2.0);
-                    ui.label(RichText::new("Presets:").size(10.0).color(tokens.text_muted));
-                    if ui.small_button("d: 587.6").clicked() {
+                    ui.label(RichText::new("Fraunhofer:").size(10.0).color(tokens.text_muted));
+                    if ui.small_button("d: 587.6").on_hover_text("Helium yellow d-line (587.56 nm)").clicked() {
                         if !prescription.wavelengths_nm.iter().any(|&w| (w - 587.56).abs() < 0.1) {
                             prescription.wavelengths_nm.push(587.56);
                             modified = true;
                         }
                     }
-                    if ui.small_button("F: 486.1").clicked() {
+                    if ui.small_button("F: 486.1").on_hover_text("Hydrogen blue F-line (486.13 nm)").clicked() {
                         if !prescription.wavelengths_nm.iter().any(|&w| (w - 486.13).abs() < 0.1) {
                             prescription.wavelengths_nm.push(486.13);
                             modified = true;
                         }
                     }
-                    if ui.small_button("C: 656.3").clicked() {
+                    if ui.small_button("C: 656.3").on_hover_text("Hydrogen red C-line (656.27 nm)").clicked() {
                         if !prescription.wavelengths_nm.iter().any(|&w| (w - 656.27).abs() < 0.1) {
                             prescription.wavelengths_nm.push(656.27);
+                            modified = true;
+                        }
+                    }
+                    if ui.small_button("e: 546.1").on_hover_text("Mercury green e-line (546.07 nm)").clicked() {
+                        if !prescription.wavelengths_nm.iter().any(|&w| (w - 546.07).abs() < 0.1) {
+                            prescription.wavelengths_nm.push(546.07);
+                            modified = true;
+                        }
+                    }
+                    if ui.small_button("HeNe: 632.8").on_hover_text("HeNe laser red line (632.82 nm)").clicked() {
+                        if !prescription.wavelengths_nm.iter().any(|&w| (w - 632.82).abs() < 0.1) {
+                            prescription.wavelengths_nm.push(632.82);
+                            modified = true;
+                        }
+                    }
+                });
+
+                // Standard Spectral Discharge Lamps (Zemax / NIST)
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = Vec2::new(4.0, 2.0);
+                    ui.label(RichText::new("Lamps:").size(10.0).color(tokens.text_muted));
+                    if ui.small_button("Hg (i,h,g,e)").on_hover_text("Mercury vapor calibration lamp lines (365.0, 404.7, 435.8, 546.1 nm)").clicked() {
+                        for &wl in &[365.015, 404.656, 435.833, 546.074] {
+                            if !prescription.wavelengths_nm.iter().any(|&w| (w - wl).abs() < 0.1) {
+                                prescription.wavelengths_nm.push(wl);
+                                modified = true;
+                            }
+                        }
+                    }
+                    if ui.small_button("He (d,r)").on_hover_text("Helium discharge lamp lines (587.6, 706.5 nm)").clicked() {
+                        for &wl in &[587.562, 706.519] {
+                            if !prescription.wavelengths_nm.iter().any(|&w| (w - wl).abs() < 0.1) {
+                                prescription.wavelengths_nm.push(wl);
+                                modified = true;
+                            }
+                        }
+                    }
+                    if ui.small_button("Cd (F',C')").on_hover_text("Cadmium vapor lamp lines (479.99, 643.85 nm)").clicked() {
+                        for &wl in &[479.991, 643.847] {
+                            if !prescription.wavelengths_nm.iter().any(|&w| (w - wl).abs() < 0.1) {
+                                prescription.wavelengths_nm.push(wl);
+                                modified = true;
+                            }
+                        }
+                    }
+                    if ui.small_button("Ne (640)").on_hover_text("Neon discharge prominent red line (640.22 nm)").clicked() {
+                        if !prescription.wavelengths_nm.iter().any(|&w| (w - 640.22).abs() < 0.1) {
+                            prescription.wavelengths_nm.push(640.225);
+                            modified = true;
+                        }
+                    }
+                });
+
+                // Planck Blackbody Radiator Peaks (Wien's Displacement Law)
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = Vec2::new(4.0, 2.0);
+                    ui.label(RichText::new("Planck:").size(10.0).color(tokens.text_muted));
+                    if ui.small_button("3000K (Tungsten)").on_hover_text("Planck blackbody peak for 3000 K halogen lamp: 965.9 nm (NIR)").clicked() {
+                        let wl = 2.897_771_955e6 / 3000.0;
+                        if !prescription.wavelengths_nm.iter().any(|&w| (w - wl).abs() < 0.1) {
+                            prescription.wavelengths_nm.push((wl * 10.0).round() / 10.0);
+                            modified = true;
+                        }
+                    }
+                    if ui.small_button("5500K (D55)").on_hover_text("Planck blackbody peak for 5500 K daylight: 526.9 nm (Green)").clicked() {
+                        let wl = 2.897_771_955e6 / 5500.0;
+                        if !prescription.wavelengths_nm.iter().any(|&w| (w - wl).abs() < 0.1) {
+                            prescription.wavelengths_nm.push((wl * 10.0).round() / 10.0);
+                            modified = true;
+                        }
+                    }
+                    if ui.small_button("6500K (D65)").on_hover_text("Planck blackbody peak for 6500 K standard daylight: 445.8 nm (Blue)").clicked() {
+                        let wl = 2.897_771_955e6 / 6500.0;
+                        if !prescription.wavelengths_nm.iter().any(|&w| (w - wl).abs() < 0.1) {
+                            prescription.wavelengths_nm.push((wl * 10.0).round() / 10.0);
                             modified = true;
                         }
                     }

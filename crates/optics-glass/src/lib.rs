@@ -178,4 +178,40 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_glass_internal_transmittance_and_thickness_scaling() {
+        let mut glass = GlassMaterial::n_bk7();
+        // N-BK7 standard Schott transmittance at 10 mm:
+        // 350 nm: 0.720, 400 nm: 0.992, 550 nm: 0.998, 700 nm: 0.998
+        glass.internal_transmittance = vec![
+            (350.0, 0.720),
+            (400.0, 0.992),
+            (550.0, 0.998),
+            (700.0, 0.998),
+        ];
+        glass.test_thickness_mm = 10.0;
+
+        // Exact tabulated point
+        assert!((glass.internal_transmittance_at(400.0) - 0.992).abs() < 1e-6);
+
+        // Linear interpolation halfway between 350 nm (0.720) and 400 nm (0.992) -> 375 nm: 0.856
+        let t_375 = glass.internal_transmittance_at(375.0);
+        assert!((t_375 - 0.856).abs() < 1e-4);
+
+        // Thickness scaling via Beer-Lambert law:
+        // At 10 mm: tau = 0.720
+        assert!((glass.transmittance_for_thickness(350.0, 10.0) - 0.720).abs() < 1e-6);
+
+        // At 20 mm (double thickness): tau = 0.720^2 = 0.5184
+        let t_20mm = glass.transmittance_for_thickness(350.0, 20.0);
+        assert!((t_20mm - 0.5184).abs() < 1e-4);
+
+        // At 25 mm: tau = 0.720^(2.5) = 0.4398
+        let t_25mm = glass.transmittance_for_thickness(350.0, 25.0);
+        assert!((t_25mm - 0.4398).abs() < 1e-4);
+
+        // At 0 mm: tau = 1.0 (no material path)
+        assert!((glass.transmittance_for_thickness(350.0, 0.0) - 1.0).abs() < 1e-9);
+    }
 }

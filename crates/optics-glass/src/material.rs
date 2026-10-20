@@ -271,6 +271,75 @@ impl GlassMaterial {
         }
     }
 
+    /// Evaluates internal transmittance $\tau_i(\lambda)$ for the standard test thickness
+    /// (typically 10.0 mm or 25.0 mm) via linear interpolation over tabulated spectral points.
+    ///
+    /// If no internal transmittance table is defined or for air/vacuum, returns 1.0.
+    #[must_use]
+    pub fn internal_transmittance_at(&self, wavelength_nm: f64) -> f64 {
+        if self.internal_transmittance.is_empty() {
+            return 1.0;
+        }
+        if self.internal_transmittance.len() == 1 {
+            return self.internal_transmittance[0].1.clamp(0.0, 1.0);
+        }
+
+        // Below lowest tabulated wavelength
+        if wavelength_nm <= self.internal_transmittance.first().unwrap().0 {
+            return self.internal_transmittance.first().unwrap().1.clamp(0.0, 1.0);
+        }
+        // Above highest tabulated wavelength
+        if wavelength_nm >= self.internal_transmittance.last().unwrap().0 {
+            return self.internal_transmittance.last().unwrap().1.clamp(0.0, 1.0);
+        }
+
+        // Linear interpolation between bracketing wavelengths
+        for window in self.internal_transmittance.windows(2) {
+            let (w0, t0) = window[0];
+            let (w1, t1) = window[1];
+            if wavelength_nm >= w0 && wavelength_nm <= w1 {
+                let frac = if (w1 - w0).abs() > 1e-12 {
+                    (wavelength_nm - w0) / (w1 - w0)
+                } else {
+                    0.0
+                };
+                return (t0 + frac * (t1 - t0)).clamp(0.0, 1.0);
+            }
+        }
+
+        1.0
+    }
+
+    /// Evaluates internal transmittance $\tau(d)$ for an arbitrary sample thickness $d$ (in mm)
+    /// using Beer-Lambert exponential scaling from the reference test thickness $t_0$:
+    ///
+    /// $$\tau(d) = \tau_0^{d / t_0} = \exp(-\alpha(\lambda) \cdot d)$$
+    ///
+    /// If $d \le 0$ or transmittance is 1.0, returns 1.0.
+    #[must_use]
+    pub fn transmittance_for_thickness(&self, wavelength_nm: f64, thickness_mm: f64) -> f64 {
+        if thickness_mm <= 0.0 {
+            return 1.0;
+        }
+        let tau_0 = self.internal_transmittance_at(wavelength_nm);
+        if tau_0 >= 1.0 || (tau_0 - 1.0).abs() < 1e-9 {
+            return 1.0;
+        }
+        if tau_0 <= 0.0 {
+            return 0.0;
+        }
+
+        let ref_t = if self.test_thickness_mm > 0.0 {
+            self.test_thickness_mm
+        } else {
+            10.0
+        };
+
+        // Beer-Lambert law: tau(d) = tau_0^(d / ref_t)
+        let exponent = thickness_mm / ref_t;
+        tau_0.powf(exponent).clamp(0.0, 1.0)
+    }
+
     /// Creates a synthetic model glass parameterized by $(n_d, V_d, \Delta P_{g,F})$.
     #[must_use]
     pub fn model_glass(name: &str, nd: f64, vd: f64, d_pgf: f64) -> Self {
