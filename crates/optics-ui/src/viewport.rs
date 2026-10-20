@@ -33,6 +33,8 @@ pub struct ViewportState {
     pub show_rays: bool,
     /// Number of rays per beam/field in 2D tracing (3, 5, 7, 9). Default: 5.
     pub ray_count: usize,
+    /// Ray aiming mode (Paraxial vs Real Iterative pupil aiming).
+    pub ray_aiming_mode: optics_core::RayAimingMode,
 }
 
 impl Default for ViewportState {
@@ -43,6 +45,7 @@ impl Default for ViewportState {
             initialized: false,
             show_rays: true, // Visible by default
             ray_count: 5,    // Standard 5-ray beam
+            ray_aiming_mode: optics_core::RayAimingMode::Paraxial,
         }
     }
 }
@@ -231,7 +234,7 @@ pub fn render_optical_viewport(
 
     // Layer E: Multi-Wavelength Ray Tracing (Real-Time Refraction)
     if state.show_rays {
-        draw_sequential_rays(&painter, prescription, state.ray_count, to_screen, tokens);
+        draw_sequential_rays(&painter, prescription, state.ray_count, state.ray_aiming_mode, to_screen, tokens);
     }
 
     // Layer F: High-Contrast Plane Markers (STO, IMAGE)
@@ -685,6 +688,7 @@ fn draw_sequential_rays(
     painter: &Painter,
     prescription: &OpticalPrescription,
     ray_count: usize,
+    aiming_mode: optics_core::RayAimingMode,
     to_screen: impl Fn(f64, f64) -> Pos2,
     tokens: &OpticsTokens,
 ) {
@@ -851,6 +855,39 @@ fn draw_sequential_rays(
 
     for (idx, &angle_deg) in off_axis_fields.iter().enumerate() {
         let col = off_axis_colors[idx % off_axis_colors.len()];
+
+        // Tracing with either Real Iterative Aiming or Paraxial Ray Aiming
+        if aiming_mode == optics_core::RayAimingMode::RealIterative {
+            if let Some(resolved) = &resolved_opt {
+                for &frac in &off_axis_fracs {
+                    let pupil_coord = optics_core::types::Pupil::new(0.0, frac)
+                        .unwrap_or_else(|_| optics_core::types::Pupil::new(0.0, 0.0).unwrap());
+                    let field = optics_core::types::Field::AngleDegrees { x: 0.0, y: angle_deg };
+                    let wl = optics_core::types::Wavelength::from_nanometers(primary_wl)
+                        .unwrap_or(optics_core::types::Wavelength::D_LINE);
+
+                    if let Ok(aimed_ray) = optics_core::aiming::trace_aimed_ray(
+                        resolved,
+                        field,
+                        pupil_coord,
+                        wl,
+                        optics_core::RayAimingMode::RealIterative,
+                    ) {
+                        if let Ok(path_rec) = trace_sequential(resolved, &aimed_ray) {
+                            if path_rec.points.len() >= 2 {
+                                for window in path_rec.points.windows(2) {
+                                    let p1 = to_screen(window[0].z, window[0].y);
+                                    let p2 = to_screen(window[1].z, window[1].y);
+                                    painter.line_segment([p1, p2], Stroke::new(1.15, col.gamma_multiply(0.88)));
+                                }
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
+        }
+
         let u_pos = (angle_deg * std::f64::consts::PI / 180.0).tan();
         let u_neg = (-angle_deg * std::f64::consts::PI / 180.0).tan();
 
@@ -942,6 +979,39 @@ fn draw_viewport_controls(
                         state.ray_count = count;
                         state.show_rays = true;
                     }
+                }
+
+                ui.separator();
+
+                let is_aim_real = state.ray_aiming_mode == optics_core::RayAimingMode::RealIterative;
+                let aim_label = if is_aim_real { "AIM: REAL" } else { "AIM: PARAXIAL" };
+                let (aim_bg, aim_stroke, aim_text_color) = if is_aim_real {
+                    (tokens.bg_control_active, tokens.border_hovered, tokens.accent)
+                } else {
+                    (tokens.bg_control, tokens.border, tokens.text_muted)
+                };
+
+                let aim_btn = egui::Button::new(
+                    RichText::new(aim_label)
+                        .size(10.0)
+                        .monospace()
+                        .strong()
+                        .color(aim_text_color),
+                )
+                .fill(aim_bg)
+                .stroke(aim_stroke)
+                .corner_radius(CornerRadius::ZERO);
+
+                if ui
+                    .add(aim_btn)
+                    .on_hover_text("Toggle between Paraxial Pupil Aiming and Real Iterative Stop Aiming (Gauss-Newton)")
+                    .clicked()
+                {
+                    state.ray_aiming_mode = if is_aim_real {
+                        optics_core::RayAimingMode::Paraxial
+                    } else {
+                        optics_core::RayAimingMode::RealIterative
+                    };
                 }
             });
         });
