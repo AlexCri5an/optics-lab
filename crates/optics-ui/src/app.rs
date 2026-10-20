@@ -307,6 +307,8 @@ impl eframe::App for OpticsWorkbenchApp {
             SidePanel::left("left_lens_data_editor")
                 .resizable(false)
                 .exact_width(400.0)
+                .min_width(400.0)
+                .max_width(400.0)
                 .show_separator_line(true)
                 .frame(
                     egui::Frame::NONE
@@ -316,6 +318,7 @@ impl eframe::App for OpticsWorkbenchApp {
                         .inner_margin(egui::Margin::same(8)),
                 )
                 .show(ctx, |ui| {
+                    ui.set_max_width(ui.available_width());
                     // Header: Left Panel Segmented Tabs (LENS DATA | OPTIMIZER)
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing = egui::Vec2::new(4.0, 0.0);
@@ -449,6 +452,8 @@ impl eframe::App for OpticsWorkbenchApp {
             SidePanel::right("right_diagnostics_panel")
                 .resizable(false)
                 .exact_width(400.0)
+                .min_width(400.0)
+                .max_width(400.0)
                 .show_separator_line(true)
                 .frame(
                     egui::Frame::NONE
@@ -458,6 +463,7 @@ impl eframe::App for OpticsWorkbenchApp {
                         .inner_margin(egui::Margin::same(8)),
                 )
                 .show(ctx, |ui| {
+                    ui.set_max_width(ui.available_width());
                     ui.horizontal(|ui| {
                         ui.label(
                             RichText::new("ANALYSIS & DIAGNOSTICS")

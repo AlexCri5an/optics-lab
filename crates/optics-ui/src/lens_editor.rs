@@ -235,7 +235,9 @@ pub fn render_lens_editor(
         // -------------------------------------------------------------------
         ScrollArea::vertical()
             .auto_shrink([false, false])
+            .max_width(ui.available_width())
             .show(ui, |ui| {
+                ui.set_max_width(ui.available_width());
                 let total_surfaces = prescription.surfaces.len();
                 let mut surf_to_remove: Option<usize> = None;
                 let mut surf_to_toggle_stop: Option<usize> = None;
@@ -319,6 +321,7 @@ fn render_surface_card(
 
     frame.show(ui, |ui| {
         ui.set_width(ui.available_width());
+        ui.set_max_width(ui.available_width());
         // -------------------------------------------------------------------
         // Row 1: Identification, Stop designation, Delete button
         // -------------------------------------------------------------------
@@ -977,6 +980,7 @@ fn render_surface_card(
                 .corner_radius(CornerRadius::same(5))
                 .inner_margin(Margin::symmetric(10, 7))
                 .show(ui, |ui| {
+                    ui.set_max_width(ui.available_width());
                     let title = match &ap.shape {
                         ApertureShape::Circular { .. } => "Circular Aperture Boundary",
                         ApertureShape::Rectangular { .. } => "Rectangular Aperture Boundary",
@@ -1087,6 +1091,7 @@ fn render_surface_card(
                 .corner_radius(CornerRadius::same(5))
                 .inner_margin(Margin::symmetric(10, 7))
                 .show(ui, |ui| {
+                    ui.set_max_width(ui.available_width());
                     ui.horizontal(|ui| {
                         ui.label(
                             RichText::new(format!("Thin-Film Coating: {}", coat.label()))
@@ -1108,14 +1113,29 @@ fn render_surface_card(
                             design_wavelength_nm,
                         } => {
                             let d_nm = *design_wavelength_nm / (4.0 * 1.38);
+                            let d_str = if !d_nm.is_finite() || d_nm <= 0.0 {
+                                "-".to_string()
+                            } else if d_nm >= 10_000.0 {
+                                format!("{:.2e} nm", d_nm)
+                            } else {
+                                format!("{:.1} nm", d_nm)
+                            };
                             ui.horizontal(|ui| {
-                                ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
+                                ui.spacing_mut().item_spacing = Vec2::new(5.0, 0.0);
                                 ui.label(RichText::new("Design λ:").size(10.0).color(tokens.text_muted));
                                 if float_input(ui, Id::new(("surf_coat_wl", idx)), design_wavelength_nm, 44.0) {
+                                    *design_wavelength_nm = design_wavelength_nm.clamp(1.0, 100_000.0);
                                     modified = true;
                                 }
                                 ui.label(RichText::new("nm").size(10.0).color(tokens.text_muted));
-                                ui.label(RichText::new(format!("(n=1.38, d={:.1} nm)", d_nm)).size(9.5).color(tokens.text_muted));
+                                ui.add(
+                                    egui::Label::new(
+                                        RichText::new(format!("(n=1.38, d={})", d_str))
+                                            .size(9.5)
+                                            .color(tokens.text_muted),
+                                    )
+                                    .truncate(),
+                                );
                             });
                         }
                         SurfaceCoating::BroadbandAr => {
@@ -1340,6 +1360,7 @@ fn float_input(ui: &mut Ui, id: Id, value: &mut f64, width: f32) -> bool {
     let resp = ui.add(
         TextEdit::singleline(&mut text)
             .desired_width(width)
+            .clip_text(true)
             .font(egui::TextStyle::Monospace),
     );
 
