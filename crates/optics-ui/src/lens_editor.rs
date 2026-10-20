@@ -1322,64 +1322,72 @@ fn render_specification_card(
                 .map(|i| format!("Stop: S{}", i))
                 .unwrap_or_else(|| "Stop: None".to_string());
 
-            // Header Row: Prescription Title & Settings Toggle (Truncated title so it never widens the panel)
+            // Header Row: Prescription Title on left, Settings Toggle on right
             ui.horizontal(|ui| {
-                let tooltip = if state.system_explorer_open {
-                    "Close System Explorer: Hide Wavelengths and Field Angles drawer"
-                } else {
-                    "Open System Explorer: Configure Wavelengths and Field Angles"
-                };
+                let total_w = ui.available_width();
+                let btn_w = 78.0;
+                let title_w = (total_w - btn_w - 12.0).max(60.0);
 
-                let btn_resp = if state.system_explorer_open {
-                    let icon_size = 14.0;
-                    let img = Image::from_bytes(
-                        LucideIcon::SlidersHorizontal.uri(),
-                        LucideIcon::SlidersHorizontal.svg_content().as_bytes(),
-                    )
-                    .tint(tokens.accent)
-                    .fit_to_exact_size(Vec2::splat(icon_size));
+                // Left: Prescription Title with hard max width to prevent panel widening
+                ui.allocate_ui_with_layout(
+                    Vec2::new(title_w, 20.0),
+                    Layout::left_to_right(Align::Center),
+                    |ui| {
+                        ui.add(
+                            egui::Label::new(
+                                RichText::new(&prescription.name)
+                                    .strong()
+                                    .size(12.0)
+                                    .color(tokens.text_primary),
+                            )
+                            .truncate(),
+                        )
+                        .on_hover_text(&prescription.name);
+                    },
+                );
 
-                    let btn = egui::Button::image_and_text(
-                        img,
-                        egui::RichText::new("Settings").size(11.0).strong().color(tokens.accent),
-                    )
-                    .fill(tokens.bg_control_active)
-                    .stroke(tokens.border_hovered)
-                    .corner_radius(CornerRadius::ZERO);
+                // Right: Settings Toggle Button
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    let tooltip = if state.system_explorer_open {
+                        "Close System Explorer: Hide Wavelengths and Field Angles drawer"
+                    } else {
+                        "Open System Explorer: Configure Wavelengths and Field Angles"
+                    };
 
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    let btn_resp = if state.system_explorer_open {
+                        let icon_size = 14.0;
+                        let img = Image::from_bytes(
+                            LucideIcon::SlidersHorizontal.uri(),
+                            LucideIcon::SlidersHorizontal.svg_content().as_bytes(),
+                        )
+                        .tint(tokens.accent)
+                        .fit_to_exact_size(Vec2::splat(icon_size));
+
+                        let btn = egui::Button::image_and_text(
+                            img,
+                            egui::RichText::new("Settings").size(11.0).strong().color(tokens.accent),
+                        )
+                        .fill(tokens.bg_control_active)
+                        .stroke(tokens.border_hovered)
+                        .corner_radius(CornerRadius::ZERO);
+
                         ui.add(btn).on_hover_text(tooltip)
-                    })
-                    .inner
-                } else {
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    } else {
                         lucide_text_button(ui, LucideIcon::SlidersHorizontal, "Settings", tokens)
                             .on_hover_text(tooltip)
-                    })
-                    .inner
-                };
+                    };
 
-                if btn_resp.clicked() {
-                    state.system_explorer_open = !state.system_explorer_open;
-                }
-
-                ui.add(
-                    egui::Label::new(
-                        RichText::new(&prescription.name)
-                            .strong()
-                            .size(12.0)
-                            .color(tokens.text_primary),
-                    )
-                    .truncate(),
-                )
-                .on_hover_text(&prescription.name);
+                    if btn_resp.clicked() {
+                        state.system_explorer_open = !state.system_explorer_open;
+                    }
+                });
             });
 
             ui.add_space(5.0);
 
-            // Technical Specs Row (Stop badge, EPD, Wav - cleanly spaced on their own row)
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing = Vec2::new(8.0, 0.0);
+            // Technical Specs Row (Stop badge, EPD, Wav - neatly wrapped, no panel widening)
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = Vec2::new(6.0, 3.0);
 
                 // Aperture Stop Indicator
                 ui.label(
@@ -1491,29 +1499,34 @@ fn render_specification_card(
                 // Add Wavelength row
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing = Vec2::new(4.0, 0.0);
-                    ui.add(TextEdit::singleline(&mut state.new_wav_buf).desired_width(50.0).font(egui::TextStyle::Monospace));
+                    ui.add(TextEdit::singleline(&mut state.new_wav_buf).desired_width(55.0).font(egui::TextStyle::Monospace));
                     if lucide_text_button(ui, LucideIcon::Plus, "Add", tokens).clicked() {
                         if let Ok(val) = state.new_wav_buf.trim().parse::<f64>() {
-                            if val >= 300.0 && val <= 15000.0 && !prescription.wavelengths_nm.iter().any(|&w| (w - val).abs() < 0.1) {
+                            if (300.0..=15000.0).contains(&val) && !prescription.wavelengths_nm.iter().any(|&w| (w - val).abs() < 0.1) {
                                 prescription.wavelengths_nm.push(val);
                                 modified = true;
                             }
                         }
                     }
-                    // Presets
-                    if ui.small_button("d (587.6)").clicked() {
+                });
+
+                // Presets wrapped row
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = Vec2::new(4.0, 2.0);
+                    ui.label(RichText::new("Presets:").size(10.0).color(tokens.text_muted));
+                    if ui.small_button("d: 587.6").clicked() {
                         if !prescription.wavelengths_nm.iter().any(|&w| (w - 587.56).abs() < 0.1) {
                             prescription.wavelengths_nm.push(587.56);
                             modified = true;
                         }
                     }
-                    if ui.small_button("F (486.1)").clicked() {
+                    if ui.small_button("F: 486.1").clicked() {
                         if !prescription.wavelengths_nm.iter().any(|&w| (w - 486.13).abs() < 0.1) {
                             prescription.wavelengths_nm.push(486.13);
                             modified = true;
                         }
                     }
-                    if ui.small_button("C (656.3)").clicked() {
+                    if ui.small_button("C: 656.3").clicked() {
                         if !prescription.wavelengths_nm.iter().any(|&w| (w - 656.27).abs() < 0.1) {
                             prescription.wavelengths_nm.push(656.27);
                             modified = true;
@@ -1565,7 +1578,7 @@ fn render_specification_card(
                 // Add Field row
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing = Vec2::new(4.0, 0.0);
-                    ui.add(TextEdit::singleline(&mut state.new_field_buf).desired_width(50.0).font(egui::TextStyle::Monospace));
+                    ui.add(TextEdit::singleline(&mut state.new_field_buf).desired_width(55.0).font(egui::TextStyle::Monospace));
                     if lucide_text_button(ui, LucideIcon::Plus, "Add", tokens).clicked() {
                         if let Ok(val) = state.new_field_buf.trim().parse::<f64>() {
                             if (0.0..=89.0).contains(&val) && !prescription.field_angles_deg.iter().any(|&f| (f - val).abs() < 0.01) {
@@ -1575,6 +1588,12 @@ fn render_specification_card(
                             }
                         }
                     }
+                });
+
+                // Presets wrapped row
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = Vec2::new(4.0, 2.0);
+                    ui.label(RichText::new("Presets:").size(10.0).color(tokens.text_muted));
                     if ui.small_button("+ 10°").clicked() {
                         if !prescription.field_angles_deg.iter().any(|&f| (f - 10.0).abs() < 0.01) {
                             prescription.field_angles_deg.push(10.0);
