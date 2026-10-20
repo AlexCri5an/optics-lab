@@ -122,8 +122,8 @@ pub fn render_optical_viewport(
     }
 
     let overlay_padding = 10.0;
-    let overlay_width = 175.0;
-    let overlay_height = 26.0;
+    let overlay_width = 310.0;
+    let overlay_height = 28.0;
     let overlay_rect = Rect::from_min_size(
         Pos2::new(rect.max.x - overlay_width - overlay_padding, rect.min.y + overlay_padding),
         Vec2::new(overlay_width, overlay_height),

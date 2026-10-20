@@ -492,6 +492,9 @@ impl eframe::App for OpticsWorkbenchApp {
         // -------------------------------------------------------------------
         // 8. Central Viewport (2D Optical Canvas)
         // -------------------------------------------------------------------
+        // Synchronize ray aiming mode bidirectionally between System Explorer and Viewport
+        self.viewport_state.ray_aiming_mode = self.lens_editor_state.ray_aiming_mode;
+
         CentralPanel::default()
             .frame(egui::Frame::NONE.fill(tokens.bg_canvas))
             .show(ctx, |ui| {
@@ -502,6 +505,9 @@ impl eframe::App for OpticsWorkbenchApp {
                     &tokens,
                 );
             });
+
+        // Propagate any toggle back from Viewport to System Explorer
+        self.lens_editor_state.ray_aiming_mode = self.viewport_state.ray_aiming_mode;
     }
 }
 
