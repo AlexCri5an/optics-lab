@@ -1541,4 +1541,41 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_ar_coating_reflectance_attenuation() -> TestResult {
+        let cooke = cooke_triplet_f4_5()?;
+        let catalog = GlassCatalogDb::load_bundled()?;
+
+        let mut state_uncoated = NonSeqUiState::default();
+        state_uncoated.ar_coating = ArCoatingPreset::Uncoated;
+        state_uncoated.compute_ghost_matrix(&cooke, &catalog);
+
+        let mut state_bmar = NonSeqUiState::default();
+        state_bmar.ar_coating = ArCoatingPreset::BmarMultiLayer;
+        state_bmar.compute_ghost_matrix(&cooke, &catalog);
+
+        let p_uncoated = state_uncoated.ghost_analysis.as_ref().unwrap().total_ghost_power_fraction;
+        let p_bmar = state_bmar.ghost_analysis.as_ref().unwrap().total_ghost_power_fraction;
+
+        // BMAR (0.5% reflectance) vs Uncoated (4.0% reflectance) drops 2-bounce ghost power by (0.005/0.040)^2 = (1/8)^2 = 1/64 ≈ 64x
+        assert!(p_uncoated > 0.0);
+        assert!(p_bmar > 0.0);
+        let attenuation = p_uncoated / p_bmar;
+        assert!(attenuation > 50.0, "BMAR coating must attenuate two-bounce ghost power by > 50x, got {attenuation}x");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_detector_quantities_and_cross_section_axes() {
+        assert_eq!(CrossSectionAxis::Horizontal.display_name(), "Slice X (Horizontal)");
+        assert_eq!(CrossSectionAxis::Vertical.display_name(), "Slice Y (Vertical)");
+        assert_eq!(CrossSectionAxis::Both.display_name(), "Both (X & Y)");
+
+        assert_eq!(DetectorQuantity::Irradiance.unit(), "W/m²");
+        assert_eq!(DetectorQuantity::Illuminance.unit(), "lux");
+        assert_eq!(DetectorQuantity::Irradiance.display_name(), "Irradiance (W/m²)");
+        assert_eq!(DetectorQuantity::Illuminance.display_name(), "Illuminance (lux)");
+    }
 }

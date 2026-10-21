@@ -344,4 +344,78 @@ mod tests {
         assert_eq!(pt.defocus_shift_mm, 0.1);
         assert_eq!(pt.rms_radius_mm, 0.025);
     }
+
+    #[test]
+    fn test_compute_two_bounce_ghosts_singlet() -> Result<(), Box<dyn std::error::Error>> {
+        use std::sync::Arc;
+        use crate::conic::ConicSurface;
+        use crate::geometry::{Air, ConstantIndex};
+        use crate::prescription::{ResolvedPrescription, ResolvedSurface};
+
+        let presc = ResolvedPrescription {
+            name: "Plano-Convex Singlet".to_string(),
+            entrance_pupil_diameter_mm: 10.0,
+            field_angles_deg: vec![0.0],
+            wavelengths_nm: vec![587.56],
+            primary_wavelength_index: 0,
+            surfaces: vec![
+                ResolvedSurface {
+                    surface_index: 0,
+                    conic: ConicSurface::sphere(50.0, 10.0)?.with_vertex_z(0.0),
+                    asphere: None,
+                    coordinate_break: None,
+                    global_transform: None,
+                    grin_profile: None,
+                    profile: None,
+                    aperture: None,
+                    coating: None,
+                    thickness_mm: 5.0,
+                    material: Arc::new(ConstantIndex(1.5168)),
+                    material_name: "N-BK7".to_string(),
+                    is_stop: true,
+                },
+                ResolvedSurface {
+                    surface_index: 1,
+                    conic: ConicSurface::plane(10.0)?.with_vertex_z(5.0),
+                    asphere: None,
+                    coordinate_break: None,
+                    global_transform: None,
+                    grin_profile: None,
+                    profile: None,
+                    aperture: None,
+                    coating: None,
+                    thickness_mm: 93.4,
+                    material: Arc::new(Air),
+                    material_name: "AIR".to_string(),
+                    is_stop: false,
+                },
+                ResolvedSurface {
+                    surface_index: 2,
+                    conic: ConicSurface::plane(10.0)?.with_vertex_z(98.4),
+                    asphere: None,
+                    coordinate_break: None,
+                    global_transform: None,
+                    grin_profile: None,
+                    profile: None,
+                    aperture: None,
+                    coating: None,
+                    thickness_mm: 0.0,
+                    material: Arc::new(Air),
+                    material_name: "AIR".to_string(),
+                    is_stop: false,
+                },
+            ],
+        };
+
+        let ghost_analysis = compute_two_bounce_ghosts(&presc, 587.56, 0.04)?;
+        assert_eq!(ghost_analysis.ghosts.len(), 1, "Singlet has exactly 1 pair between surface 0 and 1");
+        let g = &ghost_analysis.ghosts[0];
+        assert_eq!(g.surface_front, 0);
+        assert_eq!(g.surface_rear, 1);
+        assert!(g.ghost_power_fraction > 0.0);
+        // Power fraction for uncoated glass (R=0.04) should be ~ R0 * R1 = 0.04 * 0.04 = 0.0016
+        assert!((g.ghost_power_fraction - 0.0016).abs() < 0.0005);
+
+        Ok(())
+    }
 }

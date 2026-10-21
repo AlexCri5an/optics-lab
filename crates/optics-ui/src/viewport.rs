@@ -119,6 +119,8 @@ pub struct ViewportState {
     pub ghost_rays: Vec<optics_nonseq::trace::RayPathSegment>,
     /// Currently selected ghost surface pair `(S_front, S_rear)` from the Ghost Matrix table.
     pub selected_ghost_pair: Option<(usize, usize)>,
+    /// Whether non-sequential ghost rays and flare paths are drawn in the viewport.
+    pub show_ghost_rays: bool,
     /// Whether the viewport is in 3D Hardware Perspective mode (false = 2D CAD).
     pub is_3d: bool,
     /// 3D Camera navigation state.
@@ -136,6 +138,7 @@ impl Default for ViewportState {
             ray_aiming_mode: optics_core::RayAimingMode::Paraxial,
             ghost_rays: Vec::new(),
             selected_ghost_pair: None,
+            show_ghost_rays: true,
             is_3d: false,
             camera_3d: Viewport3DCamera::default(),
         }
@@ -214,7 +217,7 @@ pub fn render_optical_viewport(
     }
 
     let overlay_padding = 10.0;
-    let overlay_width = 310.0;
+    let overlay_width = if rect.width() < 720.0 { 325.0 } else { 385.0 };
     let overlay_height = 28.0;
     let overlay_rect = Rect::from_min_size(
         Pos2::new(rect.max.x - overlay_width - overlay_padding, rect.min.y + overlay_padding),
@@ -330,7 +333,7 @@ pub fn render_optical_viewport(
     }
 
     // Layer E2: Non-Sequential Ghost Rays & Internal Reflections
-    if !state.ghost_rays.is_empty() {
+    if state.show_ghost_rays && !state.ghost_rays.is_empty() {
         draw_ghost_rays(&painter, &state.ghost_rays, to_screen, tokens);
     }
 
@@ -1162,6 +1165,40 @@ fn draw_viewport_controls(
                         optics_core::RayAimingMode::RealIterative
                     };
                 }
+
+                ui.separator();
+
+                let ghost_active = state.show_ghost_rays && !state.ghost_rays.is_empty();
+                let ghost_count = state.ghost_rays.len();
+                let ghost_label = if ghost_count > 0 {
+                    format!("GHOSTS ({})", ghost_count)
+                } else {
+                    "GHOSTS".to_string()
+                };
+                let (ghost_bg, ghost_stroke, ghost_text_color) = if ghost_active {
+                    (tokens.bg_control_active, tokens.border_hovered, tokens.warning)
+                } else {
+                    (tokens.bg_control, tokens.border, tokens.text_muted)
+                };
+
+                let ghost_btn = egui::Button::new(
+                    RichText::new(ghost_label)
+                        .size(10.0)
+                        .monospace()
+                        .strong()
+                        .color(ghost_text_color),
+                )
+                .fill(ghost_bg)
+                .stroke(ghost_stroke)
+                .corner_radius(CornerRadius::ZERO);
+
+                if ui
+                    .add(ghost_btn)
+                    .on_hover_text("Toggle non-sequential ghost rays & internal reflections overlay in 2D viewport")
+                    .clicked()
+                {
+                    state.show_ghost_rays = !state.show_ghost_rays;
+                }
             });
         });
     });
@@ -1663,13 +1700,35 @@ pub fn render_optical_viewport_3d(
     // -----------------------------------------------------------------------
     // 6. 3D Non-Sequential Ghost Rays
     // -----------------------------------------------------------------------
-    if !state.ghost_rays.is_empty() {
+    if state.show_ghost_rays && !state.ghost_rays.is_empty() {
         for seg in &state.ghost_rays {
             if let (Some((s0, _)), Some((s1, _))) = (project_3d(seg.start), project_3d(seg.end)) {
                 let stroke = Stroke::new(1.2, tokens.warning.gamma_multiply(0.85));
                 painter.line_segment([s0, s1], stroke);
             }
         }
+    }
+
+    // Ghost Focus Highlight Badge (When a pair is isolated in Ghost Matrix)
+    if let Some((s_front, s_rear)) = state.selected_ghost_pair {
+        let badge_rect = Rect::from_min_size(
+            Pos2::new(rect.min.x + 10.0, rect.min.y + 36.0),
+            Vec2::new(220.0, 22.0),
+        );
+        painter.rect_filled(badge_rect, CornerRadius::ZERO, tokens.bg_panel);
+        painter.rect_stroke(
+            badge_rect,
+            CornerRadius::ZERO,
+            tokens.border,
+            egui::StrokeKind::Inside,
+        );
+        painter.text(
+            badge_rect.center(),
+            egui::Align2::CENTER_CENTER,
+            format!("GHOST FOCUS PAIR: S{} ↔ S{}", s_front, s_rear),
+            egui::FontId::monospace(10.0),
+            tokens.warning,
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -1757,6 +1816,21 @@ pub fn render_optical_viewport_3d(
                 }
 
                 ui.separator();
+
+                let ghost_active_3d = state.show_ghost_rays && !state.ghost_rays.is_empty();
+                let (ghost_3d_text, ghost_3d_color) = if ghost_active_3d {
+                    ("GHOSTS", tokens.warning)
+                } else {
+                    ("GHOSTS", tokens.text_muted)
+                };
+                if ui.button(
+                    RichText::new(ghost_3d_text)
+                        .monospace()
+                        .size(10.0)
+                        .color(ghost_3d_color),
+                ).on_hover_text("Toggle non-sequential ghost rays in 3D viewport").clicked() {
+                    state.show_ghost_rays = !state.show_ghost_rays;
+                }
 
                 if ui.button(
                     RichText::new("2D CAD")

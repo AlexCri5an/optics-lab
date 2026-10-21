@@ -542,4 +542,154 @@ mod tests {
 
         Ok(())
     }
+
+    /// Benchmark test: Rigorous verification of unpolarized dielectric Fresnel energy conservation
+    /// $R(\theta) + T(\theta) = 1.0$ across all incident angles and verification of Brewster and TIR limits.
+    #[test]
+    fn test_fresnel_dielectric_energy_conservation_and_tir() -> TestResult {
+        let n1: f64 = 1.0;
+        let n2: f64 = 1.5168; // N-BK7
+        let eta = n1 / n2;
+
+        // 1. Normal incidence validation: R0 = ((n1 - n2) / (n1 + n2))^2
+        let r0_expected = ((n1 - n2) / (n1 + n2)).powi(2);
+        assert!((r0_expected - 0.04218).abs() < 1e-4);
+
+        // 2. Air -> Glass across 90 angles
+        for deg in 0..90 {
+            let theta1 = (deg as f64).to_radians();
+            let cos_t1 = theta1.cos();
+            let sin2_t1 = (1.0 - cos_t1 * cos_t1).max(0.0);
+            let cos_t2 = (1.0 - eta * eta * sin2_t1).sqrt();
+
+            let rs = (n1 * cos_t1 - n2 * cos_t2) / (n1 * cos_t1 + n2 * cos_t2);
+            let rp = (n2 * cos_t1 - n1 * cos_t2) / (n2 * cos_t1 + n1 * cos_t2);
+            let r = 0.5 * (rs * rs + rp * rp);
+            let t = 1.0 - r;
+
+            assert!(
+                (r + t - 1.0).abs() < 1e-12,
+                "Energy conservation failed at angle {deg} deg: R={r}, T={t}"
+            );
+        }
+
+        // 3. Brewster angle: theta_B = atan(n2 / n1) ≈ 56.6 deg where rp = 0
+        let theta_b = (n2 / n1).atan();
+        let cos_tb1 = theta_b.cos();
+        let sin2_tb1 = (1.0 - cos_tb1 * cos_tb1).max(0.0);
+        let cos_tb2 = (1.0 - eta * eta * sin2_tb1).sqrt();
+        let rp_brewster = (n2 * cos_tb1 - n1 * cos_tb2) / (n2 * cos_tb1 + n1 * cos_tb2);
+        assert!(
+            rp_brewster.abs() < 1e-10,
+            "Brewster p-polarization reflectance should be zero, got {rp_brewster}"
+        );
+
+        // 4. Glass -> Air internal reflection: Critical angle theta_c = asin(n1 / n2) ≈ 41.23 deg
+        let theta_c = (n1 / n2).asin();
+        let deg_c = theta_c.to_degrees();
+        assert!((deg_c - 41.23).abs() < 0.1);
+
+        // Beyond critical angle: TIR (R = 1.0, T = 0.0)
+        let angle_above_c = theta_c + 0.1;
+        let cos_tir1 = angle_above_c.cos();
+        let sin2_tir1 = (1.0 - cos_tir1 * cos_tir1).max(0.0);
+        let radicand = 1.0 - (n2 / n1).powi(2) * sin2_tir1;
+        assert!(radicand < 0.0, "Radicand must be negative indicating evanescent wave / TIR");
+
+        Ok(())
+    }
+
+    /// Benchmark test: Verification of automatic NonSeqScene synthesis on Double Gauss 50mm preset
+    /// with 6 elements, entrance pupil collimated source, focal detector, and ray branching report.
+    #[test]
+    fn test_scene_synthesis_double_gauss_all_elements() -> TestResult {
+        let dg = optics_zemax::presets::double_gauss_50mm()?;
+        let catalog = GlassCatalogDb::load_bundled()?;
+
+        let mut scene = NonSeqScene::build_from_prescription(&dg, 36)?;
+        assert_eq!(scene.objects.len(), 6, "Double Gauss must synthesize exactly 6 optical elements");
+        assert_eq!(scene.detectors.len(), 1, "Must contain exactly 1 focal plane detector");
+        assert_eq!(scene.sources.len(), 1, "Must contain 1 entrance pupil collimated source");
+
+        // Verify entrance pupil collimated source parameters
+        match &scene.sources[0] {
+            RaySource::CollimatedBeam { radius, total_flux_watts, .. } => {
+                assert!((radius - dg.entrance_pupil_diameter_mm * 0.5).abs() < 1e-3);
+                assert_eq!(*total_flux_watts, 1.0);
+            }
+            _ => panic!("Expected CollimatedBeam source for sequential prescription synthesis"),
+        }
+
+        // Trace non-sequential rays with branching
+        let rays = scene.sources[0].generate_rays(60, 9999)?;
+        let tracer = NonSeqTracer::new(NonSeqTraceConfig {
+            max_bounces: 12,
+            min_power_threshold: 1e-5,
+            enable_branching: true,
+            record_paths: true,
+        });
+
+        let report = tracer.trace_rays(&mut scene, &rays, Some(&catalog))?;
+        assert!(report.total_rays_traced > 0);
+        assert!((report.energy_conservation_ratio() - 1.0).abs() < 0.05);
+
+        let det = &scene.detectors[0];
+        assert!(det.total_rays_hit > 0);
+        assert!(det.total_flux_watts > 0.0);
+
+        let (cx, cy) = det.centroid_mm();
+        assert!(cx.abs() < 1.0, "Centroid X should be near axis, got {cx}");
+        assert!(cy.abs() < 1.0, "Centroid Y should be near axis, got {cy}");
+
+        Ok(())
+    }
+
+    /// Acceptance test: Verification of 2D detector radiometric and photometric metrics,
+    /// irradiance ($W/m^2$), illuminance ($lux$), centroid, and RMS spot radius.
+    #[test]
+    fn test_detector_radiometric_and_photometric_flux_and_kpis() -> TestResult {
+        // 10 mm x 10 mm detector with 50x50 resolution
+        // Pixel size = 0.2 mm x 0.2 mm = 4e-8 m^2
+        // Detector area = 1e-4 m^2
+        let mut det = Detector2D::new(
+            0,
+            "RadiometricDet",
+            Vec3::new(0.0, 0.0, 50.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            Vec3::new(0.0, 1.0, 0.0),
+            10.0,
+            10.0,
+            50,
+            50,
+        )?;
+
+        let power_w = 2.0;
+        let wav_nm = 555.0; // Peak human visual sensitivity: 683 lm/W
+
+        // Deposit energy in center pixel (25, 25)
+        det.record_hit(0.0, 0.0, power_w, wav_nm);
+
+        assert_eq!(det.total_rays_hit, 1);
+        assert!((det.total_flux_watts - power_w).abs() < 1e-9);
+
+        // Luminous flux in lumens: 2.0 * 683.002 = 1366.004 lumens
+        let expected_lumens = power_w * 683.002;
+        assert!((det.total_lumens - expected_lumens).abs() < 1e-2);
+
+        // Center pixel (25, 25) irradiance
+        let irr_center = det.irradiance_at(25, 25);
+        let expected_irr = power_w / det.pixel_area_m2();
+        assert!((irr_center - expected_irr).abs() < 1.0);
+
+        // Centroid should be exactly at (0.0, 0.0)
+        let (cx, cy) = det.centroid_mm();
+        assert!(cx.abs() < 1e-6);
+        assert!(cy.abs() < 1e-6);
+
+        // RMS spot radius with single central hit should be 0.0
+        let rms = det.rms_radius_mm();
+        assert!(rms.abs() < 1e-6);
+
+        Ok(())
+    }
 }
