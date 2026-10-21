@@ -812,16 +812,16 @@ fn render_detector_viewer_tab(
             });
         }
     } else {
-        ui.add_space(16.0);
-        ui.centered_and_justified(|ui| {
-            ui.label(
-                RichText::new("Click 'Trace Non-Seq' to trace physical 3D rays and generate detector maps.")
-                    .monospace()
-                    .size(10.5)
-                    .color(tokens.text_muted),
-            );
+        ui.allocate_ui(Vec2::new(avail_w, 140.0), |ui| {
+            ui.centered_and_justified(|ui| {
+                ui.label(
+                    RichText::new("Click 'Trace Non-Seq' to trace physical 3D rays and generate detector maps.")
+                        .monospace()
+                        .size(10.5)
+                        .color(tokens.text_muted),
+                );
+            });
         });
-        ui.add_space(16.0);
     }
 }
 

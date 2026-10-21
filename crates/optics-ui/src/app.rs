@@ -526,9 +526,16 @@ impl eframe::App for OpticsWorkbenchApp {
         // -------------------------------------------------------------------
         // 7b. Non-Sequential & Stray Light Bottom Drawer (Docked under viewport)
         // -------------------------------------------------------------------
+        let drawer_height = if self.nonseq_state.drawer_open {
+            236.0_f32.min(window_size.y * 0.35)
+        } else {
+            28.0
+        };
+
         TopBottomPanel::bottom("nonseq_bottom_drawer")
             .resizable(false)
-            .show_separator_line(false)
+            .exact_height(drawer_height)
+            .show_separator_line(self.nonseq_state.drawer_open)
             .frame(
                 egui::Frame::NONE
                     .fill(tokens.bg_panel)
@@ -536,6 +543,7 @@ impl eframe::App for OpticsWorkbenchApp {
             )
             .show(ctx, |ui| {
                 ui.set_max_width(ui.available_width());
+                ui.set_max_height(drawer_height);
                 render_nonseq_bottom_drawer(
                     ui,
                     &mut self.nonseq_state,
