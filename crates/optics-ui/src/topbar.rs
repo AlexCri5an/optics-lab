@@ -83,6 +83,8 @@ pub enum TopBarAction {
     OpenTolerancing,
     /// Toggle Non-Sequential & Stray Light detector viewer bottom drawer.
     ToggleNonSeqDrawer,
+    /// Toggle between 2D Cross-Section CAD and 3D Hardware Perspective viewport mode.
+    ToggleViewport3DMode,
 }
 
 /// State for the TopBar component.
@@ -104,6 +106,8 @@ pub struct TopBarState {
     pub recent_files: Vec<std::path::PathBuf>,
     /// Whether the bottom drawer (Non-Sequential & Stray Light) is open.
     pub nonseq_drawer_open: bool,
+    /// Whether the viewport is in 3D Hardware Perspective mode.
+    pub viewport_3d_mode: bool,
 }
 
 impl Default for TopBarState {
@@ -117,6 +121,7 @@ impl Default for TopBarState {
             is_dirty: false,
             recent_files: Vec::new(),
             nonseq_drawer_open: false,
+            viewport_3d_mode: false,
         }
     }
 }
@@ -347,6 +352,10 @@ pub fn render_topbar(
                         triggered_action = Some(TopBarAction::ToggleNonSeqDrawer);
                         ui.close();
                     }
+                    if ui.button(if state.viewport_3d_mode { "Switch to 2D Cross-Section (Ctrl+2)" } else { "Switch to 3D Hardware View (Ctrl+3)" }).clicked() {
+                        triggered_action = Some(TopBarAction::ToggleViewport3DMode);
+                        ui.close();
+                    }
                     ui.separator();
                     ui.menu_button("Theme", |ui| {
                         for mode in ThemeMode::ALL {
@@ -444,6 +453,15 @@ pub fn render_topbar(
             }
             if lucide_toolbar_button(ui, LucideIcon::RotateCcw, "Reset View & Center Optical Axis", false, tokens).clicked() {
                 triggered_action = Some(TopBarAction::ResetView);
+            }
+
+            let (view_3d_tooltip, view_3d_active) = if state.viewport_3d_mode {
+                ("Active: 3D Hardware Perspective (Click or Ctrl+2 for 2D CAD)", true)
+            } else {
+                ("Switch to 3D Hardware Perspective Viewport (Ctrl+3)", false)
+            };
+            if lucide_toolbar_button(ui, LucideIcon::Box, view_3d_tooltip, view_3d_active, tokens).clicked() {
+                triggered_action = Some(TopBarAction::ToggleViewport3DMode);
             }
 
             draw_toolbar_separator(ui, tokens.border);

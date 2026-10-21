@@ -491,6 +491,10 @@ pub fn render_nonseq_bottom_drawer(
 ) {
     let header_bg = tokens.bg_control;
     let border_stroke = tokens.border;
+    let avail_w = ui.available_width();
+    let is_compact = avail_w < 820.0;
+
+    ui.set_max_width(avail_w);
 
     // Header bar (always visible, toggles drawer expansion)
     Frame::NONE
@@ -501,6 +505,7 @@ pub fn render_nonseq_bottom_drawer(
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 6.0;
                 let toggle_icon = if state.drawer_open {
                     LucideIcon::Minus
                 } else {
@@ -508,20 +513,28 @@ pub fn render_nonseq_bottom_drawer(
                 };
                 if lucide_small_icon_button(ui, toggle_icon, "Toggle Non-Sequential Viewer", tokens).clicked() {
                     state.drawer_open = !state.drawer_open;
-                }                ui.label(
-                    RichText::new("NON-SEQUENTIAL DETECTOR VIEWER & STRAY LIGHT")
+                }
+
+                let title = if is_compact {
+                    "NON-SEQ & GHOSTS"
+                } else {
+                    "NON-SEQUENTIAL DETECTOR VIEWER & STRAY LIGHT"
+                };
+                ui.label(
+                    RichText::new(title)
                         .monospace()
                         .strong()
-                        .size(11.0)
+                        .size(10.5)
                         .color(tokens.text_primary),
                 );
 
                 ui.separator();
 
                 let det_active = state.active_tab == NonSeqDrawerTab::DetectorViewer;
+                let det_label = if is_compact { "2D Detector" } else { "2D Detector Map" };
                 let btn_det = ui.add(
                     Button::new(
-                        RichText::new("2D Detector Map")
+                        RichText::new(det_label)
                             .monospace()
                             .size(10.0)
                             .color(if det_active { tokens.text_primary } else { tokens.text_muted }),
@@ -535,9 +548,10 @@ pub fn render_nonseq_bottom_drawer(
                 }
 
                 let ghost_active = state.active_tab == NonSeqDrawerTab::GhostFocusMatrix;
+                let ghost_label = if is_compact { "Ghost Matrix" } else { "Ghost Focus Matrix (2-Bounce)" };
                 let btn_ghost = ui.add(
                     Button::new(
-                        RichText::new("Ghost Focus Matrix (2-Bounce)")
+                        RichText::new(ghost_label)
                             .monospace()
                             .size(10.0)
                             .color(if ghost_active { tokens.text_primary } else { tokens.text_muted }),
@@ -553,20 +567,23 @@ pub fn render_nonseq_bottom_drawer(
                     }
                 }
 
-                if let Some(msg) = &state.status_message {
-                    ui.label(RichText::new("|").size(9.0).color(tokens.border.color));
-                    ui.label(
-                        RichText::new(msg)
-                            .monospace()
-                            .size(10.0)
-                            .color(tokens.text_muted),
-                    );
+                if !is_compact {
+                    if let Some(msg) = &state.status_message {
+                        ui.label(RichText::new("|").size(9.0).color(tokens.border.color));
+                        let short_msg = if msg.len() > 45 { &msg[..45] } else { msg.as_str() };
+                        ui.label(
+                            RichText::new(short_msg)
+                                .monospace()
+                                .size(9.5)
+                                .color(tokens.text_muted),
+                        );
+                    }
                 }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.checkbox(
                         &mut state.show_ghost_rays_in_viewport,
-                        RichText::new("Show Ghost Rays in Viewport").monospace().size(10.0),
+                        RichText::new(if is_compact { "Ghost Rays" } else { "Show Ghost Rays" }).monospace().size(10.0),
                     );
                 });
             });
@@ -606,19 +623,23 @@ fn render_detector_viewer_tab(
     catalog: &Arc<GlassCatalogDb>,
     tokens: &OpticsTokens,
 ) {
-    // 1. Controls Strip
+    let avail_w = ui.available_width();
+    ui.set_max_width(avail_w);
+
+    // 1. Controls Strip: Two neat, mathematically sized rows (< 560px per row)
+    // Row 1: Execution & Source Parameters
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;
 
         let icon = LucideIcon::Play;
         let img = egui::Image::from_bytes(icon.uri(), icon.svg_content().as_bytes())
             .tint(tokens.accent)
-            .fit_to_exact_size(Vec2::splat(13.0));
+            .fit_to_exact_size(Vec2::splat(12.0));
         let btn = Button::image_and_text(
             img,
-            RichText::new("Trace Non-Seq Rays").monospace().size(10.5),
+            RichText::new("Trace Non-Seq").monospace().size(10.0),
         )
-        .min_size(Vec2::new(150.0, 22.0))
+        .min_size(Vec2::new(115.0, 20.0))
         .fill(tokens.bg_control)
         .stroke(tokens.border)
         .corner_radius(CornerRadius::ZERO);
@@ -627,27 +648,32 @@ fn render_detector_viewer_tab(
             state.execute_trace(prescription, catalog);
         }
 
-        ui.label(RichText::new("Rays:").monospace().size(10.0).color(tokens.text_muted));
-        uint_input(ui, egui::Id::new("ns_rays_inp"), &mut state.num_rays, 45.0);
+        ui.label(RichText::new("Rays:").monospace().size(9.5).color(tokens.text_muted));
+        uint_input(ui, egui::Id::new("ns_rays_inp"), &mut state.num_rays, 38.0);
 
-        ui.label(RichText::new("Bounces:").monospace().size(10.0).color(tokens.text_muted));
-        uint_input(ui, egui::Id::new("ns_bounces_inp"), &mut state.max_bounces, 28.0);
+        ui.label(RichText::new("Bounces:").monospace().size(9.5).color(tokens.text_muted));
+        uint_input(ui, egui::Id::new("ns_bounces_inp"), &mut state.max_bounces, 24.0);
 
-        ui.label(RichText::new("Cutoff (W):").monospace().size(10.0).color(tokens.text_muted));
-        float_input(ui, egui::Id::new("ns_cutoff_inp"), &mut state.min_power_threshold, 48.0);
+        ui.label(RichText::new("Cutoff:").monospace().size(9.5).color(tokens.text_muted));
+        float_input(ui, egui::Id::new("ns_cutoff_inp"), &mut state.min_power_threshold, 44.0);
 
         ui.checkbox(
             &mut state.enable_branching,
-            RichText::new("Fresnel Branching").monospace().size(10.0),
+            RichText::new("Branching").monospace().size(9.5),
         );
+    });
 
-        ui.label(RichText::new("|").size(9.0).color(tokens.border.color));
+    ui.add_space(2.0);
+
+    // Row 2: Filtering, Palette, Scale, Quantity, and Slice Axis
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
 
         // Ray Filter Dropdown
-        ui.label(RichText::new("Filter:").monospace().size(10.0).color(tokens.text_muted));
+        ui.label(RichText::new("Filter:").monospace().size(9.5).color(tokens.text_muted));
         egui::ComboBox::from_id_salt("ns_ray_filter_cb")
-            .selected_text(RichText::new(state.ray_filter.display_name()).monospace().size(10.0))
-            .width(135.0)
+            .selected_text(RichText::new(state.ray_filter.display_name()).monospace().size(9.5))
+            .width(105.0)
             .show_ui(ui, |ui| {
                 for f in [
                     RayPathFilter::All,
@@ -662,12 +688,11 @@ fn render_detector_viewer_tab(
                 }
             });
 
-        ui.label(RichText::new("|").size(9.0).color(tokens.border.color));
-
         // Palette dropdown
+        ui.label(RichText::new("Palette:").monospace().size(9.5).color(tokens.text_muted));
         egui::ComboBox::from_id_salt("ns_palette_cb")
-            .selected_text(RichText::new(state.palette.display_name()).monospace().size(10.0))
-            .width(70.0)
+            .selected_text(RichText::new(state.palette.display_name()).monospace().size(9.5))
+            .width(65.0)
             .show_ui(ui, |ui| {
                 for p in [
                     HeatmapPalette::Inferno,
@@ -683,8 +708,8 @@ fn render_detector_viewer_tab(
 
         // Scale dropdown (Linear vs Log)
         egui::ComboBox::from_id_salt("ns_scale_cb")
-            .selected_text(RichText::new(state.color_scale.display_name()).monospace().size(10.0))
-            .width(110.0)
+            .selected_text(RichText::new(state.color_scale.display_name()).monospace().size(9.5))
+            .width(75.0)
             .show_ui(ui, |ui| {
                 for s in [ColorScale::Linear, ColorScale::Logarithmic] {
                     if ui.selectable_label(state.color_scale == s, s.display_name()).clicked() {
@@ -695,8 +720,8 @@ fn render_detector_viewer_tab(
 
         // Radiometric vs Photometric
         egui::ComboBox::from_id_salt("ns_quantity_cb")
-            .selected_text(RichText::new(state.quantity.display_name()).monospace().size(10.0))
-            .width(120.0)
+            .selected_text(RichText::new(state.quantity.display_name()).monospace().size(9.5))
+            .width(95.0)
             .show_ui(ui, |ui| {
                 for q in [DetectorQuantity::Irradiance, DetectorQuantity::Illuminance] {
                     if ui.selectable_label(state.quantity == q, q.display_name()).clicked() {
@@ -704,79 +729,99 @@ fn render_detector_viewer_tab(
                     }
                 }
             });
+
+        // 1D Slice Axis
+        ui.label(RichText::new("Slice:").monospace().size(9.5).color(tokens.text_muted));
+        egui::ComboBox::from_id_salt("ns_cs_axis_cb")
+            .selected_text(RichText::new(state.cross_section_axis.display_name()).monospace().size(9.5))
+            .width(85.0)
+            .show_ui(ui, |ui| {
+                for axis in [CrossSectionAxis::Horizontal, CrossSectionAxis::Vertical, CrossSectionAxis::Both] {
+                    if ui.selectable_label(state.cross_section_axis == axis, axis.display_name()).clicked() {
+                        state.cross_section_axis = axis;
+                    }
+                }
+            });
     });
 
-    ui.add_space(6.0);
+    ui.add_space(4.0);
 
-    // 2. Visualization Area (2 Columns)
+    // 2. Visualization Area: Mathematically adapts to available width
     let det_opt = state.cached_scene.as_ref().and_then(|s| s.detectors.first().cloned());
     if let Some(detector) = det_opt {
-        let avail_w = ui.available_width();
-        let left_w = 260.0_f32.min(avail_w * 0.4);
-        let right_w = avail_w - left_w - 12.0;
+        let avail_w = ui.available_width().max(380.0);
 
-        ui.horizontal(|ui| {
-            // Left Column: 2D False-Color Detector Heatmap + Colorbar
-            ui.allocate_ui(Vec2::new(left_w, 175.0), |ui| {
-                render_detector_heatmap_widget(ui, &detector, state, tokens);
+        if avail_w >= 860.0 {
+            // WIDE MODE: 3 Columns side-by-side
+            let left_w = 200.0;
+            let rem_w = avail_w - left_w - 20.0;
+            let col_w = (rem_w * 0.5).max(180.0);
+
+            ui.horizontal(|ui| {
+                ui.allocate_ui(Vec2::new(left_w, 150.0), |ui| {
+                    render_detector_heatmap_widget(ui, &detector, state, tokens);
+                });
+
+                ui.separator();
+
+                ui.allocate_ui(Vec2::new(col_w, 150.0), |ui| {
+                    ui.label(
+                        RichText::new("1D Cross-Section Beam Profile:")
+                            .monospace()
+                            .strong()
+                            .size(10.0)
+                            .color(tokens.text_primary),
+                    );
+                    ui.add_space(2.0);
+                    render_cross_section_plot(ui, &detector, state, 120.0, tokens);
+                });
+
+                ui.separator();
+
+                ui.allocate_ui(Vec2::new(col_w, 150.0), |ui| {
+                    ui.label(
+                        RichText::new("Detector Radiometric Metrics:")
+                            .monospace()
+                            .strong()
+                            .size(10.0)
+                            .color(tokens.text_primary),
+                    );
+                    ui.add_space(2.0);
+                    render_radiometric_kpis_side(ui, &detector, state, tokens);
+                });
             });
+        } else {
+            // COMPACT MODE: 2 Columns (Left: Heatmap, Right: Stacked Plot & Compact KPIs)
+            let left_w = 190.0_f32.min(avail_w * 0.38);
+            let right_w = (avail_w - left_w - 14.0).max(180.0);
 
-            ui.separator();
+            ui.horizontal(|ui| {
+                ui.allocate_ui(Vec2::new(left_w, 150.0), |ui| {
+                    render_detector_heatmap_widget(ui, &detector, state, tokens);
+                });
 
-            // Right Column: 1D Cross-Section Slice + Radiometric KPI Cards
-            ui.allocate_ui(Vec2::new(right_w, 175.0), |ui| {
-                ui.columns(2, |cols| {
-                    // Col 1: 1D Cross-Section slice profile
-                    cols[0].vertical(|ui| {
-                        ui.horizontal(|ui| {
-                            ui.label(
-                                RichText::new("1D Cross-Section Beam Profile:")
-                                    .monospace()
-                                    .strong()
-                                    .size(10.5)
-                                    .color(tokens.text_primary),
-                            );
-                            egui::ComboBox::from_id_salt("ns_cs_axis_cb")
-                                .selected_text(RichText::new(state.cross_section_axis.display_name()).monospace().size(9.5))
-                                .width(120.0)
-                                .show_ui(ui, |ui| {
-                                    for axis in [CrossSectionAxis::Horizontal, CrossSectionAxis::Vertical, CrossSectionAxis::Both] {
-                                        if ui.selectable_label(state.cross_section_axis == axis, axis.display_name()).clicked() {
-                                            state.cross_section_axis = axis;
-                                        }
-                                    }
-                                });
-                        });
+                ui.separator();
+
+                ui.allocate_ui(Vec2::new(right_w, 150.0), |ui| {
+                    ui.vertical(|ui| {
+                        render_cross_section_plot(ui, &detector, state, 65.0, tokens);
                         ui.add_space(2.0);
-                        render_cross_section_plot(ui, &detector, state, tokens);
-                    });
-
-                    // Col 2: Radiometric metrics & energy conservation
-                    cols[1].vertical(|ui| {
-                        ui.label(
-                            RichText::new("Detector Radiometric Metrics:")
-                                .monospace()
-                                .strong()
-                                .size(10.5)
-                                .color(tokens.text_primary),
-                        );
-                        ui.add_space(4.0);
-                        render_radiometric_kpis(ui, &detector, state, tokens);
+                        render_radiometric_kpis_compact(ui, &detector, state, tokens);
                     });
                 });
             });
-        });
+        }
     } else {
-        ui.add_space(20.0);
+        ui.add_space(16.0);
         ui.centered_and_justified(|ui| {
             ui.label(
-                RichText::new("Click 'Trace Non-Seq Rays' to trace physical 3D rays and generate detector maps")
+                RichText::new("Click 'Trace Non-Seq' to trace physical 3D rays and generate detector maps.")
                     .monospace()
-                    .size(11.0)
+                    .size(10.5)
                     .color(tokens.text_muted),
             );
         });
-        ui.add_space(20.0);
+        ui.add_space(16.0);
     }
 }
 
@@ -788,11 +833,15 @@ fn render_ghost_matrix_table(
     catalog: &Arc<GlassCatalogDb>,
     tokens: &OpticsTokens,
 ) {
+    let avail_w = ui.available_width().max(400.0);
+    ui.set_max_width(avail_w);
+
     ui.horizontal(|ui| {
-        ui.label(RichText::new("AR Coating:").monospace().size(10.0).color(tokens.text_muted));
+        ui.spacing_mut().item_spacing.x = 6.0;
+        ui.label(RichText::new("AR Coating:").monospace().size(9.5).color(tokens.text_muted));
         egui::ComboBox::from_id_salt("ns_ar_coating_cb")
-            .selected_text(RichText::new(state.ar_coating.display_name()).monospace().size(10.0))
-            .width(180.0)
+            .selected_text(RichText::new(state.ar_coating.display_name()).monospace().size(9.5))
+            .width(135.0)
             .show_ui(ui, |ui| {
                 for preset in [
                     ArCoatingPreset::Uncoated,
@@ -807,10 +856,8 @@ fn render_ghost_matrix_table(
                 }
             });
 
-        ui.label(RichText::new("|").size(9.0).color(tokens.border.color));
-
         let recompute_btn = ui.add(
-            Button::new(RichText::new("Recompute Ghost Table").monospace().size(10.0))
+            Button::new(RichText::new("Recompute").monospace().size(9.5))
                 .fill(tokens.bg_control)
                 .stroke(tokens.border)
                 .corner_radius(CornerRadius::ZERO),
@@ -821,20 +868,20 @@ fn render_ghost_matrix_table(
 
         ui.checkbox(
             &mut state.filter_focused_ghosts_only,
-            RichText::new("Show Focused / Danger Ghosts Only").monospace().size(10.0),
+            RichText::new("Focused Only").monospace().size(9.5),
         );
 
         if let Some(ga) = &state.ghost_analysis {
             ui.label(RichText::new("|").size(9.0).color(tokens.border.color));
             ui.label(
                 RichText::new(format!(
-                    "Pairs: {} | Focused: {} | Total Stray: {:.3e}",
+                    "Pairs: {} | Focused: {} | Stray: {:.2e}",
                     ga.ghosts.len(),
                     ga.num_focused_ghosts,
                     ga.total_ghost_power_fraction
                 ))
                 .monospace()
-                .size(10.0)
+                .size(9.5)
                 .color(tokens.text_muted),
             );
         }
@@ -842,128 +889,143 @@ fn render_ghost_matrix_table(
 
     ui.add_space(4.0);
 
-    // Table Header
-    Frame::NONE
-        .fill(tokens.bg_control)
-        .stroke(tokens.border)
-        .corner_radius(CornerRadius::ZERO)
-        .inner_margin(Margin::symmetric(6, 4))
+    let col_pair = 76.0;
+    let col_defocus = 76.0;
+    let col_height = 76.0;
+    let col_power = 82.0;
+    let col_irrad = 86.0;
+    let col_threat = 110.0;
+    let total_table_w = col_pair + col_defocus + col_height + col_power + col_irrad + col_threat + 16.0;
+
+    ScrollArea::both()
+        .auto_shrink([false, false])
+        .max_height(145.0)
         .show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.allocate_ui(Vec2::new(100.0, 14.0), |ui| {
-                    ui.label(RichText::new("Pair (Front ↔ Rear)").monospace().strong().size(9.5).color(tokens.text_primary));
-                });
-                ui.allocate_ui(Vec2::new(95.0, 14.0), |ui| {
-                    ui.label(RichText::new("Defocus Δz").monospace().strong().size(9.5).color(tokens.text_primary));
-                });
-                ui.allocate_ui(Vec2::new(105.0, 14.0), |ui| {
-                    ui.label(RichText::new("Marginal Ray y").monospace().strong().size(9.5).color(tokens.text_primary));
-                });
-                ui.allocate_ui(Vec2::new(105.0, 14.0), |ui| {
-                    ui.label(RichText::new("Power Fraction").monospace().strong().size(9.5).color(tokens.text_primary));
-                });
-                ui.allocate_ui(Vec2::new(115.0, 14.0), |ui| {
-                    ui.label(RichText::new("Rel. Peak Irradiance").monospace().strong().size(9.5).color(tokens.text_primary));
-                });
-                ui.allocate_ui(Vec2::new(130.0, 14.0), |ui| {
-                    ui.label(RichText::new("Threat Assessment").monospace().strong().size(9.5).color(tokens.text_primary));
-                });
-            });
-        });
+            ui.set_min_width(total_table_w);
 
-    if let Some(ga) = &state.ghost_analysis {
-        let filtered_ghosts: Vec<&GhostReflection> = ga
-            .ghosts
-            .iter()
-            .filter(|g| !state.filter_focused_ghosts_only || g.is_focused_ghost)
-            .collect();
+            // Table Header
+            Frame::NONE
+                .fill(tokens.bg_control)
+                .stroke(tokens.border)
+                .corner_radius(CornerRadius::ZERO)
+                .inner_margin(Margin::symmetric(6, 4))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.allocate_ui(Vec2::new(col_pair, 14.0), |ui| {
+                            ui.label(RichText::new("Pair (S↔S)").monospace().strong().size(9.5).color(tokens.text_primary));
+                        });
+                        ui.allocate_ui(Vec2::new(col_defocus, 14.0), |ui| {
+                            ui.label(RichText::new("Defocus Δz").monospace().strong().size(9.5).color(tokens.text_primary));
+                        });
+                        ui.allocate_ui(Vec2::new(col_height, 14.0), |ui| {
+                            ui.label(RichText::new("Marginal y").monospace().strong().size(9.5).color(tokens.text_primary));
+                        });
+                        ui.allocate_ui(Vec2::new(col_power, 14.0), |ui| {
+                            ui.label(RichText::new("Power Frac.").monospace().strong().size(9.5).color(tokens.text_primary));
+                        });
+                        ui.allocate_ui(Vec2::new(col_irrad, 14.0), |ui| {
+                            ui.label(RichText::new("Rel. Irrad.").monospace().strong().size(9.5).color(tokens.text_primary));
+                        });
+                        ui.allocate_ui(Vec2::new(col_threat, 14.0), |ui| {
+                            ui.label(RichText::new("Threat Badge").monospace().strong().size(9.5).color(tokens.text_primary));
+                        });
+                    });
+                });
 
-        if filtered_ghosts.is_empty() {
-            ui.add_space(16.0);
-            ui.centered_and_justified(|ui| {
-                ui.label(
-                    RichText::new("No ghost reflections match current filter criteria.")
-                        .monospace()
-                        .size(10.5)
-                        .color(tokens.text_muted),
-                );
-            });
-            ui.add_space(16.0);
-        } else {
-            ScrollArea::vertical().max_height(140.0).show(ui, |ui| {
-                for (row_idx, g) in filtered_ghosts.iter().enumerate() {
-                    let is_selected = state.selected_ghost_pair == Some((g.surface_front, g.surface_rear));
-                    let bg = if is_selected {
-                        tokens.bg_control_active
-                    } else if row_idx % 2 == 0 {
-                        tokens.bg_panel
-                    } else {
-                        tokens.bg_control
-                    };
+            if let Some(ga) = &state.ghost_analysis {
+                let filtered_ghosts: Vec<&GhostReflection> = ga
+                    .ghosts
+                    .iter()
+                    .filter(|g| !state.filter_focused_ghosts_only || g.is_focused_ghost)
+                    .collect();
 
-                    Frame::NONE
-                        .fill(bg)
-                        .stroke(if is_selected { tokens.border_hovered } else { Stroke::NONE })
-                        .corner_radius(CornerRadius::ZERO)
-                        .inner_margin(Margin::symmetric(6, 3))
-                        .show(ui, |ui| {
-                            let resp = ui.horizontal(|ui| {
-                                // Pair name
-                                let pair_label = format!("S{} ↔ S{}", g.surface_front + 1, g.surface_rear + 1);
-                                ui.allocate_ui(Vec2::new(100.0, 16.0), |ui| {
-                                    ui.label(RichText::new(pair_label).monospace().size(10.0).color(tokens.text_primary));
+                if filtered_ghosts.is_empty() {
+                    ui.add_space(16.0);
+                    ui.centered_and_justified(|ui| {
+                        ui.label(
+                            RichText::new("No ghost reflections match current filter criteria.")
+                                .monospace()
+                                .size(10.5)
+                                .color(tokens.text_muted),
+                        );
+                    });
+                    ui.add_space(16.0);
+                } else {
+                    for (row_idx, g) in filtered_ghosts.iter().enumerate() {
+                        let is_selected = state.selected_ghost_pair == Some((g.surface_front, g.surface_rear));
+                        let bg = if is_selected {
+                            tokens.bg_control_active
+                        } else if row_idx % 2 == 0 {
+                            tokens.bg_panel
+                        } else {
+                            tokens.bg_control
+                        };
+
+                        Frame::NONE
+                            .fill(bg)
+                            .stroke(if is_selected { tokens.border_hovered } else { Stroke::NONE })
+                            .corner_radius(CornerRadius::ZERO)
+                            .inner_margin(Margin::symmetric(6, 3))
+                            .show(ui, |ui| {
+                                let resp = ui.horizontal(|ui| {
+                                    // Pair name
+                                    let pair_label = format!("S{} ↔ S{}", g.surface_front + 1, g.surface_rear + 1);
+                                    ui.allocate_ui(Vec2::new(col_pair, 16.0), |ui| {
+                                        ui.label(RichText::new(pair_label).monospace().size(9.5).color(tokens.text_primary));
+                                    });
+
+                                    // Defocus
+                                    ui.allocate_ui(Vec2::new(col_defocus, 16.0), |ui| {
+                                        let sign = if g.ghost_defocus_mm >= 0.0 { "+" } else { "" };
+                                        ui.label(RichText::new(format!("{}{:.2} mm", sign, g.ghost_defocus_mm)).monospace().size(9.5).color(tokens.text_muted));
+                                    });
+
+                                    // Marginal Ray y
+                                    ui.allocate_ui(Vec2::new(col_height, 16.0), |ui| {
+                                        ui.label(RichText::new(format!("{:.3} mm", g.ghost_marginal_height_mm)).monospace().size(9.5).color(tokens.text_muted));
+                                    });
+
+                                    // Power Fraction
+                                    ui.allocate_ui(Vec2::new(col_power, 16.0), |ui| {
+                                        ui.label(RichText::new(format!("{:.2e}%", g.ghost_power_fraction * 100.0)).monospace().size(9.5).color(tokens.text_muted));
+                                    });
+
+                                    // Peak Irradiance
+                                    ui.allocate_ui(Vec2::new(col_irrad, 16.0), |ui| {
+                                        ui.label(RichText::new(format!("{:.2e}×", g.relative_irradiance)).monospace().size(9.5).color(tokens.text_muted));
+                                    });
+
+                                    // Threat badge
+                                    ui.allocate_ui(Vec2::new(col_threat, 16.0), |ui| {
+                                        if g.is_focused_ghost {
+                                            ui.label(RichText::new("[FOCUSED DANGER]").monospace().strong().size(9.0).color(Color32::from_rgb(220, 50, 40)));
+                                        } else if g.ghost_marginal_height_mm.abs() < 1.5 && g.ghost_power_fraction > 1e-6 {
+                                            ui.label(RichText::new("[COMPACT GHOST]").monospace().size(9.0).color(tokens.warning));
+                                        } else {
+                                            ui.label(RichText::new("[DIFFUSE FLARE]").monospace().size(9.0).color(tokens.text_muted));
+                                        }
+                                    });
                                 });
 
-                                // Defocus
-                                ui.allocate_ui(Vec2::new(95.0, 16.0), |ui| {
-                                    let sign = if g.ghost_defocus_mm >= 0.0 { "+" } else { "" };
-                                    ui.label(RichText::new(format!("{}{:.3} mm", sign, g.ghost_defocus_mm)).monospace().size(10.0).color(tokens.text_muted));
-                                });
-
-                                // Marginal Ray y
-                                ui.allocate_ui(Vec2::new(105.0, 16.0), |ui| {
-                                    ui.label(RichText::new(format!("{:.3} mm", g.ghost_marginal_height_mm)).monospace().size(10.0).color(tokens.text_muted));
-                                });
-
-                                // Power Fraction
-                                ui.allocate_ui(Vec2::new(105.0, 16.0), |ui| {
-                                    ui.label(RichText::new(format!("{:.3e} %", g.ghost_power_fraction * 100.0)).monospace().size(10.0).color(tokens.text_muted));
-                                });
-
-                                // Peak Irradiance
-                                ui.allocate_ui(Vec2::new(115.0, 16.0), |ui| {
-                                    ui.label(RichText::new(format!("{:.2e} ×", g.relative_irradiance)).monospace().size(10.0).color(tokens.text_muted));
-                                });
-
-                                // Threat badge
-                                if g.is_focused_ghost {
-                                    ui.label(RichText::new("[CRITICAL FOCUSED]").monospace().strong().size(9.0).color(Color32::from_rgb(220, 50, 40)));
-                                } else if g.ghost_marginal_height_mm.abs() < 1.5 && g.ghost_power_fraction > 1e-6 {
-                                    ui.label(RichText::new("[COMPACT GHOST]").monospace().size(9.0).color(tokens.warning));
-                                } else {
-                                    ui.label(RichText::new("[DIFFUSE FLARE]").monospace().size(9.0).color(tokens.text_muted));
+                                if resp.response.interact(egui::Sense::click()).clicked() {
+                                    state.selected_ghost_pair = Some((g.surface_front, g.surface_rear));
                                 }
                             });
-
-                            if resp.response.interact(egui::Sense::click()).clicked() {
-                                state.selected_ghost_pair = Some((g.surface_front, g.surface_rear));
-                            }
-                        });
+                    }
                 }
-            });
-        }
-    } else {
-        ui.add_space(20.0);
-        ui.centered_and_justified(|ui| {
-            ui.label(
-                RichText::new("Click 'Recompute Ghost Table' to analyze all two-bounce ghost reflections.")
-                    .monospace()
-                    .size(11.0)
-                    .color(tokens.text_muted),
-            );
+            } else {
+                ui.add_space(20.0);
+                ui.centered_and_justified(|ui| {
+                    ui.label(
+                        RichText::new("Click 'Recompute' to calculate systematic two-bounce ghost matrix.")
+                            .monospace()
+                            .size(10.5)
+                            .color(tokens.text_muted),
+                    );
+                });
+                ui.add_space(20.0);
+            }
         });
-        ui.add_space(20.0);
-    }
 }
 
 /// Renders the 2D false-color pixel array and vertical colorbar scale.
@@ -992,7 +1054,7 @@ fn render_detector_heatmap_widget(
     let res_y = detector.res_y;
 
     ui.horizontal(|ui| {
-        let map_size = Vec2::splat(155.0);
+        let map_size = Vec2::splat(135.0);
         let (rect_map, _) = ui.allocate_exact_size(map_size, egui::Sense::hover());
         {
             let painter = ui.painter();
@@ -1057,7 +1119,7 @@ fn render_detector_heatmap_widget(
         ui.add_space(4.0);
 
         // Vertical Colorbar
-        let bar_size = Vec2::new(12.0, 155.0);
+        let bar_size = Vec2::new(10.0, 135.0);
         let (rect_bar, _) = ui.allocate_exact_size(bar_size, egui::Sense::hover());
         {
             let painter = ui.painter();
@@ -1081,21 +1143,21 @@ fn render_detector_heatmap_widget(
             ui.label(
                 RichText::new(format!("{:.1e}", max_val))
                     .monospace()
-                    .size(9.0)
+                    .size(8.5)
                     .color(tokens.text_primary),
             );
-            ui.add_space(55.0);
+            ui.add_space(44.0);
             ui.label(
                 RichText::new(format!("{:.1e}", max_val * 0.5))
                     .monospace()
-                    .size(8.5)
+                    .size(8.0)
                     .color(tokens.text_muted),
             );
-            ui.add_space(55.0);
+            ui.add_space(44.0);
             ui.label(
                 RichText::new("0.0")
                     .monospace()
-                    .size(9.0)
+                    .size(8.5)
                     .color(tokens.text_muted),
             );
         });
@@ -1107,9 +1169,10 @@ fn render_cross_section_plot(
     ui: &mut Ui,
     detector: &Detector2D,
     state: &NonSeqUiState,
+    plot_height: f32,
     tokens: &OpticsTokens,
 ) {
-    let plot_size = Vec2::new(ui.available_width() - 8.0, 125.0);
+    let plot_size = Vec2::new(ui.available_width() - 4.0, plot_height);
     let (rect_plot, _) = ui.allocate_exact_size(plot_size, egui::Sense::hover());
     let painter = ui.painter();
 
@@ -1129,14 +1192,14 @@ fn render_cross_section_plot(
         return;
     }
 
-    let margin = 18.0;
+    let margin = 14.0;
     let inner_rect = Rect::from_min_max(
-        Pos2::new(rect_plot.min.x + margin, rect_plot.min.y + 10.0),
-        Pos2::new(rect_plot.max.x - 10.0, rect_plot.max.y - 18.0),
+        Pos2::new(rect_plot.min.x + margin, rect_plot.min.y + 6.0),
+        Pos2::new(rect_plot.max.x - 8.0, rect_plot.max.y - 14.0),
     );
 
     // Draw grid lines
-    for i in 1..=3 {
+    for i in 1..=2 {
         let y_t = (i as f32) / 3.0;
         let y = inner_rect.max.y - y_t * inner_rect.height();
         painter.line_segment(
@@ -1170,7 +1233,7 @@ fn render_cross_section_plot(
             pts.push(Pos2::new(px_x, px_y));
         }
         for w in pts.windows(2) {
-            painter.line_segment([w[0], w[1]], Stroke::new(1.5, tokens.accent));
+            painter.line_segment([w[0], w[1]], Stroke::new(1.4, tokens.accent));
         }
     }
 
@@ -1191,29 +1254,29 @@ fn render_cross_section_plot(
             tokens.accent
         };
         for w in pts.windows(2) {
-            painter.line_segment([w[0], w[1]], Stroke::new(1.5, stroke_color));
+            painter.line_segment([w[0], w[1]], Stroke::new(1.4, stroke_color));
         }
     }
 
     // Axis coordinate labels
     painter.text(
-        Pos2::new(inner_rect.min.x, inner_rect.max.y + 10.0),
+        Pos2::new(inner_rect.min.x, inner_rect.max.y + 6.0),
         egui::Align2::LEFT_CENTER,
         format!("-{:.1} mm", half_w),
-        egui::FontId::monospace(8.5),
+        egui::FontId::monospace(8.0),
         tokens.text_muted,
     );
     painter.text(
-        Pos2::new(inner_rect.max.x, inner_rect.max.y + 10.0),
+        Pos2::new(inner_rect.max.x, inner_rect.max.y + 6.0),
         egui::Align2::RIGHT_CENTER,
         format!("+{:.1} mm", half_w),
-        egui::FontId::monospace(8.5),
+        egui::FontId::monospace(8.0),
         tokens.text_muted,
     );
 }
 
-/// Renders the radiometric and energy balance metrics card.
-fn render_radiometric_kpis(
+/// Renders the radiometric and energy balance metrics in a vertical card (Wide mode).
+fn render_radiometric_kpis_side(
     ui: &mut Ui,
     detector: &Detector2D,
     state: &NonSeqUiState,
@@ -1238,42 +1301,42 @@ fn render_radiometric_kpis(
         .fill(tokens.bg_control)
         .stroke(tokens.border)
         .corner_radius(CornerRadius::ZERO)
-        .inner_margin(Margin::symmetric(8, 6))
+        .inner_margin(Margin::symmetric(6, 4))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.spacing_mut().item_spacing.y = 3.0;
+            ui.spacing_mut().item_spacing.y = 2.0;
 
             ui.horizontal(|ui| {
-                ui.label(RichText::new("Peak Signal:").monospace().size(10.0).color(tokens.text_muted));
+                ui.label(RichText::new("Peak Signal:").monospace().size(9.5).color(tokens.text_muted));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(
                         RichText::new(format!("{:.2e} {}", peak_val, state.quantity.unit()))
                             .monospace()
                             .strong()
-                            .size(10.5)
+                            .size(10.0)
                             .color(tokens.text_primary),
                     );
                 });
             });
 
             ui.horizontal(|ui| {
-                ui.label(RichText::new("Filtered Flux:").monospace().size(10.0).color(tokens.text_muted));
+                ui.label(RichText::new("Filtered Flux:").monospace().size(9.5).color(tokens.text_muted));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(
-                        RichText::new(format!("{:.4e} W ({:.2e} lm)", total_filtered_flux, filtered_lumens))
+                        RichText::new(format!("{:.3e} W ({:.2e} lm)", total_filtered_flux, filtered_lumens))
                             .monospace()
                             .strong()
-                            .size(10.0)
+                            .size(9.5)
                             .color(tokens.accent),
                     );
                 });
             });
 
             ui.horizontal(|ui| {
-                ui.label(RichText::new("Filter & Hits:").monospace().size(10.0).color(tokens.text_muted));
+                ui.label(RichText::new("Hits:").monospace().size(9.5).color(tokens.text_muted));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(
-                        RichText::new(format!("{} ({} hits)", state.ray_filter.display_name(), filtered_hits))
+                        RichText::new(format!("{} hits", filtered_hits))
                             .monospace()
                             .size(9.5)
                             .color(tokens.text_primary),
@@ -1282,46 +1345,90 @@ fn render_radiometric_kpis(
             });
 
             ui.horizontal(|ui| {
-                ui.label(RichText::new("Centroid (X, Y):").monospace().size(10.0).color(tokens.text_muted));
+                ui.label(RichText::new("Centroid:").monospace().size(9.5).color(tokens.text_muted));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(
-                        RichText::new(format!("({:.3}, {:.3}) mm", cx, cy))
+                        RichText::new(format!("({:.2}, {:.2}) mm", cx, cy))
                             .monospace()
-                            .size(10.0)
+                            .size(9.5)
                             .color(tokens.text_primary),
                     );
                 });
             });
 
             ui.horizontal(|ui| {
-                ui.label(RichText::new("RMS Spot Radius:").monospace().size(10.0).color(tokens.text_muted));
+                ui.label(RichText::new("RMS Spot:").monospace().size(9.5).color(tokens.text_muted));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(
-                        RichText::new(format!("{:.4} mm", rms_spot))
+                        RichText::new(format!("{:.3} mm", rms_spot))
                             .monospace()
                             .strong()
-                            .size(10.0)
+                            .size(9.5)
                             .color(tokens.warning),
                     );
                 });
             });
 
             if let Some(rep) = &state.last_trace_report {
-                ui.separator();
+                let ratio = rep.energy_conservation_ratio() * 100.0;
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new("Energy Balance:").monospace().size(10.0).color(tokens.text_muted));
+                    ui.label(RichText::new("Energy:").monospace().size(9.5).color(tokens.text_muted));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let ratio = rep.energy_conservation_ratio() * 100.0;
                         ui.label(
-                            RichText::new(format!("{:.2}%", ratio))
+                            RichText::new(format!("{:.1}%", ratio))
                                 .monospace()
-                                .strong()
-                                .size(10.0)
+                                .size(9.5)
                                 .color(if (ratio - 100.0).abs() < 1.0 { tokens.success } else { tokens.warning }),
                         );
                     });
                 });
             }
+        });
+}
+
+/// Renders compact radiometric KPI chips in a 2-column micro-grid (Compact mode).
+fn render_radiometric_kpis_compact(
+    ui: &mut Ui,
+    detector: &Detector2D,
+    state: &NonSeqUiState,
+    tokens: &OpticsTokens,
+) {
+    let area = detector.pixel_area_m2().max(1e-12);
+    let conv = if state.quantity == DetectorQuantity::Illuminance {
+        683.0 * optics_nonseq::detector::photopic_luminous_efficiency(587.56)
+    } else {
+        1.0
+    };
+
+    let (pixel_flux_data, total_filtered_flux, filtered_hits) =
+        detector.filtered_pixel_flux(state.ray_filter);
+    let max_flux = pixel_flux_data.iter().copied().fold(0.0_f64, f64::max);
+    let peak_val = max_flux / area * conv;
+    let (cx, cy) = detector.centroid_mm();
+    let rms_spot = detector.rms_radius_mm();
+
+    Frame::NONE
+        .fill(tokens.bg_control)
+        .stroke(tokens.border)
+        .corner_radius(CornerRadius::ZERO)
+        .inner_margin(Margin::symmetric(6, 3))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.columns(2, |cols| {
+                cols[0].vertical(|ui| {
+                    ui.label(RichText::new(format!("Peak: {:.2e} {}", peak_val, state.quantity.unit())).monospace().strong().size(9.0).color(tokens.text_primary));
+                    ui.label(RichText::new(format!("Flux: {:.2e} W", total_filtered_flux)).monospace().size(8.5).color(tokens.accent));
+                    ui.label(RichText::new(format!("Hits: {}", filtered_hits)).monospace().size(8.5).color(tokens.text_muted));
+                });
+                cols[1].vertical(|ui| {
+                    ui.label(RichText::new(format!("Centroid: ({:.2}, {:.2}) mm", cx, cy)).monospace().size(9.0).color(tokens.text_primary));
+                    ui.label(RichText::new(format!("RMS Spot: {:.3} mm", rms_spot)).monospace().strong().size(8.5).color(tokens.warning));
+                    if let Some(rep) = &state.last_trace_report {
+                        let ratio = rep.energy_conservation_ratio() * 100.0;
+                        ui.label(RichText::new(format!("Energy: {:.1}%", ratio)).monospace().size(8.5).color(if (ratio - 100.0).abs() < 1.0 { tokens.success } else { tokens.warning }));
+                    }
+                });
+            });
         });
 }
 

@@ -73,6 +73,8 @@ pub enum LucideIcon {
     Compass,
     /// BarChart2 / Histogram / Tolerancing indicator.
     BarChart2,
+    /// 3D Box / Isometric View indicator.
+    Box,
 }
 
 impl LucideIcon {
@@ -170,6 +172,9 @@ impl LucideIcon {
             Self::BarChart2 => {
                 r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>"#
             }
+            Self::Box => {
+                r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>"#
+            }
         }
     }
 
@@ -207,6 +212,7 @@ impl LucideIcon {
             Self::Square => "bytes://lucide/square.svg",
             Self::Compass => "bytes://lucide/compass.svg",
             Self::BarChart2 => "bytes://lucide/bar-chart-2.svg",
+            Self::Box => "bytes://lucide/box.svg",
         }
     }
 }
@@ -343,6 +349,7 @@ mod tests {
             LucideIcon::Square,
             LucideIcon::Compass,
             LucideIcon::BarChart2,
+            LucideIcon::Box,
         ];
 
         for icon in icons {

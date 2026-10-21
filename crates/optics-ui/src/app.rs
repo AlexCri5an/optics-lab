@@ -21,7 +21,7 @@ use crate::optimization::{OptimizationModalState, render_optimization_panel};
 use crate::theme::OpticsTokens;
 use crate::tolerancing::{TolerancingAction, TolerancingModalState};
 use crate::topbar::{TopBarAction, TopBarState, render_topbar};
-use crate::viewport::{ViewportState, render_optical_viewport};
+use crate::viewport::{ViewportState, render_optical_viewport, render_optical_viewport_3d};
 
 /// Complete snapshot of the application state for synchronized undo/redo.
 #[derive(Clone, Debug, PartialEq)]
@@ -232,6 +232,16 @@ impl eframe::App for OpticsWorkbenchApp {
         }
         if cmd && !shift && ctx.input(|i| i.key_pressed(egui::Key::T)) {
             self.handle_topbar_action(TopBarAction::OpenTolerancing);
+        }
+        if cmd && !shift && ctx.input(|i| i.key_pressed(egui::Key::Num2)) {
+            self.viewport_state.is_3d = false;
+            self.topbar_state.viewport_3d_mode = false;
+            self.last_action_msg = "Viewport: 2D Cross-Section CAD mode active.".to_string();
+        }
+        if cmd && !shift && ctx.input(|i| i.key_pressed(egui::Key::Num3)) {
+            self.viewport_state.is_3d = true;
+            self.topbar_state.viewport_3d_mode = true;
+            self.last_action_msg = "Viewport: 3D Hardware Perspective mode active.".to_string();
         }
 
         // 2.5. Receive any files selected asynchronously from background file picker
@@ -525,6 +535,7 @@ impl eframe::App for OpticsWorkbenchApp {
                     .inner_margin(egui::Margin::ZERO),
             )
             .show(ctx, |ui| {
+                ui.set_max_width(ui.available_width());
                 render_nonseq_bottom_drawer(
                     ui,
                     &mut self.nonseq_state,
@@ -542,18 +553,28 @@ impl eframe::App for OpticsWorkbenchApp {
         // Synchronize ghost ray trajectories and isolated pair from NonSeq state to Viewport state
         self.viewport_state.ghost_rays = self.nonseq_state.filtered_ghost_ray_paths();
         self.viewport_state.selected_ghost_pair = self.nonseq_state.selected_ghost_pair;
-        // Synchronize drawer toggle with topbar
+        // Synchronize drawer toggle and 3D mode with topbar
         self.topbar_state.nonseq_drawer_open = self.nonseq_state.drawer_open;
+        self.topbar_state.viewport_3d_mode = self.viewport_state.is_3d;
 
         CentralPanel::default()
             .frame(egui::Frame::NONE.fill(tokens.bg_canvas))
             .show(ctx, |ui| {
-                render_optical_viewport(
-                    ui,
-                    &self.prescription,
-                    &mut self.viewport_state,
-                    &tokens,
-                );
+                if self.viewport_state.is_3d {
+                    render_optical_viewport_3d(
+                        ui,
+                        &self.prescription,
+                        &mut self.viewport_state,
+                        &tokens,
+                    );
+                } else {
+                    render_optical_viewport(
+                        ui,
+                        &self.prescription,
+                        &mut self.viewport_state,
+                        &tokens,
+                    );
+                }
             });
 
         // Propagate any toggle back from Viewport to System Explorer
@@ -1180,6 +1201,15 @@ impl OpticsWorkbenchApp {
                     "Opened Non-Sequential Detector Drawer.".to_string()
                 } else {
                     "Closed Non-Sequential Detector Drawer.".to_string()
+                };
+            }
+            TopBarAction::ToggleViewport3DMode => {
+                self.viewport_state.is_3d = !self.viewport_state.is_3d;
+                self.topbar_state.viewport_3d_mode = self.viewport_state.is_3d;
+                self.last_action_msg = if self.viewport_state.is_3d {
+                    "Switched to 3D Hardware Perspective Viewport.".to_string()
+                } else {
+                    "Switched to 2D Cross-Section CAD Viewport.".to_string()
                 };
             }
         }

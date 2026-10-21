@@ -20,7 +20,87 @@ static BUNDLED_CATALOG: LazyLock<GlassCatalogDb> = LazyLock::new(GlassCatalogDb:
 
 use crate::theme::OpticsTokens;
 
-/// Persistent state for the 2D optical canvas viewport.
+/// Interactive 3D camera state for the hardware perspective viewport.
+#[derive(Debug, Clone)]
+pub struct Viewport3DCamera {
+    /// Azimuth angle in radians (yaw around optical Y axis).
+    pub azimuth_rad: f32,
+    /// Elevation angle in radians (pitch above X-Z plane).
+    pub elevation_rad: f32,
+    /// Camera distance from target in world millimeters.
+    pub distance_mm: f32,
+    /// Target center point in world space (X, Y, Z) mm.
+    pub target_mm: [f32; 3],
+    /// Pan offset in camera screen space (X, Y) mm.
+    pub pan_screen_mm: Vec2,
+    /// Vertical field of view in degrees.
+    pub fov_deg: f32,
+    /// Whether initial zoom-fit was performed.
+    pub initialized: bool,
+}
+
+impl Default for Viewport3DCamera {
+    fn default() -> Self {
+        Self {
+            azimuth_rad: 35.0f32.to_radians(),
+            elevation_rad: 22.0f32.to_radians(),
+            distance_mm: 150.0,
+            target_mm: [0.0, 0.0, 50.0],
+            pan_screen_mm: Vec2::ZERO,
+            fov_deg: 35.0,
+            initialized: false,
+        }
+    }
+}
+
+impl Viewport3DCamera {
+    /// Resets 3D camera to default isometric perspective.
+    pub fn reset_view(&mut self) {
+        self.azimuth_rad = 35.0f32.to_radians();
+        self.elevation_rad = 22.0f32.to_radians();
+        self.pan_screen_mm = Vec2::ZERO;
+    }
+
+    /// Fits the optical prescription into the 3D perspective viewport.
+    pub fn zoom_fit(&mut self, prescription: &OpticalPrescription, _viewport_size: Vec2) {
+        if prescription.surfaces.is_empty() {
+            return;
+        }
+        let mut min_z = 0.0f64;
+        let mut max_z = 0.0f64;
+        let mut max_semi_d = 5.0f64;
+        let mut cum_z = 0.0f64;
+
+        for surf in &prescription.surfaces {
+            min_z = min_z.min(cum_z);
+            max_z = max_z.max(cum_z);
+            let sd = if surf.semi_diameter_mm.is_finite() && surf.semi_diameter_mm > 0.0 {
+                surf.semi_diameter_mm
+            } else {
+                5.0
+            };
+            max_semi_d = max_semi_d.max(sd);
+            let th = if surf.thickness_mm.is_finite() && surf.thickness_mm >= 0.0 {
+                surf.thickness_mm
+            } else {
+                0.0
+            };
+            cum_z += th;
+        }
+        max_z = max_z.max(cum_z);
+
+        let system_length = (max_z - min_z).clamp(1.0, 10000.0) as f32;
+        let center_z = ((min_z + max_z) * 0.5) as f32;
+
+        self.target_mm = [0.0, 0.0, center_z];
+        self.pan_screen_mm = Vec2::ZERO;
+        let extent = system_length.max(max_semi_d as f32 * 2.5);
+        self.distance_mm = (extent * 2.1).clamp(20.0, 5000.0);
+        self.initialized = true;
+    }
+}
+
+/// Persistent state for the 2D/3D optical canvas viewport.
 #[derive(Debug, Clone)]
 pub struct ViewportState {
     /// Pan offset in world millimeters (relative to optical axis origin).
@@ -39,6 +119,10 @@ pub struct ViewportState {
     pub ghost_rays: Vec<optics_nonseq::trace::RayPathSegment>,
     /// Currently selected ghost surface pair `(S_front, S_rear)` from the Ghost Matrix table.
     pub selected_ghost_pair: Option<(usize, usize)>,
+    /// Whether the viewport is in 3D Hardware Perspective mode (false = 2D CAD).
+    pub is_3d: bool,
+    /// 3D Camera navigation state.
+    pub camera_3d: Viewport3DCamera,
 }
 
 impl Default for ViewportState {
@@ -52,6 +136,8 @@ impl Default for ViewportState {
             ray_aiming_mode: optics_core::RayAimingMode::Paraxial,
             ghost_rays: Vec::new(),
             selected_ghost_pair: None,
+            is_3d: false,
+            camera_3d: Viewport3DCamera::default(),
         }
     }
 }
@@ -1245,6 +1331,461 @@ fn draw_scale_indicator(
     );
 }
 
+/// Computes surface sag z(r) for an optical surface at radial distance r from optical axis.
+fn sample_surface_sag(surf: &OpticalSurface, r: f64) -> f64 {
+    let is_flat = surf.radius_mm.is_infinite() || surf.radius_mm.abs() > 1e12;
+    if let Some(profile) = &surf.profile {
+        profile.sag(0.0, r).unwrap_or(0.0)
+    } else if !surf.asphere_coefficients.is_empty() {
+        let r_abs = r.abs();
+        let c = if is_flat { 0.0 } else { 1.0 / surf.radius_mm };
+        let conic_sag = if c.abs() < 1e-15 {
+            0.0
+        } else {
+            let s = (1.0 - (1.0 + surf.conic_constant) * c * c * r * r).max(0.0).sqrt();
+            (c * r * r) / (1.0 + s)
+        };
+        let mut asph_sag = 0.0;
+        for (i, &a) in surf.asphere_coefficients.iter().enumerate() {
+            let power = 2 * (i + 2);
+            asph_sag += a * r_abs.powi(power as i32);
+        }
+        conic_sag + asph_sag
+    } else if is_flat {
+        0.0
+    } else {
+        let radius = surf.radius_mm;
+        let disc = radius * radius - r * r;
+        if disc > 0.0 {
+            radius - radius.signum() * disc.sqrt()
+        } else {
+            0.0
+        }
+    }
+}
+
+/// Renders the interactive 3D Hardware Perspective viewport with CAD lenses, rays, coordinate triad, and HUD.
+pub fn render_optical_viewport_3d(
+    ui: &mut Ui,
+    prescription: &OpticalPrescription,
+    state: &mut ViewportState,
+    tokens: &OpticsTokens,
+) -> Response {
+    let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
+
+    if !state.camera_3d.initialized && rect.width() > 50.0 && rect.height() > 50.0 {
+        state.camera_3d.zoom_fit(prescription, rect.size());
+    }
+
+    // Top-right HUD bounds
+    let is_compact_hud = rect.width() < 640.0;
+    let overlay_w = if is_compact_hud { 220.0 } else { 340.0 };
+    let overlay_h = 28.0;
+    let overlay_rect = Rect::from_min_size(
+        Pos2::new(rect.max.x - overlay_w - 10.0, rect.min.y + 10.0),
+        Vec2::new(overlay_w, overlay_h),
+    );
+
+    // -----------------------------------------------------------------------
+    // 1. Mouse & Gesture 3D Camera Controls (Orbit, Pan, Zoom)
+    // -----------------------------------------------------------------------
+    let is_over_controls = response
+        .interact_pointer_pos()
+        .map_or(false, |p| overlay_rect.contains(p));
+
+    if response.dragged() && !is_over_controls {
+        let delta = response.drag_delta();
+        let shift_down = ui.input(|i| i.modifiers.shift);
+        let middle_drag = response.dragged_by(egui::PointerButton::Middle);
+
+        if shift_down || middle_drag {
+            // Camera Pan in screen space
+            let pan_scale = (state.camera_3d.distance_mm / rect.height().max(50.0)) * 0.8;
+            state.camera_3d.pan_screen_mm.x += delta.x * pan_scale;
+            state.camera_3d.pan_screen_mm.y -= delta.y * pan_scale;
+        } else {
+            // Orbit camera around optical system target
+            state.camera_3d.azimuth_rad -= delta.x * 0.007;
+            state.camera_3d.elevation_rad = (state.camera_3d.elevation_rad - delta.y * 0.007).clamp(-1.45, 1.45);
+        }
+    }
+
+    if response.hovered() && !is_over_controls {
+        let pinch = ui.input(|i| i.zoom_delta());
+        let scroll_y = ui.input(|i| i.raw_scroll_delta.y);
+        let mut zoom_factor = 1.0f32;
+        if (pinch - 1.0).abs() > 0.001 {
+            zoom_factor /= pinch;
+        } else if scroll_y.abs() > 0.1 {
+            zoom_factor *= (-scroll_y * 0.003).exp();
+        }
+
+        if (zoom_factor - 1.0).abs() > 0.001 {
+            state.camera_3d.distance_mm = (state.camera_3d.distance_mm * zoom_factor).clamp(5.0, 20000.0);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // 2. Camera Mathematics & 3D Perspective Projection
+    // -----------------------------------------------------------------------
+    let painter = ui.painter_at(rect);
+    painter.rect_filled(rect, CornerRadius::ZERO, tokens.bg_canvas);
+
+    // Viewport CAD boundaries
+    painter.line_segment([Pos2::new(rect.min.x, rect.min.y), Pos2::new(rect.min.x, rect.max.y)], tokens.border);
+    painter.line_segment([Pos2::new(rect.max.x, rect.min.y), Pos2::new(rect.max.x, rect.max.y)], tokens.border);
+    painter.line_segment([Pos2::new(rect.min.x, rect.min.y), Pos2::new(rect.max.x, rect.min.y)], tokens.border);
+    painter.line_segment([Pos2::new(rect.min.x, rect.max.y), Pos2::new(rect.max.x, rect.max.y)], tokens.border);
+
+    let cam = &state.camera_3d;
+    let target = Vec3::new(cam.target_mm[0] as f64, cam.target_mm[1] as f64, cam.target_mm[2] as f64);
+    let cos_el = (cam.elevation_rad as f64).cos();
+    let sin_el = (cam.elevation_rad as f64).sin();
+    let cos_az = (cam.azimuth_rad as f64).cos();
+    let sin_az = (cam.azimuth_rad as f64).sin();
+
+    let eye = target + Vec3::new(
+        (cam.distance_mm as f64) * cos_el * sin_az,
+        (cam.distance_mm as f64) * sin_el,
+        (cam.distance_mm as f64) * cos_el * cos_az,
+    );
+
+    let fwd = (target - eye).normalize();
+    let up_ref = if cos_el.abs() > 0.001 { Vec3::new(0.0, 1.0, 0.0) } else { Vec3::new(0.0, 0.0, -1.0) };
+    let right = fwd.cross(&up_ref).normalize();
+    let up = right.cross(&fwd).normalize();
+
+    let fov_rad = (cam.fov_deg as f64).to_radians();
+    let focal_len_px = (rect.height() as f64 * 0.5) / (fov_rad * 0.5).tan();
+    let center_screen = rect.center();
+
+    let project_3d = |p: Vec3| -> Option<(Pos2, f64)> {
+        let v = p - eye;
+        let z_cam = v.dot(&fwd);
+        if z_cam <= 0.1 {
+            return None;
+        }
+        let x_cam = v.dot(&right) + cam.pan_screen_mm.x as f64;
+        let y_cam = v.dot(&up) + cam.pan_screen_mm.y as f64;
+
+        let sx = center_screen.x + (x_cam / z_cam * focal_len_px) as f32;
+        let sy = center_screen.y - (y_cam / z_cam * focal_len_px) as f32;
+        Some((Pos2::new(sx, sy), z_cam))
+    };
+
+    // -----------------------------------------------------------------------
+    // 3. 3D Optical Axis and Reference Geometry
+    // -----------------------------------------------------------------------
+    let mut z_vertices = Vec::with_capacity(prescription.surfaces.len());
+    let mut cum_z = 0.0f64;
+    for surf in &prescription.surfaces {
+        z_vertices.push(cum_z);
+        let th = if surf.thickness_mm.is_finite() && surf.thickness_mm >= 0.0 { surf.thickness_mm } else { 0.0 };
+        cum_z += th;
+    }
+
+    let min_axis_z = z_vertices.first().copied().unwrap_or(0.0) - 15.0;
+    let max_axis_z = cum_z + 15.0;
+
+    if let (Some((p_start, _)), Some((p_end, _))) = (
+        project_3d(Vec3::new(0.0, 0.0, min_axis_z)),
+        project_3d(Vec3::new(0.0, 0.0, max_axis_z)),
+    ) {
+        painter.line_segment([p_start, p_end], Stroke::new(1.0, tokens.canvas_fg_muted.gamma_multiply(0.40)));
+    }
+
+    // -----------------------------------------------------------------------
+    // 4. 3D Physical Lenses and Surfaces
+    // -----------------------------------------------------------------------
+    let num_ang_segments = 24;
+    for (i, surf) in prescription.surfaces.iter().enumerate() {
+        let z_vert = z_vertices[i];
+        let semi_d = surf.semi_diameter_mm.max(0.5);
+
+        // A. Draw 3D surface rim perimeter ring
+        let mut rim_pts_screen = Vec::with_capacity(num_ang_segments);
+        for k in 0..num_ang_segments {
+            let theta = (k as f64 * 2.0 * std::f64::consts::PI) / num_ang_segments as f64;
+            let sag = sample_surface_sag(surf, semi_d);
+            let pt_world = Vec3::new(semi_d * theta.cos(), semi_d * theta.sin(), z_vert + sag);
+            if let Some((pt_scr, _)) = project_3d(pt_world) {
+                rim_pts_screen.push(pt_scr);
+            }
+        }
+        if rim_pts_screen.len() >= 3 {
+            for k in 0..rim_pts_screen.len() {
+                let p0 = rim_pts_screen[k];
+                let p1 = rim_pts_screen[(k + 1) % rim_pts_screen.len()];
+                let stroke_color = if surf.is_stop {
+                    tokens.warning
+                } else if i == prescription.surfaces.len() - 1 {
+                    tokens.accent
+                } else {
+                    tokens.accent.gamma_multiply(0.75)
+                };
+                painter.line_segment([p0, p1], Stroke::new(1.2, stroke_color));
+            }
+        }
+
+        // B. If physical lens body (connects surface i with surface i+1)
+        let is_glass = !surf.material_name.is_empty() && !surf.material_name.eq_ignore_ascii_case("AIR");
+        if is_glass && i + 1 < prescription.surfaces.len() {
+            let next_surf = &prescription.surfaces[i + 1];
+            let next_z = z_vertices[i + 1];
+            let next_semi_d = next_surf.semi_diameter_mm.max(0.5);
+
+            // Longitudinal outer barrel lines connecting front and rear rims
+            for k in (0..num_ang_segments).step_by(2) {
+                let theta = (k as f64 * 2.0 * std::f64::consts::PI) / num_ang_segments as f64;
+                let sag_f = sample_surface_sag(surf, semi_d);
+                let sag_r = sample_surface_sag(next_surf, next_semi_d);
+
+                let pf = Vec3::new(semi_d * theta.cos(), semi_d * theta.sin(), z_vert + sag_f);
+                let pr = Vec3::new(next_semi_d * theta.cos(), next_semi_d * theta.sin(), next_z + sag_r);
+
+                if let (Some((scr_f, _)), Some((scr_r, _))) = (project_3d(pf), project_3d(pr)) {
+                    painter.line_segment([scr_f, scr_r], Stroke::new(1.0, tokens.glass_stroke.color.gamma_multiply(0.45)));
+                }
+            }
+
+            // Translucent glass body quads for solid CAD visualization
+            for k in 0..num_ang_segments {
+                let theta0 = (k as f64 * 2.0 * std::f64::consts::PI) / num_ang_segments as f64;
+                let theta1 = (((k + 1) % num_ang_segments) as f64 * 2.0 * std::f64::consts::PI) / num_ang_segments as f64;
+
+                let pf0 = Vec3::new(semi_d * theta0.cos(), semi_d * theta0.sin(), z_vert + sample_surface_sag(surf, semi_d));
+                let pf1 = Vec3::new(semi_d * theta1.cos(), semi_d * theta1.sin(), z_vert + sample_surface_sag(surf, semi_d));
+                let pr1 = Vec3::new(next_semi_d * theta1.cos(), next_semi_d * theta1.sin(), next_z + sample_surface_sag(next_surf, next_semi_d));
+                let pr0 = Vec3::new(next_semi_d * theta0.cos(), next_semi_d * theta0.sin(), next_z + sample_surface_sag(next_surf, next_semi_d));
+
+                if let (Some((s_f0, _)), Some((s_f1, _)), Some((s_r1, _)), Some((s_r0, _))) = (
+                    project_3d(pf0),
+                    project_3d(pf1),
+                    project_3d(pr1),
+                    project_3d(pr0),
+                ) {
+                    let quad = vec![s_f0, s_f1, s_r1, s_r0];
+                    painter.add(egui::Shape::convex_polygon(
+                        quad,
+                        tokens.glass_fill,
+                        Stroke::NONE,
+                    ));
+                }
+            }
+        }
+
+        // C. Mechanical Stop diaphragm disk
+        if surf.is_stop {
+            let outer_r = semi_d * 1.5 + 2.0;
+            for k in (0..num_ang_segments).step_by(2) {
+                let theta = (k as f64 * 2.0 * std::f64::consts::PI) / num_ang_segments as f64;
+                let p_inner = Vec3::new(semi_d * theta.cos(), semi_d * theta.sin(), z_vert);
+                let p_outer = Vec3::new(outer_r * theta.cos(), outer_r * theta.sin(), z_vert);
+                if let (Some((s_in, _)), Some((s_out, _))) = (project_3d(p_inner), project_3d(p_outer)) {
+                    painter.line_segment([s_in, s_out], Stroke::new(1.4, tokens.warning));
+                }
+            }
+        }
+
+        // D. Image detector sensor rectangle
+        if i == prescription.surfaces.len() - 1 {
+            let w = semi_d * 1.2;
+            let h = semi_d * 0.9;
+            let p_corners = [
+                Vec3::new(-w, -h, z_vert),
+                Vec3::new(w, -h, z_vert),
+                Vec3::new(w, h, z_vert),
+                Vec3::new(-w, h, z_vert),
+            ];
+            let scr_corners: Vec<_> = p_corners.iter().filter_map(|&p| project_3d(p).map(|(s, _)| s)).collect();
+            if scr_corners.len() == 4 {
+                for c in 0..4 {
+                    painter.line_segment([scr_corners[c], scr_corners[(c + 1) % 4]], Stroke::new(1.8, tokens.accent));
+                }
+                painter.add(egui::Shape::convex_polygon(
+                    scr_corners,
+                    tokens.accent.gamma_multiply(0.15),
+                    Stroke::NONE,
+                ));
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // 5. 3D Sequential Real-Time Ray Tracing
+    // -----------------------------------------------------------------------
+    if state.show_rays {
+        if let Ok(resolved) = prescription.resolve(&*BUNDLED_CATALOG) {
+            let epd = prescription.entrance_pupil_diameter_mm;
+            let semi_epd = (epd * 0.5).max(1.0);
+            let z0 = z_vertices.first().copied().unwrap_or(0.0);
+            let start_z = z0 - (semi_epd * 2.0).clamp(1.0, 15.0);
+
+            let ray_rings = 8;
+            for k in 0..ray_rings {
+                let alpha = (k as f64 * 2.0 * std::f64::consts::PI) / ray_rings as f64;
+                let x_pupil = semi_epd * alpha.cos();
+                let y_pupil = semi_epd * alpha.sin();
+
+                let ray = Ray {
+                    origin: Vec3::new(x_pupil, y_pupil, start_z),
+                    direction: Vec3::new(0.0, 0.0, 1.0),
+                    wavelength_nm: 587.6, // d-line green
+                    energy: 1.0,
+                };
+
+                if let Ok(record) = trace_sequential(&resolved, &ray) {
+                    for seg in record.points.windows(2) {
+                        if let (Some((s0, _)), Some((s1, _))) = (project_3d(seg[0]), project_3d(seg[1])) {
+                            painter.line_segment([s0, s1], Stroke::new(1.2, Color32::from_rgb(46, 204, 113)));
+                        }
+                    }
+                }
+            }
+
+            // Chief axial ray
+            let chief_ray = Ray {
+                origin: Vec3::new(0.0, 0.0, start_z),
+                direction: Vec3::new(0.0, 0.0, 1.0),
+                wavelength_nm: 587.6,
+                energy: 1.0,
+            };
+            if let Ok(record) = trace_sequential(&resolved, &chief_ray) {
+                for seg in record.points.windows(2) {
+                    if let (Some((s0, _)), Some((s1, _))) = (project_3d(seg[0]), project_3d(seg[1])) {
+                        painter.line_segment([s0, s1], Stroke::new(1.5, Color32::from_rgb(241, 196, 15)));
+                    }
+                }
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // 6. 3D Non-Sequential Ghost Rays
+    // -----------------------------------------------------------------------
+    if !state.ghost_rays.is_empty() {
+        for seg in &state.ghost_rays {
+            if let (Some((s0, _)), Some((s1, _))) = (project_3d(seg.start), project_3d(seg.end)) {
+                let stroke = Stroke::new(1.2, tokens.warning.gamma_multiply(0.85));
+                painter.line_segment([s0, s1], stroke);
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // 7. 3D Orientation Triad (Bottom-Left)
+    // -----------------------------------------------------------------------
+    let triad_center = Pos2::new(rect.min.x + 46.0, rect.max.y - 46.0);
+    let triad_len = 24.0f32;
+
+    let draw_axis_vector = |dir: Vec3, label: &str, color: Color32| {
+        let dx = dir.dot(&right) as f32;
+        let dy = dir.dot(&up) as f32;
+        let p_end = Pos2::new(triad_center.x + dx * triad_len, triad_center.y - dy * triad_len);
+        painter.line_segment([triad_center, p_end], Stroke::new(2.0, color));
+        painter.text(
+            Pos2::new(p_end.x + dx * 6.0, p_end.y - dy * 6.0),
+            egui::Align2::CENTER_CENTER,
+            label,
+            egui::FontId::monospace(9.5),
+            color,
+        );
+    };
+
+    draw_axis_vector(Vec3::new(1.0, 0.0, 0.0), "+X", Color32::from_rgb(235, 75, 75));
+    draw_axis_vector(Vec3::new(0.0, 1.0, 0.0), "+Y", Color32::from_rgb(60, 200, 90));
+    draw_axis_vector(Vec3::new(0.0, 0.0, 1.0), "+Z", Color32::from_rgb(60, 160, 240));
+
+    // -----------------------------------------------------------------------
+    // 8. 3D Top-Left Mode Badge
+    // -----------------------------------------------------------------------
+    let badge_rect = Rect::from_min_size(
+        Pos2::new(rect.min.x + 10.0, rect.min.y + 10.0),
+        Vec2::new(230.0, 22.0),
+    );
+    painter.rect_filled(badge_rect, CornerRadius::ZERO, tokens.bg_panel.gamma_multiply(0.92));
+    painter.rect_stroke(badge_rect, CornerRadius::ZERO, tokens.border, egui::StrokeKind::Inside);
+    painter.text(
+        badge_rect.center(),
+        egui::Align2::CENTER_CENTER,
+        "3D HARDWARE VIEWPORT (Ctrl+2: 2D CAD)",
+        egui::FontId::monospace(9.5),
+        tokens.text_primary,
+    );
+
+    // -----------------------------------------------------------------------
+    // 9. 3D Top-Right Camera Navigation HUD
+    // -----------------------------------------------------------------------
+    let overlay_frame = Frame::NONE
+        .fill(tokens.bg_panel.gamma_multiply(0.95))
+        .stroke(tokens.border)
+        .corner_radius(CornerRadius::ZERO)
+        .inner_margin(Margin::symmetric(4, 2));
+
+    ui.scope_builder(
+        egui::UiBuilder::new()
+            .max_rect(overlay_rect)
+            .layout(egui::Layout::left_to_right(egui::Align::Center)),
+        |ui| {
+            overlay_frame.show(ui, |ui| {
+                ui.spacing_mut().item_spacing = Vec2::new(3.0, 0.0);
+
+                if ui.button(RichText::new("ISO").monospace().size(10.0)).clicked() {
+                    state.camera_3d.azimuth_rad = 35.0f32.to_radians();
+                    state.camera_3d.elevation_rad = 22.0f32.to_radians();
+                    state.camera_3d.pan_screen_mm = Vec2::ZERO;
+                }
+                if ui.button(RichText::new("SIDE").monospace().size(10.0)).clicked() {
+                    state.camera_3d.azimuth_rad = 90.0f32.to_radians();
+                    state.camera_3d.elevation_rad = 0.0;
+                    state.camera_3d.pan_screen_mm = Vec2::ZERO;
+                }
+                if !is_compact_hud {
+                    if ui.button(RichText::new("TOP").monospace().size(10.0)).clicked() {
+                        state.camera_3d.azimuth_rad = 0.0;
+                        state.camera_3d.elevation_rad = 89.0f32.to_radians();
+                        state.camera_3d.pan_screen_mm = Vec2::ZERO;
+                    }
+                    if ui.button(RichText::new("FRONT").monospace().size(10.0)).clicked() {
+                        state.camera_3d.azimuth_rad = 0.0;
+                        state.camera_3d.elevation_rad = 0.0;
+                        state.camera_3d.pan_screen_mm = Vec2::ZERO;
+                    }
+                }
+                if ui.button(RichText::new("FIT").monospace().size(10.0)).clicked() {
+                    state.camera_3d.zoom_fit(prescription, rect.size());
+                }
+
+                ui.separator();
+
+                if ui.button(
+                    RichText::new("2D CAD")
+                        .monospace()
+                        .size(10.0)
+                        .color(tokens.accent),
+                ).clicked() {
+                    state.is_3d = false;
+                }
+
+                if !is_compact_hud {
+                    ui.label(
+                        RichText::new(format!(
+                            "Az:{:.0}° El:{:.0}°",
+                            state.camera_3d.azimuth_rad.to_degrees(),
+                            state.camera_3d.elevation_rad.to_degrees()
+                        ))
+                        .monospace()
+                        .size(9.0)
+                        .color(tokens.text_muted),
+                    );
+                }
+            });
+        },
+    );
+
+    response
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1285,5 +1826,57 @@ mod tests {
         state.zoom_fit(&rx, Vec2::new(800.0, 600.0));
         assert!(state.zoom > 1.0);
         assert!(state.initialized);
+    }
+
+    #[test]
+    fn test_viewport_3d_camera_defaults_and_zoom_fit() {
+        let mut cam = Viewport3DCamera::default();
+        assert!(!cam.initialized);
+        assert!((cam.azimuth_rad - 35.0f32.to_radians()).abs() < 1e-4);
+        assert!((cam.elevation_rad - 22.0f32.to_radians()).abs() < 1e-4);
+
+        let rx = OpticalPrescription {
+            surfaces: vec![
+                OpticalSurface {
+                    thickness_mm: 15.0,
+                    semi_diameter_mm: 10.0,
+                    ..Default::default()
+                },
+                OpticalSurface {
+                    thickness_mm: 25.0,
+                    semi_diameter_mm: 12.0,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+
+        cam.zoom_fit(&rx, Vec2::new(800.0, 600.0));
+        assert!(cam.initialized);
+        assert!(cam.distance_mm > 50.0);
+        assert!((cam.target_mm[2] - 20.0).abs() < 1e-3);
+
+        cam.reset_view();
+        assert!((cam.azimuth_rad - 35.0f32.to_radians()).abs() < 1e-4);
+        assert_eq!(cam.pan_screen_mm, Vec2::ZERO);
+    }
+
+    #[test]
+    fn test_sample_surface_sag() {
+        let flat_surf = OpticalSurface {
+            radius_mm: f64::INFINITY,
+            semi_diameter_mm: 10.0,
+            ..Default::default()
+        };
+        assert_eq!(sample_surface_sag(&flat_surf, 5.0), 0.0);
+
+        let curved_surf = OpticalSurface {
+            radius_mm: 50.0,
+            semi_diameter_mm: 15.0,
+            ..Default::default()
+        };
+        let sag = sample_surface_sag(&curved_surf, 10.0);
+        // Exact sag for sphere r=50, y=10: 50 - sqrt(2500 - 100) = 50 - sqrt(2400) ≈ 1.0102
+        assert!((sag - (50.0 - (2400.0f64).sqrt())).abs() < 1e-6);
     }
 }
