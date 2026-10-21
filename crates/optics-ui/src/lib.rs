@@ -25,8 +25,8 @@ pub use icons::{
 pub use layout::{Breakpoint, LayoutMetrics};
 pub use lens_editor::{LeftPanelTab, LensEditorState, render_lens_editor};
 pub use nonseq::{
-    render_nonseq_bottom_drawer, ColorScale, CrossSectionAxis, DetectorQuantity, HeatmapPalette,
-    NonSeqUiState,
+    render_nonseq_bottom_drawer, ArCoatingPreset, ColorScale, CrossSectionAxis, DetectorQuantity,
+    HeatmapPalette, NonSeqDrawerTab, NonSeqUiState, RayPathFilter,
 };
 pub use optimization::{DlsRunSummary, OptimizationModalState, render_optimization_panel};
 pub use theme::{OpticsTokens, ThemeMode};

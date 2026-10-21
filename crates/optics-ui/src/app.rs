@@ -539,8 +539,9 @@ impl eframe::App for OpticsWorkbenchApp {
         // -------------------------------------------------------------------
         // Synchronize ray aiming mode bidirectionally between System Explorer and Viewport
         self.viewport_state.ray_aiming_mode = self.lens_editor_state.ray_aiming_mode;
-        // Synchronize ghost ray trajectories from NonSeq state to Viewport state
-        self.viewport_state.ghost_rays = self.nonseq_state.ghost_ray_paths().to_vec();
+        // Synchronize ghost ray trajectories and isolated pair from NonSeq state to Viewport state
+        self.viewport_state.ghost_rays = self.nonseq_state.filtered_ghost_ray_paths();
+        self.viewport_state.selected_ghost_pair = self.nonseq_state.selected_ghost_pair;
         // Synchronize drawer toggle with topbar
         self.topbar_state.nonseq_drawer_open = self.nonseq_state.drawer_open;
 

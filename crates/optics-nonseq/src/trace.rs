@@ -50,6 +50,10 @@ pub struct RayPathSegment {
     pub hit_detector_id: Option<usize>,
     /// Interaction type tag.
     pub interaction: String,
+    /// Cumulative reflection count before this interaction.
+    pub reflection_count: usize,
+    /// Cumulative total internal reflection count before this interaction.
+    pub tir_count: usize,
 }
 
 /// Global energy conservation and diagnostic report.
@@ -88,6 +92,8 @@ struct ActiveRay {
     ray: Ray,
     ray_id: usize,
     bounce_count: usize,
+    reflection_count: usize,
+    tir_count: usize,
     medium_stack: Vec<usize>, // Object IDs currently enclosing the ray
 }
 
@@ -124,6 +130,8 @@ impl NonSeqTracer {
                 ray: r.ray,
                 ray_id: r.ray_id,
                 bounce_count: r.bounce_count,
+                reflection_count: 0,
+                tir_count: 0,
                 medium_stack: r.medium_stack.clone(),
             });
         }
@@ -196,14 +204,19 @@ impl NonSeqTracer {
                         hit_object_id: None,
                         hit_detector_id: Some(det_idx),
                         interaction: "DetectorHit".to_string(),
+                        reflection_count: active.reflection_count,
+                        tir_count: active.tir_count,
                     });
                 }
 
-                scene.detectors[det_idx].record_hit(
+                scene.detectors[det_idx].record_hit_classified(
                     lx,
                     ly,
                     transmitted_power,
                     active.ray.wavelength_nm,
+                    active.bounce_count,
+                    active.reflection_count,
+                    active.tir_count,
                 );
                 detected_flux += transmitted_power;
                 // Detector absorbs the incident ray
@@ -244,6 +257,8 @@ impl NonSeqTracer {
                                 hit_object_id: Some(hit.object_id),
                                 hit_detector_id: None,
                                 interaction: "Absorption".to_string(),
+                                reflection_count: active.reflection_count,
+                                tir_count: active.tir_count,
                             });
                         }
                     }
@@ -265,6 +280,8 @@ impl NonSeqTracer {
                                 hit_object_id: Some(hit.object_id),
                                 hit_detector_id: None,
                                 interaction: "MirrorReflection".to_string(),
+                                reflection_count: active.reflection_count,
+                                tir_count: active.tir_count,
                             });
                         }
 
@@ -277,6 +294,8 @@ impl NonSeqTracer {
                                 ray: new_ray,
                                 ray_id: active.ray_id,
                                 bounce_count: active.bounce_count + 1,
+                                reflection_count: active.reflection_count + 1,
+                                tir_count: active.tir_count,
                                 medium_stack: active.medium_stack.clone(),
                             });
                         }
@@ -294,6 +313,8 @@ impl NonSeqTracer {
                                 hit_object_id: Some(hit.object_id),
                                 hit_detector_id: None,
                                 interaction: "LambertianScatter".to_string(),
+                                reflection_count: active.reflection_count,
+                                tir_count: active.tir_count,
                             });
                         }
 
@@ -326,6 +347,8 @@ impl NonSeqTracer {
                                 ray: new_ray,
                                 ray_id: active.ray_id,
                                 bounce_count: active.bounce_count + 1,
+                                reflection_count: active.reflection_count + 1,
+                                tir_count: active.tir_count,
                                 medium_stack: active.medium_stack.clone(),
                             });
                         }
@@ -390,16 +413,29 @@ impl NonSeqTracer {
                                 } else {
                                     "SnellFresnelSplit".to_string()
                                 },
+                                reflection_count: active.reflection_count,
+                                tir_count: active.tir_count,
                             });
                         }
 
                         // Enqueue reflected branch
                         if r_power > self.config.min_power_threshold {
                             if let Some(r_ray) = refl_ray {
+                                let is_tir = t_power <= 0.0;
                                 queue.push(ActiveRay {
                                     ray: r_ray,
                                     ray_id: active.ray_id,
                                     bounce_count: active.bounce_count + 1,
+                                    reflection_count: if is_tir {
+                                        active.reflection_count
+                                    } else {
+                                        active.reflection_count + 1
+                                    },
+                                    tir_count: if is_tir {
+                                        active.tir_count + 1
+                                    } else {
+                                        active.tir_count
+                                    },
                                     medium_stack: active.medium_stack.clone(),
                                 });
                             }
@@ -423,6 +459,8 @@ impl NonSeqTracer {
                                     ray: t_ray,
                                     ray_id: active.ray_id,
                                     bounce_count: active.bounce_count + 1,
+                                    reflection_count: active.reflection_count,
+                                    tir_count: active.tir_count,
                                     medium_stack: next_stack,
                                 });
                             }
@@ -444,6 +482,8 @@ impl NonSeqTracer {
                         hit_object_id: None,
                         hit_detector_id: None,
                         interaction: "EscapedToInfinity".to_string(),
+                        reflection_count: active.reflection_count,
+                        tir_count: active.tir_count,
                     });
                 }
             }

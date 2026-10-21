@@ -24,6 +24,54 @@ pub fn watts_to_lumens(flux_watts: f64, wavelength_nm: f64) -> f64 {
     flux_watts * KM_LUMENS_PER_WATT * photopic_luminous_efficiency(wavelength_nm)
 }
 
+/// Ray path filtering criteria for isolating signal, ghosts, and stray light.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum RayPathFilter {
+    /// All incident rays.
+    #[default]
+    All,
+    /// Direct transmission signal only (0 reflections, 0 TIR).
+    SignalOnly,
+    /// Parasitic ghost reflections (at least 1 internal Fresnel/specular reflection).
+    GhostsOnly,
+    /// Total internal reflection (TIR) guided rays.
+    TirOnly,
+    /// All stray light (non-signal rays, including ghosts and TIR).
+    StrayLight,
+}
+
+impl RayPathFilter {
+    /// Human-readable display label.
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::All => "All Rays (Total)",
+            Self::SignalOnly => "Signal Only (Direct)",
+            Self::GhostsOnly => "Ghosts Only (Internal Refl)",
+            Self::TirOnly => "TIR Light-Pipe",
+            Self::StrayLight => "All Stray Light",
+        }
+    }
+}
+
+/// Detailed record of an individual ray hit on the detector.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DetectorHit {
+    /// Local detector x-coordinate (mm).
+    pub local_x: f64,
+    /// Local detector y-coordinate (mm).
+    pub local_y: f64,
+    /// Incident power in Watts.
+    pub flux_watts: f64,
+    /// Optical wavelength in nanometers.
+    pub wavelength_nm: f64,
+    /// Total interaction bounces before hitting detector.
+    pub bounce_count: usize,
+    /// Total internal Fresnel or specular reflections.
+    pub reflection_count: usize,
+    /// Total internal reflections (TIR).
+    pub tir_count: usize,
+}
+
 /// 2D pixelated planar detector capturing spatial irradiance and illuminance maps.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Detector2D {
@@ -57,6 +105,8 @@ pub struct Detector2D {
     pub pixel_hit_counts: Vec<u64>,
     /// Hit coordinates $(x, y)$ in detector local millimeters for centroid and spot metrics.
     pub hit_positions_mm: Vec<(f64, f64, f64)>, // (x_mm, y_mm, flux_w)
+    /// Full record of all incident ray hits for interactive path filtering.
+    pub hits: Vec<DetectorHit>,
 }
 
 impl Detector2D {
@@ -110,6 +160,7 @@ impl Detector2D {
             pixel_flux_watts: vec![0.0; num_pixels],
             pixel_hit_counts: vec![0; num_pixels],
             hit_positions_mm: Vec::new(),
+            hits: Vec::new(),
         })
     }
 
@@ -121,6 +172,7 @@ impl Detector2D {
         self.pixel_flux_watts.fill(0.0);
         self.pixel_hit_counts.fill(0);
         self.hit_positions_mm.clear();
+        self.hits.clear();
     }
 
     /// Right-hand horizontal axis in detector plane.
@@ -182,6 +234,74 @@ impl Detector2D {
         }
 
         self.hit_positions_mm.push((local_x, local_y, flux_watts));
+    }
+
+    /// Record an incident ray hit with full ray path provenance and classification.
+    pub fn record_hit_classified(
+        &mut self,
+        local_x: f64,
+        local_y: f64,
+        flux_watts: f64,
+        wavelength_nm: f64,
+        bounce_count: usize,
+        reflection_count: usize,
+        tir_count: usize,
+    ) {
+        self.record_hit(local_x, local_y, flux_watts, wavelength_nm);
+        self.hits.push(DetectorHit {
+            local_x,
+            local_y,
+            flux_watts,
+            wavelength_nm,
+            bounce_count,
+            reflection_count,
+            tir_count,
+        });
+    }
+
+    /// Computes pixel flux grid filtered by ray history criteria.
+    /// Returns `(filtered_pixel_flux, total_filtered_flux, filtered_hit_count)`.
+    pub fn filtered_pixel_flux(&self, filter: RayPathFilter) -> (Vec<f64>, f64, usize) {
+        if filter == RayPathFilter::All {
+            return (
+                self.pixel_flux_watts.clone(),
+                self.total_flux_watts,
+                self.total_rays_hit,
+            );
+        }
+
+        let num_pixels = self.res_x * self.res_y;
+        let mut grid = vec![0.0; num_pixels];
+        let mut total_flux = 0.0;
+        let mut hit_count = 0;
+
+        let half_w = self.width_mm * 0.5;
+        let half_h = self.height_mm * 0.5;
+
+        for hit in &self.hits {
+            let matches = match filter {
+                RayPathFilter::All => true,
+                RayPathFilter::SignalOnly => hit.reflection_count == 0 && hit.tir_count == 0,
+                RayPathFilter::GhostsOnly => hit.reflection_count >= 1,
+                RayPathFilter::TirOnly => hit.tir_count > 0,
+                RayPathFilter::StrayLight => hit.reflection_count > 0 || hit.tir_count > 0,
+            };
+
+            if matches {
+                let u = ((hit.local_x + half_w) / self.width_mm).clamp(0.0, 0.999999);
+                let v = ((hit.local_y + half_h) / self.height_mm).clamp(0.0, 0.999999);
+                let px = (u * self.res_x as f64) as usize;
+                let py = (v * self.res_y as f64) as usize;
+                let idx = py * self.res_x + px;
+                if idx < grid.len() {
+                    grid[idx] += hit.flux_watts;
+                }
+                total_flux += hit.flux_watts;
+                hit_count += 1;
+            }
+        }
+
+        (grid, total_flux, hit_count)
     }
 
     /// Compute pixel area in square meters.

@@ -37,6 +37,8 @@ pub struct ViewportState {
     pub ray_aiming_mode: optics_core::RayAimingMode,
     /// Optional non-sequential ghost ray path segments to overlay in the viewport.
     pub ghost_rays: Vec<optics_nonseq::trace::RayPathSegment>,
+    /// Currently selected ghost surface pair `(S_front, S_rear)` from the Ghost Matrix table.
+    pub selected_ghost_pair: Option<(usize, usize)>,
 }
 
 impl Default for ViewportState {
@@ -49,6 +51,7 @@ impl Default for ViewportState {
             ray_count: 5,    // Standard 5-ray beam
             ray_aiming_mode: optics_core::RayAimingMode::Paraxial,
             ghost_rays: Vec::new(),
+            selected_ghost_pair: None,
         }
     }
 }
@@ -243,6 +246,28 @@ pub fn render_optical_viewport(
     // Layer E2: Non-Sequential Ghost Rays & Internal Reflections
     if !state.ghost_rays.is_empty() {
         draw_ghost_rays(&painter, &state.ghost_rays, to_screen, tokens);
+    }
+
+    // Ghost Focus Highlight Badge (When a pair is isolated in Ghost Matrix)
+    if let Some((s_front, s_rear)) = state.selected_ghost_pair {
+        let badge_rect = Rect::from_min_size(
+            Pos2::new(rect.min.x + 10.0, rect.min.y + 10.0),
+            Vec2::new(220.0, 22.0),
+        );
+        painter.rect_filled(badge_rect, CornerRadius::ZERO, tokens.bg_panel);
+        painter.rect_stroke(
+            badge_rect,
+            CornerRadius::ZERO,
+            tokens.border,
+            egui::StrokeKind::Inside,
+        );
+        painter.text(
+            badge_rect.center(),
+            egui::Align2::CENTER_CENTER,
+            format!("GHOST FOCUS PAIR: S{} ↔ S{}", s_front, s_rear),
+            egui::FontId::monospace(10.0),
+            tokens.warning,
+        );
     }
 
     // Layer F: High-Contrast Plane Markers (STO, IMAGE)

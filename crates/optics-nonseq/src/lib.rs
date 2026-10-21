@@ -12,7 +12,9 @@ pub mod scene;
 pub mod source;
 pub mod trace;
 
-pub use detector::{Detector2D, photopic_luminous_efficiency, watts_to_lumens};
+pub use detector::{
+    photopic_luminous_efficiency, watts_to_lumens, Detector2D, DetectorHit, RayPathFilter,
+};
 pub use error::NonSeqError;
 pub use geometry::{NonSeqHit, PrimitiveGeometry, Transform3D};
 pub use material::{BulkAbsorption, NonSeqMaterial, OpticalMedium, SurfaceFinish};
@@ -527,6 +529,16 @@ mod tests {
         let (cx, cy) = det.centroid_mm();
         assert!(cx.abs() < 0.5, "Centroid X should be near axis, got {cx}");
         assert!(cy.abs() < 0.5, "Centroid Y should be near axis, got {cy}");
+
+        // Verify ray path filtering functionality
+        let (signal_grid, signal_flux, signal_hits) = det.filtered_pixel_flux(RayPathFilter::SignalOnly);
+        assert!(signal_flux > 0.0, "Signal flux must be non-zero");
+        assert!(signal_hits > 0, "Signal hit count must be non-zero");
+        assert_eq!(signal_grid.len(), 40 * 40);
+
+        let (_ghost_grid, ghost_flux, _ghost_hits) = det.filtered_pixel_flux(RayPathFilter::GhostsOnly);
+        assert!(ghost_flux >= 0.0);
+        assert!(ghost_flux < signal_flux, "Ghost flux should be a small fraction of signal flux");
 
         Ok(())
     }
