@@ -65,6 +65,48 @@ pub struct MonteCarloReport {
     pub yield_percent: Option<f64>,
     /// Worst-case perturbed optical prescription.
     pub worst_case_prescription: Option<OpticalPrescription>,
+    /// Evaluated performance values for all simulated trials.
+    pub trial_values: Vec<f64>,
+}
+
+impl MonteCarloReport {
+    /// Compute histogram bin counts given a requested number of bins.
+    ///
+    /// Returns a list of tuples `(bin_min, bin_max, count)`.
+    pub fn compute_histogram(&self, num_bins: usize) -> Vec<(f64, f64, usize)> {
+        let n = num_bins.max(1);
+        if self.trial_values.is_empty() {
+            return Vec::new();
+        }
+
+        let min_v = self.min_value;
+        let max_v = self.max_value;
+        let span = max_v - min_v;
+
+        if span <= 1e-12 {
+            return vec![(min_v, max_v, self.trial_values.len())];
+        }
+
+        let bin_w = span / (n as f64);
+        let mut bins = Vec::with_capacity(n);
+        for i in 0..n {
+            let b_start = min_v + (i as f64) * bin_w;
+            let b_end = if i == n - 1 { max_v } else { b_start + bin_w };
+            bins.push((b_start, b_end, 0usize));
+        }
+
+        for &val in &self.trial_values {
+            let mut idx = ((val - min_v) / bin_w).floor() as usize;
+            if idx >= n {
+                idx = n - 1;
+            }
+            if let Some(entry) = bins.get_mut(idx) {
+                entry.2 += 1;
+            }
+        }
+
+        bins
+    }
 }
 
 /// Monte Carlo tolerancing simulation engine.
@@ -172,6 +214,7 @@ impl MonteCarloSimulator {
             percentiles: PercentileSummary { p10, p50, p90, p99 },
             yield_percent,
             worst_case_prescription: worst_presc,
+            trial_values,
         })
     }
 }

@@ -67,6 +67,29 @@ pub enum ToleranceOperandType {
     },
 }
 
+/// Standard manufacturing tolerance quality grade (ISO 10110 / Optimax / Zemax standard).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum ToleranceGrade {
+    /// Commercial quality grade (typical consumer optics, lower cost).
+    Commercial,
+    /// Precision quality grade (standard scientific / industrial imaging optics).
+    #[default]
+    Precision,
+    /// High precision quality grade (diffraction-limited, high performance).
+    HighPrecision,
+}
+
+impl ToleranceGrade {
+    /// Human-readable display label.
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::Commercial => "Commercial",
+            Self::Precision => "Precision",
+            Self::HighPrecision => "High Precision",
+        }
+    }
+}
+
 /// An individual tolerance operand with assigned distribution and metadata.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ToleranceOperand {
@@ -101,6 +124,92 @@ impl ToleranceOperand {
     pub fn with_cost_weight(mut self, weight: f64) -> Self {
         self.cost_weight = weight;
         self
+    }
+
+    /// Generate standard default tolerance operands for an optical prescription according to the specified grade.
+    pub fn generate_default_operands(
+        prescription: &OpticalPrescription,
+        grade: ToleranceGrade,
+    ) -> Vec<ToleranceOperand> {
+        let mut operands = Vec::new();
+        let (rad_pct, rad_min, fringes, d_thi, d_conic, d_dec, d_tilt, d_nd, d_vd) = match grade {
+            ToleranceGrade::Commercial => (0.001, 0.050, 5.0, 0.050, 0.005, 0.050, 0.033, 0.0010, 0.8),
+            ToleranceGrade::Precision => (0.0005, 0.020, 3.0, 0.020, 0.002, 0.015, 0.016, 0.0005, 0.4),
+            ToleranceGrade::HighPrecision => (0.0002, 0.008, 1.0, 0.010, 0.001, 0.005, 0.005, 0.0002, 0.2),
+        };
+
+        let num_surfaces = prescription.surfaces.len();
+        for (i, surf) in prescription.surfaces.iter().enumerate() {
+            let is_last = i + 1 == num_surfaces;
+
+            // 1. Radius tolerance (TRAD)
+            if !surf.radius_mm.is_infinite() && !is_last {
+                let delta_r = (surf.radius_mm.abs() * rad_pct).max(rad_min);
+                operands.push(ToleranceOperand::new(
+                    format!("TRAD_S{}", i + 1),
+                    ToleranceOperandType::Radius {
+                        surface_index: i,
+                        delta_radius_mm: delta_r,
+                        fringes: Some(fringes),
+                    },
+                ));
+            }
+
+            // 2. Thickness tolerance (TTHI)
+            if !is_last && surf.thickness_mm > 0.0 {
+                operands.push(ToleranceOperand::new(
+                    format!("TTHI_S{}", i + 1),
+                    ToleranceOperandType::Thickness {
+                        surface_index: i,
+                        delta_thickness_mm: d_thi,
+                    },
+                ));
+            }
+
+            // 3. Conic tolerance (TCON) if non-zero
+            if surf.conic_constant.abs() > 1e-6 && !is_last {
+                operands.push(ToleranceOperand::new(
+                    format!("TCON_S{}", i + 1),
+                    ToleranceOperandType::Conic {
+                        surface_index: i,
+                        delta_conic: d_conic,
+                    },
+                ));
+            }
+
+            // 4. Surface Decenter & Tilt
+            if !is_last {
+                operands.push(ToleranceOperand::new(
+                    format!("TSDC_S{}", i + 1),
+                    ToleranceOperandType::SurfaceDecenter {
+                        surface_index: i,
+                        max_decenter_mm: d_dec,
+                    },
+                ));
+                operands.push(ToleranceOperand::new(
+                    format!("TSTI_S{}", i + 1),
+                    ToleranceOperandType::SurfaceTilt {
+                        surface_index: i,
+                        max_tilt_deg: d_tilt,
+                    },
+                ));
+            }
+
+            // 5. Glass material tolerance (TGLA)
+            let mat_upper = surf.material_name.trim().to_uppercase();
+            if !is_last && !mat_upper.is_empty() && mat_upper != "AIR" && mat_upper != "VACUUM" && mat_upper != "NONE" {
+                operands.push(ToleranceOperand::new(
+                    format!("TGLA_S{}", i + 1),
+                    ToleranceOperandType::GlassIndexAbbe {
+                        surface_index: i,
+                        delta_nd: d_nd,
+                        delta_vd: d_vd,
+                    },
+                ));
+            }
+        }
+
+        operands
     }
 
     /// Get half-width tolerance limit for this operand.

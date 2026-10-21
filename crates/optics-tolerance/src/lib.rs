@@ -16,7 +16,7 @@ pub use inverse::{
     BudgetedToleranceItem, InverseToleranceConfig, InverseToleranceReport, InverseTolerancing,
 };
 pub use monte_carlo::{MonteCarloConfig, MonteCarloReport, MonteCarloSimulator, PercentileSummary};
-pub use operand::{ToleranceOperand, ToleranceOperandType};
+pub use operand::{ToleranceGrade, ToleranceOperand, ToleranceOperandType};
 pub use sensitivity::{
     Compensator, SensitivityAnalyzer, SensitivityRecord, SensitivityReport, ToleranceCriterion,
 };
@@ -298,27 +298,39 @@ mod tests {
         let dist_u = ToleranceDistribution::Uniform;
         let dist_n = ToleranceDistribution::NormalTruncated { sigma_cutoff: 2.0 };
         let dist_e = ToleranceDistribution::WorstCaseEdge;
+        let dist_p = ToleranceDistribution::Parabolic;
+        let dist_b = ToleranceDistribution::Bimodal;
 
         let half_w = 1.0;
         let mut sum_u = 0.0;
         let mut sum_n = 0.0;
+        let mut sum_p = 0.0;
+        let mut sum_b = 0.0;
         let n_samples = 1000;
 
         for _ in 0..n_samples {
             let s_u = dist_u.sample(half_w, &mut rng);
             let s_n = dist_n.sample(half_w, &mut rng);
             let s_e = dist_e.sample(half_w, &mut rng);
+            let s_p = dist_p.sample(half_w, &mut rng);
+            let s_b = dist_b.sample(half_w, &mut rng);
 
             assert!(s_u.abs() <= half_w + 1e-12);
             assert!(s_n.abs() <= half_w + 1e-12);
             assert!((s_e.abs() - half_w).abs() < 1e-12);
+            assert!(s_p.abs() <= half_w + 1e-12);
+            assert!(s_b.abs() <= half_w + 1e-12);
 
             sum_u += s_u;
             sum_n += s_n;
+            sum_p += s_p;
+            sum_b += s_b;
         }
 
         let mean_u = sum_u / (n_samples as f64);
         let mean_n = sum_n / (n_samples as f64);
+        let mean_p = sum_p / (n_samples as f64);
+        let mean_b = sum_b / (n_samples as f64);
         assert!(
             mean_u.abs() < 0.1,
             "Uniform mean should be near 0, got {}",
@@ -329,6 +341,55 @@ mod tests {
             "Normal mean should be near 0, got {}",
             mean_n
         );
+        assert!(
+            mean_p.abs() < 0.1,
+            "Parabolic mean should be near 0, got {}",
+            mean_p
+        );
+        assert!(
+            mean_b.abs() < 0.1,
+            "Bimodal mean should be near 0, got {}",
+            mean_b
+        );
+
+        Ok(())
+    }
+
+    /// Acceptance test: Automatic default operand generator produces correct operands for Cooke Triplet.
+    #[test]
+    fn test_default_operand_generation_and_histogram() -> TestResult {
+        let cooke = optics_zemax::presets::cooke_triplet_f4_5()?;
+        let operands_comm = ToleranceOperand::generate_default_operands(&cooke, ToleranceGrade::Commercial);
+        let operands_prec = ToleranceOperand::generate_default_operands(&cooke, ToleranceGrade::Precision);
+
+        assert!(!operands_comm.is_empty());
+        assert_eq!(operands_comm.len(), operands_prec.len());
+        // Verify precision tolerances are tighter than commercial
+        assert!(operands_prec[0].half_width() < operands_comm[0].half_width());
+
+        // Test histogram generation on MonteCarloReport
+        let report = MonteCarloReport {
+            nominal_value: 10.0,
+            total_trials: 100,
+            mean: 11.2,
+            std_dev: 1.5,
+            min_value: 8.0,
+            max_value: 16.0,
+            percentiles: PercentileSummary {
+                p10: 9.0,
+                p50: 11.0,
+                p90: 13.5,
+                p99: 15.2,
+            },
+            yield_percent: Some(95.0),
+            worst_case_prescription: None,
+            trial_values: (0..100).map(|i| 8.0 + (i as f64) * 0.08).collect(),
+        };
+
+        let bins = report.compute_histogram(10);
+        assert_eq!(bins.len(), 10);
+        let total_counted: usize = bins.iter().map(|b| b.2).sum();
+        assert_eq!(total_counted, 100);
 
         Ok(())
     }

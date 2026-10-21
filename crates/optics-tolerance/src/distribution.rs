@@ -60,6 +60,10 @@ pub enum ToleranceDistribution {
     },
     /// Worst-case edge distribution sampling exclusively from $\{-T, +T\}$ with equal probability.
     WorstCaseEdge,
+    /// Parabolic distribution over $[-T, +T]$ with peak density at nominal $P(x) \propto 1 - (x/T)^2$.
+    Parabolic,
+    /// Bimodal distribution over $[-T, +T]$ with peak density at tolerance extremes $P(x) \propto (x/T)^2$.
+    Bimodal,
 }
 
 impl Default for ToleranceDistribution {
@@ -91,6 +95,30 @@ impl ToleranceDistribution {
                 rng.uniform(-half_width, half_width)
             }
             ToleranceDistribution::WorstCaseEdge => {
+                if rng.next_f64() < 0.5 {
+                    -half_width
+                } else {
+                    half_width
+                }
+            }
+            ToleranceDistribution::Parabolic => {
+                for _ in 0..50 {
+                    let x = rng.uniform(-half_width, half_width);
+                    let u = x / half_width;
+                    if rng.next_f64() <= (1.0 - u * u) {
+                        return x;
+                    }
+                }
+                rng.uniform(-half_width, half_width)
+            }
+            ToleranceDistribution::Bimodal => {
+                for _ in 0..50 {
+                    let x = rng.uniform(-half_width, half_width);
+                    let u = x / half_width;
+                    if rng.next_f64() <= (u * u) {
+                        return x;
+                    }
+                }
                 if rng.next_f64() < 0.5 {
                     -half_width
                 } else {
