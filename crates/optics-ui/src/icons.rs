@@ -69,6 +69,8 @@ pub enum LucideIcon {
     Square,
     /// Compass / Direction / Polarization indicator.
     Compass,
+    /// BarChart2 / Histogram / Tolerancing indicator.
+    BarChart2,
 }
 
 impl LucideIcon {
@@ -160,6 +162,9 @@ impl LucideIcon {
             Self::Compass => {
                 r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z"/><circle cx="12" cy="12" r="10"/></svg>"#
             }
+            Self::BarChart2 => {
+                r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>"#
+            }
         }
     }
 
@@ -195,6 +200,7 @@ impl LucideIcon {
             Self::TrendingUp => "bytes://lucide/trending-up.svg",
             Self::Square => "bytes://lucide/square.svg",
             Self::Compass => "bytes://lucide/compass.svg",
+            Self::BarChart2 => "bytes://lucide/bar-chart-2.svg",
         }
     }
 }
@@ -328,6 +334,8 @@ mod tests {
             LucideIcon::TrendingDown,
             LucideIcon::TrendingUp,
             LucideIcon::Square,
+            LucideIcon::Compass,
+            LucideIcon::BarChart2,
         ];
 
         for icon in icons {

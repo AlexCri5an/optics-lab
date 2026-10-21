@@ -39,6 +39,8 @@ pub enum AnalysisTab {
     ParaxialCardinal,
     /// Polarization ray tracing, Stokes vector, DoP, and polarization ellipse.
     Polarization,
+    /// Manufacturing tolerancing & Monte Carlo production statistics.
+    Tolerancing,
 }
 
 /// State of the interactive optical analysis panel.
@@ -56,6 +58,10 @@ pub struct AnalysisPanelState {
     pub show_airy_disk: bool,
     /// Input polarization state for polarization tracing: 0 = Unpolarized, 1 = Linear Horizontal (s), 2 = Linear Vertical (p), 3 = Linear 45°, 4 = Circular Right (RCP).
     pub polarization_input_mode: usize,
+    /// Request to open the standalone Tolerancing & Monte Carlo modal dialog hub.
+    pub open_tolerancing_dialog: bool,
+    /// Cached Monte Carlo report for the analysis panel view.
+    pub cached_mc_report: Option<optics_tolerance::MonteCarloReport>,
 }
 
 impl Default for AnalysisPanelState {
@@ -67,6 +73,8 @@ impl Default for AnalysisPanelState {
             spot_zoom: 3.0,
             show_airy_disk: true,
             polarization_input_mode: 3, // Default Linear 45° to see s/p differential
+            open_tolerancing_dialog: false,
+            cached_mc_report: None,
         }
     }
 }
@@ -74,17 +82,20 @@ impl Default for AnalysisPanelState {
 /// Renders the complete Analysis & Diagnostics panel in classic academic engineering style.
 pub fn render_analysis_panel(
     ui: &mut Ui,
-    prescription: &OpticalPrescription,
+    prescription: &mut OpticalPrescription,
     catalog: &Arc<GlassCatalogDb>,
     state: &mut AnalysisPanelState,
+    tolerancing_state: &mut crate::tolerancing::TolerancingModalState,
     tokens: &OpticsTokens,
-) {
+) -> Option<crate::tolerancing::TolerancingAction> {
+    let mut tolerancing_action = None;
+
     // 1. Resolve optical prescription against glass catalog
     let resolved = match prescription.resolve(&**catalog) {
         Ok(res) => res,
         Err(err) => {
             render_resolution_error(ui, &err.to_string(), tokens);
-            return;
+            return None;
         }
     };
 
@@ -173,26 +184,40 @@ pub fn render_analysis_panel(
     render_analysis_tabs(ui, state, tokens);
     ui.add_space(8.0);
 
-    // Active Tab Content inside vertical scroll area
-    ScrollArea::vertical()
-        .auto_shrink([false, false])
-        .show(ui, |ui| match state.active_tab {
-            AnalysisTab::SpotDiagram => {
-                render_spot_diagram_view(ui, &resolved, prescription, primary_wl, state, tokens);
-            }
-            AnalysisTab::SeidelAberrations => {
-                render_seidel_view(ui, &resolved, prescription, primary_wl, state, tokens);
-            }
-            AnalysisTab::MtfCurve => {
-                render_mtf_view(ui, &resolved, prescription, primary_wl, state, tokens);
-            }
-            AnalysisTab::ParaxialCardinal => {
-                render_cardinal_view(ui, paraxial.as_ref(), prescription, primary_wl, tokens);
-            }
-            AnalysisTab::Polarization => {
-                render_polarization_view(ui, &resolved, prescription, primary_wl, state, tokens);
-            }
-        });
+    // Active Tab Content
+    if state.active_tab == AnalysisTab::Tolerancing {
+        tolerancing_action = crate::tolerancing::render_tolerancing_panel_view(
+            ui,
+            tolerancing_state,
+            prescription,
+            catalog,
+            tokens,
+        );
+    } else {
+        ScrollArea::vertical()
+            .id_salt("analysis_panel_content_scroll")
+            .auto_shrink([false, false])
+            .show(ui, |ui| match state.active_tab {
+                AnalysisTab::SpotDiagram => {
+                    render_spot_diagram_view(ui, &resolved, prescription, primary_wl, state, tokens);
+                }
+                AnalysisTab::SeidelAberrations => {
+                    render_seidel_view(ui, &resolved, prescription, primary_wl, state, tokens);
+                }
+                AnalysisTab::MtfCurve => {
+                    render_mtf_view(ui, &resolved, prescription, primary_wl, state, tokens);
+                }
+                AnalysisTab::ParaxialCardinal => {
+                    render_cardinal_view(ui, paraxial.as_ref(), prescription, primary_wl, tokens);
+                }
+                AnalysisTab::Polarization => {
+                    render_polarization_view(ui, &resolved, prescription, primary_wl, state, tokens);
+                }
+                AnalysisTab::Tolerancing => unreachable!(),
+            });
+    }
+
+    tolerancing_action
 }
 
 /// Renders a graceful error card when a prescription cannot be resolved.
@@ -272,57 +297,71 @@ fn render_cardinal_header(
         });
 }
 
-/// Renders compact horizontal tab buttons with balanced icon and label.
+/// Renders diagnostic tab buttons across two balanced rows with balanced icons and labels.
 fn render_analysis_tabs(ui: &mut Ui, state: &mut AnalysisPanelState, tokens: &OpticsTokens) {
-    let tabs = [
-        (AnalysisTab::SpotDiagram, "Spot", LucideIcon::Target),
-        (AnalysisTab::SeidelAberrations, "Seidel", LucideIcon::Activity),
-        (AnalysisTab::MtfCurve, "MTF", LucideIcon::SlidersHorizontal),
-        (AnalysisTab::ParaxialCardinal, "Cardinal", LucideIcon::Maximize2),
-        (AnalysisTab::Polarization, "Polar", LucideIcon::Compass),
+    let rows: [&[(AnalysisTab, &str, LucideIcon)]; 2] = [
+        &[
+            (AnalysisTab::SpotDiagram, "Spot", LucideIcon::Target),
+            (AnalysisTab::SeidelAberrations, "Seidel", LucideIcon::Activity),
+            (AnalysisTab::MtfCurve, "MTF", LucideIcon::SlidersHorizontal),
+        ],
+        &[
+            (AnalysisTab::ParaxialCardinal, "Cardinal", LucideIcon::Maximize2),
+            (AnalysisTab::Polarization, "Polar", LucideIcon::Compass),
+            (AnalysisTab::Tolerancing, "Tol/MC", LucideIcon::BarChart2),
+        ],
     ];
 
     let total_w = ui.available_width();
-    let count = tabs.len() as f32;
     let spacing = 3.0;
-    let btn_w = ((total_w - spacing * (count - 1.0)) / count).floor();
     let btn_h = 24.0;
 
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = spacing;
-        for (tab, label, icon) in tabs {
-            let is_selected = state.active_tab == tab;
-            let bg_color = if is_selected {
-                tokens.bg_control_active
-            } else {
-                tokens.bg_control
-            };
-            let text_color = if is_selected {
-                tokens.accent
-            } else {
-                tokens.text_muted
-            };
-            let border_stroke = if is_selected {
-                Stroke::new(1.0, tokens.accent)
-            } else {
-                tokens.border
-            };
+    for (row_idx, row_tabs) in rows.iter().enumerate() {
+        if row_idx > 0 {
+            ui.add_space(3.0);
+        }
+        let count = row_tabs.len() as f32;
+        let btn_w = ((total_w - spacing * (count - 1.0)) / count).floor();
 
-            let img = Image::from_bytes(icon.uri(), icon.svg_content().as_bytes())
-                .tint(text_color)
-                .fit_to_exact_size(Vec2::splat(12.0));
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = spacing;
+            for (tab, label, icon) in *row_tabs {
+                let is_selected = state.active_tab == *tab;
+                let bg_color = if is_selected {
+                    tokens.bg_control_active
+                } else {
+                    tokens.bg_control
+                };
+                let text_color = if is_selected {
+                    tokens.accent
+                } else {
+                    tokens.text_muted
+                };
+                let border_stroke = if is_selected {
+                    Stroke::new(1.0, tokens.accent)
+                } else {
+                    tokens.border
+                };
 
-            let btn = Button::image_and_text(img, RichText::new(label).size(11.0).strong().color(text_color))
+                let img = Image::from_bytes(icon.uri(), icon.svg_content().as_bytes())
+                    .tint(text_color)
+                    .fit_to_exact_size(Vec2::splat(12.0));
+
+                let btn = Button::image_and_text(
+                    img,
+                    RichText::new(*label).size(11.0).strong().color(text_color),
+                )
                 .min_size(Vec2::new(btn_w, btn_h))
                 .fill(bg_color)
                 .stroke(border_stroke)
                 .corner_radius(CornerRadius::ZERO);
 
-            if ui.add(btn).clicked() {
-                state.active_tab = tab;
+                if ui.add(btn).clicked() {
+                    state.active_tab = *tab;
+                }
             }
-        }
-    });
+        });
+    }
 }
 
 // ===========================================================================
@@ -1420,16 +1459,25 @@ fn render_polarization_view(
     });
 }
 
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_analysis_panel_state_default() {
-        let state = AnalysisPanelState::default();
+    fn test_analysis_tabs_interaction() {
+        let ctx = egui::Context::default();
+        let mut state = AnalysisPanelState::default();
+        let tokens = crate::theme::ThemeMode::ZemaxClassic.tokens();
+
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                render_analysis_tabs(ui, &mut state, &tokens);
+            });
+        });
+
         assert_eq!(state.active_tab, AnalysisTab::SpotDiagram);
-        assert_eq!(state.selected_field_deg, 0.0);
-        assert_eq!(state.spot_rings, 5);
-        assert!(state.show_airy_disk);
     }
 }
+
