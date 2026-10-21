@@ -46,14 +46,7 @@ pub struct ThinLensCamera {
 impl ThinLensCamera {
     /// Creates a new thin-lens camera.
     #[must_use]
-    pub fn new(
-        position: Vec3,
-        look_at: Vec3,
-        up: Vec3,
-        fov_deg: f64,
-        aperture_mm: f64,
-        focus_dist_mm: f64,
-    ) -> Self {
+    pub fn new(position: Vec3, look_at: Vec3, up: Vec3, fov_deg: f64, aperture_mm: f64, focus_dist_mm: f64) -> Self {
         Self {
             position,
             look_at,
@@ -148,12 +141,7 @@ impl ThinLensCamera {
         let up_vec = Vector3::new(self.up.x, self.up.y, self.up.z);
 
         let view = Matrix4::look_at_rh(&eye, &target, &up_vec);
-        let proj = Matrix4::new_perspective(
-            aspect_ratio as f32,
-            self.fov_deg.to_radians() as f32,
-            0.1,
-            10000.0,
-        );
+        let proj = Matrix4::new_perspective(aspect_ratio as f32, self.fov_deg.to_radians() as f32, 0.1, 10000.0);
 
         let view_f32 = view.cast::<f32>();
         let vp = proj * view_f32;
@@ -205,13 +193,7 @@ pub struct OrthographicCamera {
 impl OrthographicCamera {
     /// Creates a new orthographic camera.
     #[must_use]
-    pub fn new(
-        position: Vec3,
-        look_at: Vec3,
-        up: Vec3,
-        viewport_width_mm: f64,
-        viewport_height_mm: f64,
-    ) -> Self {
+    pub fn new(position: Vec3, look_at: Vec3, up: Vec3, viewport_width_mm: f64, viewport_height_mm: f64) -> Self {
         Self {
             position,
             look_at,
@@ -230,9 +212,8 @@ impl OrthographicCamera {
         let right = self.up.cross(&forward).normalize();
         let up = forward.cross(&right).normalize();
 
-        let origin = self.position
-            + right * ((u - 0.5) * self.viewport_width_mm)
-            + up * ((0.5 - v) * self.viewport_height_mm);
+        let origin =
+            self.position + right * ((u - 0.5) * self.viewport_width_mm) + up * ((0.5 - v) * self.viewport_height_mm);
 
         Ray::new(origin, forward, wavelength_nm, 1.0)
     }

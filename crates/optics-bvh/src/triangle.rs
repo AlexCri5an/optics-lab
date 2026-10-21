@@ -99,11 +99,7 @@ impl Triangle {
 
         let point = ray.at(t);
         let is_front_face = ray.direction.dot(&self.normal) < 0.0;
-        let normal = if is_front_face {
-            self.normal
-        } else {
-            -self.normal
-        };
+        let normal = if is_front_face { self.normal } else { -self.normal };
 
         Some(HitRecord {
             t,
@@ -148,12 +144,7 @@ mod tests {
             1,
         );
 
-        let ray = Ray::new(
-            Vec3::new(0.0, 0.0, -2.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )?;
+        let ray = Ray::new(Vec3::new(0.0, 0.0, -2.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0)?;
 
         let hit = tri.intersect(&ray, 1);
         assert!(hit.is_some());

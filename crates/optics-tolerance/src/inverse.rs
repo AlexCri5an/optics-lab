@@ -70,16 +70,10 @@ impl InverseTolerancing {
         catalog: &GlassCatalogDb,
         config: &InverseToleranceConfig,
     ) -> Result<InverseToleranceReport, ToleranceError> {
-        let sensitivity = SensitivityAnalyzer::analyze(
-            nominal_prescription,
-            operands,
-            criterion,
-            compensator,
-            catalog,
-        )?;
+        let sensitivity =
+            SensitivityAnalyzer::analyze(nominal_prescription, operands, criterion, compensator, catalog)?;
 
-        let allowable_degradation =
-            (config.performance_threshold - sensitivity.nominal_value).max(1e-6);
+        let allowable_degradation = (config.performance_threshold - sensitivity.nominal_value).max(1e-6);
         let current_rss = sensitivity.estimated_rss_degradation.max(1e-6);
 
         // Overall scaling factor to match allowable RSS
@@ -114,27 +108,19 @@ impl InverseTolerancing {
             let mut revised_op = op.clone();
             // Update half width in operand type
             match &mut revised_op.operand_type {
-                crate::operand::ToleranceOperandType::Radius {
-                    delta_radius_mm, ..
-                } => *delta_radius_mm = rec_w,
-                crate::operand::ToleranceOperandType::Thickness {
-                    delta_thickness_mm, ..
-                } => *delta_thickness_mm = rec_w,
-                crate::operand::ToleranceOperandType::Conic { delta_conic, .. } => {
-                    *delta_conic = rec_w
+                crate::operand::ToleranceOperandType::Radius { delta_radius_mm, .. } => *delta_radius_mm = rec_w,
+                crate::operand::ToleranceOperandType::Thickness { delta_thickness_mm, .. } => {
+                    *delta_thickness_mm = rec_w
                 }
-                crate::operand::ToleranceOperandType::SurfaceDecenter {
-                    max_decenter_mm, ..
-                } => *max_decenter_mm = rec_w,
-                crate::operand::ToleranceOperandType::SurfaceTilt { max_tilt_deg, .. } => {
-                    *max_tilt_deg = rec_w
+                crate::operand::ToleranceOperandType::Conic { delta_conic, .. } => *delta_conic = rec_w,
+                crate::operand::ToleranceOperandType::SurfaceDecenter { max_decenter_mm, .. } => {
+                    *max_decenter_mm = rec_w
                 }
-                crate::operand::ToleranceOperandType::ElementWedge {
-                    max_wedge_arcmin, ..
-                } => *max_wedge_arcmin = rec_w,
-                crate::operand::ToleranceOperandType::GlassIndexAbbe { delta_nd, .. } => {
-                    *delta_nd = rec_w
+                crate::operand::ToleranceOperandType::SurfaceTilt { max_tilt_deg, .. } => *max_tilt_deg = rec_w,
+                crate::operand::ToleranceOperandType::ElementWedge { max_wedge_arcmin, .. } => {
+                    *max_wedge_arcmin = rec_w
                 }
+                crate::operand::ToleranceOperandType::GlassIndexAbbe { delta_nd, .. } => *delta_nd = rec_w,
             }
             revised_operands.push(revised_op);
         }
@@ -146,13 +132,7 @@ impl InverseTolerancing {
             yield_threshold: Some(config.performance_threshold),
         });
 
-        let mc_report = mc_sim.run(
-            nominal_prescription,
-            &revised_operands,
-            criterion,
-            compensator,
-            catalog,
-        )?;
+        let mc_report = mc_sim.run(nominal_prescription, &revised_operands, criterion, compensator, catalog)?;
 
         let achieved_yield = mc_report.yield_percent.unwrap_or(0.0);
 

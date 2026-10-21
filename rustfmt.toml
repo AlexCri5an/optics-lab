@@ -1,0 +1,3 @@
+max_width = 120
+use_small_heuristics = "Default"
+edition = "2021"

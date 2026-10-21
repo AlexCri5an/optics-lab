@@ -63,8 +63,7 @@ pub fn trace_bvh_cost(ray: &Ray, bvh: &BvhScene) -> u32 {
                                     if b_node.is_leaf {
                                         for j in 0..b_node.count {
                                             cost = cost.saturating_add(1);
-                                            let tri_idx =
-                                                tri_indices[(b_node.left_or_first + j) as usize];
+                                            let tri_idx = tri_indices[(b_node.left_or_first + j) as usize];
                                             let _ = tris[tri_idx].intersect(&local_ray, inst_idx);
                                         }
                                     } else {
@@ -115,32 +114,14 @@ mod tests {
         let scene = BvhScene::build(vec![mesh], vec![instance]);
 
         // 1. Hit ray
-        let hit_ray = Ray::new(
-            Vec3::new(0.0, 0.0, 0.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )?;
+        let hit_ray = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0)?;
         let cost_hit = trace_bvh_cost(&hit_ray, &scene);
-        assert!(
-            cost_hit > 0,
-            "Cost for hit ray must be > 0, got {}",
-            cost_hit
-        );
+        assert!(cost_hit > 0, "Cost for hit ray must be > 0, got {}", cost_hit);
 
         // 2. Early-exit miss ray (pointing far away from scene)
-        let miss_ray = Ray::new(
-            Vec3::new(100.0, 100.0, 0.0),
-            Vec3::new(0.0, 1.0, 0.0),
-            587.56,
-            1.0,
-        )?;
+        let miss_ray = Ray::new(Vec3::new(100.0, 100.0, 0.0), Vec3::new(0.0, 1.0, 0.0), 587.56, 1.0)?;
         let cost_miss = trace_bvh_cost(&miss_ray, &scene);
-        assert_eq!(
-            cost_miss, 0,
-            "Cost for early-exit miss must be 0, got {}",
-            cost_miss
-        );
+        assert_eq!(cost_miss, 0, "Cost for early-exit miss must be 0, got {}", cost_miss);
 
         Ok(())
     }

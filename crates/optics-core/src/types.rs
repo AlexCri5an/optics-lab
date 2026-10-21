@@ -29,12 +29,7 @@ impl Ray {
     /// # Errors
     /// Returns [`OpticsError::NumericalSingularity`] if the direction contains NaN/infinite
     /// components, or if its norm is zero or near-zero (< 1e-15).
-    pub fn new(
-        origin: Vec3,
-        direction: Vec3,
-        wavelength_nm: f64,
-        energy: f64,
-    ) -> Result<Self, OpticsError> {
+    pub fn new(origin: Vec3, direction: Vec3, wavelength_nm: f64, energy: f64) -> Result<Self, OpticsError> {
         if !origin.iter().all(|x| x.is_finite()) || !direction.iter().all(|x| x.is_finite()) {
             return Err(OpticsError::NumericalSingularity(
                 "Ray origin or direction contains non-finite values".to_string(),
@@ -151,25 +146,15 @@ pub struct Wavelength {
 
 impl Wavelength {
     /// Fraunhofer d-line (Helium yellow): 0.5875618 µm (587.5618 nm).
-    pub const D_LINE: Self = Self {
-        microns: 0.587_561_8,
-    };
+    pub const D_LINE: Self = Self { microns: 0.587_561_8 };
     /// Fraunhofer e-line (Mercury green): 0.5460740 µm (546.0740 nm).
-    pub const E_LINE: Self = Self {
-        microns: 0.546_074_0,
-    };
+    pub const E_LINE: Self = Self { microns: 0.546_074_0 };
     /// Fraunhofer F-line (Hydrogen blue): 0.4861327 µm (486.1327 nm).
-    pub const F_LINE: Self = Self {
-        microns: 0.486_132_7,
-    };
+    pub const F_LINE: Self = Self { microns: 0.486_132_7 };
     /// Fraunhofer C-line (Hydrogen red): 0.6562725 µm (656.2725 nm).
-    pub const C_LINE: Self = Self {
-        microns: 0.656_272_5,
-    };
+    pub const C_LINE: Self = Self { microns: 0.656_272_5 };
     /// Fraunhofer g-line (Mercury violet): 0.4358343 µm (435.8343 nm).
-    pub const G_LINE: Self = Self {
-        microns: 0.435_834_3,
-    };
+    pub const G_LINE: Self = Self { microns: 0.435_834_3 };
 
     /// Creates a wavelength from micrometers (µm).
     ///
@@ -194,9 +179,7 @@ impl Wavelength {
                 "Wavelength in nanometers must be a positive, finite number".to_string(),
             ));
         }
-        Ok(Self {
-            microns: nm / 1000.0,
-        })
+        Ok(Self { microns: nm / 1000.0 })
     }
 
     /// Wavelength value in micrometers (µm).

@@ -304,10 +304,7 @@ impl PrimitiveGeometry {
 
                 Some((t, normal, (u, v)))
             }
-            PrimitiveGeometry::Cylinder {
-                radius,
-                half_length,
-            } => {
+            PrimitiveGeometry::Cylinder { radius, half_length } => {
                 let ox = local_ray.origin.x;
                 let oy = local_ray.origin.y;
                 let dx = local_ray.direction.x;
@@ -346,11 +343,7 @@ impl PrimitiveGeometry {
                 }
                 None
             }
-            PrimitiveGeometry::Box {
-                half_x,
-                half_y,
-                half_z,
-            } => {
+            PrimitiveGeometry::Box { half_x, half_y, half_z } => {
                 let ox = local_ray.origin.x;
                 let oy = local_ray.origin.y;
                 let oz = local_ray.origin.z;
@@ -475,21 +468,13 @@ impl PrimitiveGeometry {
                 let r = radius.abs();
                 Aabb::from_points(&[Vec3::new(-r, -r, -r), Vec3::new(r, r, r)])
             }
-            PrimitiveGeometry::Cylinder {
-                radius,
-                half_length,
-            } => Aabb::from_points(&[
+            PrimitiveGeometry::Cylinder { radius, half_length } => Aabb::from_points(&[
                 Vec3::new(-radius, -radius, -half_length),
                 Vec3::new(radius, radius, half_length),
             ]),
-            PrimitiveGeometry::Box {
-                half_x,
-                half_y,
-                half_z,
-            } => Aabb::from_points(&[
-                Vec3::new(-half_x, -half_y, -half_z),
-                Vec3::new(half_x, half_y, half_z),
-            ]),
+            PrimitiveGeometry::Box { half_x, half_y, half_z } => {
+                Aabb::from_points(&[Vec3::new(-half_x, -half_y, -half_z), Vec3::new(half_x, half_y, half_z)])
+            }
             PrimitiveGeometry::Mesh { ref triangles } => {
                 let mut b = Aabb::empty();
                 for t in triangles {

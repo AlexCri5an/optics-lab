@@ -98,13 +98,7 @@ impl MultiStartOptimizer {
         let local_optimizer = DlsOptimizer::new(self.config.local_dls_config.clone());
 
         // First evaluate baseline system
-        let mut best_result = local_optimizer.optimize(
-            base_prescription,
-            variables,
-            merit_function,
-            catalog,
-            None,
-        )?;
+        let mut best_result = local_optimizer.optimize(base_prescription, variables, merit_function, catalog, None)?;
 
         let num_vars = variables.num_active();
         if num_vars == 0 {
@@ -128,17 +122,12 @@ impl MultiStartOptimizer {
             }
 
             let mut trial_presc = base_prescription.clone();
-            if variables
-                .apply_values(&mut trial_presc, &random_params)
-                .is_err()
-            {
+            if variables.apply_values(&mut trial_presc, &random_params).is_err() {
                 continue;
             }
 
             // Perform local minimization
-            if let Ok(result) =
-                local_optimizer.optimize(&trial_presc, variables, merit_function, catalog, None)
-            {
+            if let Ok(result) = local_optimizer.optimize(&trial_presc, variables, merit_function, catalog, None) {
                 if result.final_merit < best_result.final_merit {
                     best_result = result;
                 }
@@ -230,16 +219,12 @@ impl SimulatedAnnealingOptimizer {
                     }
                     let range = var.max_value - var.min_value;
                     let perturb = (rng.next_f64() - 0.5) * 0.1 * range;
-                    trial_params[p_idx] =
-                        (trial_params[p_idx] + perturb).clamp(var.min_value, var.max_value);
+                    trial_params[p_idx] = (trial_params[p_idx] + perturb).clamp(var.min_value, var.max_value);
                     p_idx += 1;
                 }
 
                 let mut trial_presc = current_presc.clone();
-                if variables
-                    .apply_values(&mut trial_presc, &trial_params)
-                    .is_err()
-                {
+                if variables.apply_values(&mut trial_presc, &trial_params).is_err() {
                     continue;
                 }
 

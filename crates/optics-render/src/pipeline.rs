@@ -122,13 +122,11 @@ impl PathTracingRenderer {
         let aspect_ratio = width as f64 / height.max(1) as f64;
         let camera_uniform = camera.to_uniform(aspect_ratio);
 
-        let camera_buffer = context
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Camera Uniform Buffer"),
-                contents: bytemuck::bytes_of(&camera_uniform),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
+        let camera_buffer = context.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Camera Uniform Buffer"),
+            contents: bytemuck::bytes_of(&camera_uniform),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
 
         // Default Schott N-BK7 Sellmeier coefficients
         let default_b = [1.039_612_2_f32, 0.231_792_35_f32, 1.010_469_4_f32];
@@ -148,13 +146,11 @@ impl PathTracingRenderer {
             _pad: [0.0; 2],
         };
 
-        let params_buffer = context
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Render Params Buffer"),
-                contents: bytemuck::bytes_of(&initial_params),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
+        let params_buffer = context.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Render Params Buffer"),
+            contents: bytemuck::bytes_of(&initial_params),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
 
         let default_materials = vec![
             GpuMaterial::n_bk7(),
@@ -166,245 +162,220 @@ impl PathTracingRenderer {
             GpuMaterial::fused_silica(),
         ];
         let material_bytes = pack_materials_to_gpu_buffer(&default_materials);
-        let material_buffer =
-            context
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Material Storage Buffer"),
-                    contents: &material_bytes,
-                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-                });
+        let material_buffer = context.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Material Storage Buffer"),
+            contents: &material_bytes,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        });
 
         let accum_size = (width.max(1) as u64) * (height.max(1) as u64) * 16;
         let accum_buffer = context.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("HDR Accumulation Storage Buffer"),
             size: accum_size.max(64),
-            usage: wgpu::BufferUsages::STORAGE
-                | wgpu::BufferUsages::COPY_SRC
-                | wgpu::BufferUsages::COPY_DST,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        let compute_shader = context
-            .device
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("Path Tracer Compute Shader"),
-                source: wgpu::ShaderSource::Wgsl(PATH_TRACER_WGSL.into()),
-            });
+        let compute_shader = context.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Path Tracer Compute Shader"),
+            source: wgpu::ShaderSource::Wgsl(PATH_TRACER_WGSL.into()),
+        });
 
-        let compute_bind_group_layout =
-            context
-                .device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("Compute Bind Group Layout"),
-                    entries: &[
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Uniform,
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 1,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Uniform,
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 2,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Storage { read_only: true },
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 3,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Storage { read_only: true },
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 4,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::StorageTexture {
-                                access: wgpu::StorageTextureAccess::WriteOnly,
-                                format: wgpu::TextureFormat::Rgba16Float,
-                                view_dimension: wgpu::TextureViewDimension::D2,
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 5,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Storage { read_only: false },
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 6,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Storage { read_only: true },
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        },
-                    ],
-                });
-
-        let compute_bind_group = context
+        let compute_bind_group_layout = context
             .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("Compute Bind Group"),
-                layout: &compute_bind_group_layout,
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("Compute Bind Group Layout"),
                 entries: &[
-                    wgpu::BindGroupEntry {
+                    wgpu::BindGroupLayoutEntry {
                         binding: 0,
-                        resource: camera_buffer.as_entire_binding(),
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
                     },
-                    wgpu::BindGroupEntry {
+                    wgpu::BindGroupLayoutEntry {
                         binding: 1,
-                        resource: params_buffer.as_entire_binding(),
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
                     },
-                    wgpu::BindGroupEntry {
+                    wgpu::BindGroupLayoutEntry {
                         binding: 2,
-                        resource: bvh_buffer.node_buf.as_entire_binding(),
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
                     },
-                    wgpu::BindGroupEntry {
+                    wgpu::BindGroupLayoutEntry {
                         binding: 3,
-                        resource: bvh_buffer.triangle_buf.as_entire_binding(),
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
                     },
-                    wgpu::BindGroupEntry {
+                    wgpu::BindGroupLayoutEntry {
                         binding: 4,
-                        resource: wgpu::BindingResource::TextureView(&accumulation_target.view),
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::StorageTexture {
+                            access: wgpu::StorageTextureAccess::WriteOnly,
+                            format: wgpu::TextureFormat::Rgba16Float,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                        },
+                        count: None,
                     },
-                    wgpu::BindGroupEntry {
+                    wgpu::BindGroupLayoutEntry {
                         binding: 5,
-                        resource: accum_buffer.as_entire_binding(),
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
                     },
-                    wgpu::BindGroupEntry {
+                    wgpu::BindGroupLayoutEntry {
                         binding: 6,
-                        resource: material_buffer.as_entire_binding(),
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
                     },
                 ],
             });
 
-        let compute_pipeline_layout =
-            context
-                .device
-                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("Compute Pipeline Layout"),
-                    bind_group_layouts: &[&compute_bind_group_layout],
-                    push_constant_ranges: &[],
-                });
+        let compute_bind_group = context.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Compute Bind Group"),
+            layout: &compute_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: camera_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: params_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: bvh_buffer.node_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: bvh_buffer.triangle_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::TextureView(&accumulation_target.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: accum_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 6,
+                    resource: material_buffer.as_entire_binding(),
+                },
+            ],
+        });
 
-        let compute_pipeline =
-            context
-                .device
-                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                    label: Some("Path Tracer Compute Pipeline"),
-                    layout: Some(&compute_pipeline_layout),
-                    module: &compute_shader,
-                    entry_point: Some("main"),
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                    cache: None,
-                });
+        let compute_pipeline_layout = context.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Compute Pipeline Layout"),
+            bind_group_layouts: &[&compute_bind_group_layout],
+            push_constant_ranges: &[],
+        });
 
-        // Tonemapping presentation pipeline
-        let tonemap_shader = context
+        let compute_pipeline = context
             .device
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("Tonemapping Shader Module"),
-                source: wgpu::ShaderSource::Wgsl(TONEMAPPING_WGSL.into()),
+            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("Path Tracer Compute Pipeline"),
+                layout: Some(&compute_pipeline_layout),
+                module: &compute_shader,
+                entry_point: Some("main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                cache: None,
             });
 
-        let tonemap_bind_group_layout =
-            context
-                .device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("Tonemapping Bind Group Layout"),
-                    entries: &[wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: false },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    }],
-                });
+        // Tonemapping presentation pipeline
+        let tonemap_shader = context.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Tonemapping Shader Module"),
+            source: wgpu::ShaderSource::Wgsl(TONEMAPPING_WGSL.into()),
+        });
 
-        let tonemap_bind_group = context
+        let tonemap_bind_group_layout = context
             .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("Tonemapping Bind Group"),
-                layout: &tonemap_bind_group_layout,
-                entries: &[wgpu::BindGroupEntry {
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("Tonemapping Bind Group Layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&accumulation_target.view),
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
                 }],
             });
 
-        let tonemap_pipeline_layout =
-            context
-                .device
-                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("Tonemapping Pipeline Layout"),
-                    bind_group_layouts: &[&tonemap_bind_group_layout],
-                    push_constant_ranges: &[],
-                });
+        let tonemap_bind_group = context.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Tonemapping Bind Group"),
+            layout: &tonemap_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&accumulation_target.view),
+            }],
+        });
 
-        let tonemap_pipeline =
-            context
-                .device
-                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    label: Some("Tonemapping Render Pipeline"),
-                    layout: Some(&tonemap_pipeline_layout),
-                    vertex: wgpu::VertexState {
-                        module: &tonemap_shader,
-                        entry_point: Some("vs_main"),
-                        buffers: &[],
-                        compilation_options: wgpu::PipelineCompilationOptions::default(),
-                    },
-                    fragment: Some(wgpu::FragmentState {
-                        module: &tonemap_shader,
-                        entry_point: Some("fs_main"),
-                        targets: &[Some(wgpu::ColorTargetState {
-                            format: display_format,
-                            blend: Some(wgpu::BlendState::REPLACE),
-                            write_mask: wgpu::ColorWrites::ALL,
-                        })],
-                        compilation_options: wgpu::PipelineCompilationOptions::default(),
-                    }),
-                    primitive: wgpu::PrimitiveState {
-                        topology: wgpu::PrimitiveTopology::TriangleList,
-                        ..Default::default()
-                    },
-                    depth_stencil: None,
-                    multisample: wgpu::MultisampleState::default(),
-                    multiview: None,
-                    cache: None,
-                });
+        let tonemap_pipeline_layout = context.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Tonemapping Pipeline Layout"),
+            bind_group_layouts: &[&tonemap_bind_group_layout],
+            push_constant_ranges: &[],
+        });
+
+        let tonemap_pipeline = context.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Tonemapping Render Pipeline"),
+            layout: Some(&tonemap_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &tonemap_shader,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &tonemap_shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: display_format,
+                    blend: Some(wgpu::BlendState::REPLACE),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
 
         Ok(Self {
             context,
@@ -436,14 +407,14 @@ impl PathTracingRenderer {
     pub fn update_materials(&mut self, materials: &[GpuMaterial]) {
         self.materials = materials.to_vec();
         let bytes = pack_materials_to_gpu_buffer(&self.materials);
-        self.material_buffer =
-            self.context
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Material Storage Buffer"),
-                    contents: &bytes,
-                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-                });
+        self.material_buffer = self
+            .context
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Material Storage Buffer"),
+                contents: &bytes,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            });
         self.rebuild_compute_bind_group();
         self.reset_accumulation();
     }
@@ -470,8 +441,7 @@ impl PathTracingRenderer {
 
     /// Updates the camera parameters and resets sample accumulation.
     pub fn update_camera(&mut self, camera: &ThinLensCamera) {
-        let aspect =
-            self.accumulation_target.width as f64 / self.accumulation_target.height.max(1) as f64;
+        let aspect = self.accumulation_target.width as f64 / self.accumulation_target.height.max(1) as f64;
         let uniform = camera.to_uniform(aspect);
         self.context
             .queue
@@ -502,9 +472,7 @@ impl PathTracingRenderer {
         self.accum_buffer = self.context.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("HDR Accumulation Storage Buffer"),
             size: accum_size.max(64),
-            usage: wgpu::BufferUsages::STORAGE
-                | wgpu::BufferUsages::COPY_SRC
-                | wgpu::BufferUsages::COPY_DST,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
@@ -515,61 +483,51 @@ impl PathTracingRenderer {
     }
 
     fn rebuild_compute_bind_group(&mut self) {
-        self.compute_bind_group =
-            self.context
-                .device
-                .create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("Compute Bind Group"),
-                    layout: &self.compute_bind_group_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: self.camera_buffer.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: self.params_buffer.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 2,
-                            resource: self.bvh_buffer.node_buf.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 3,
-                            resource: self.bvh_buffer.triangle_buf.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 4,
-                            resource: wgpu::BindingResource::TextureView(
-                                &self.accumulation_target.view,
-                            ),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 5,
-                            resource: self.accum_buffer.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 6,
-                            resource: self.material_buffer.as_entire_binding(),
-                        },
-                    ],
-                });
+        self.compute_bind_group = self.context.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Compute Bind Group"),
+            layout: &self.compute_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.camera_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: self.params_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: self.bvh_buffer.node_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: self.bvh_buffer.triangle_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::TextureView(&self.accumulation_target.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: self.accum_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 6,
+                    resource: self.material_buffer.as_entire_binding(),
+                },
+            ],
+        });
     }
 
     fn rebuild_tonemap_bind_group(&mut self) {
-        self.tonemap_bind_group =
-            self.context
-                .device
-                .create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("Tonemapping Bind Group"),
-                    layout: &self.tonemap_bind_group_layout,
-                    entries: &[wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(
-                            &self.accumulation_target.view,
-                        ),
-                    }],
-                });
+        self.tonemap_bind_group = self.context.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Tonemapping Bind Group"),
+            layout: &self.tonemap_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&self.accumulation_target.view),
+            }],
+        });
     }
 
     /// Executes one frame of compute path tracing and tonemapping.
@@ -592,12 +550,12 @@ impl PathTracingRenderer {
             .queue
             .write_buffer(&self.params_buffer, 0, bytemuck::bytes_of(&params));
 
-        let mut encoder =
-            self.context
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Path Tracer Command Encoder"),
-                });
+        let mut encoder = self
+            .context
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Path Tracer Command Encoder"),
+            });
 
         {
             let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -653,7 +611,7 @@ impl PathTracingRenderer {
 
         let unpadded_bytes_per_row = width * 4;
         let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
-        let padded_bytes_per_row = (unpadded_bytes_per_row + align - 1) / align * align;
+        let padded_bytes_per_row = unpadded_bytes_per_row.div_ceil(align) * align;
         let buffer_size = (padded_bytes_per_row * height) as u64;
 
         let staging_buffer = self.context.device.create_buffer(&wgpu::BufferDescriptor {
@@ -663,12 +621,12 @@ impl PathTracingRenderer {
             mapped_at_creation: false,
         });
 
-        let mut encoder =
-            self.context
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Readback Command Encoder"),
-                });
+        let mut encoder = self
+            .context
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Readback Command Encoder"),
+            });
 
         encoder.copy_texture_to_buffer(
             wgpu::TexelCopyTextureInfo {
@@ -783,14 +741,7 @@ mod tests {
                 5.0,
             );
 
-            let mut renderer = PathTracingRenderer::new(
-                ctx,
-                &scene,
-                &camera,
-                64,
-                64,
-                wgpu::TextureFormat::Rgba8Unorm,
-            )?;
+            let mut renderer = PathTracingRenderer::new(ctx, &scene, &camera, 64, 64, wgpu::TextureFormat::Rgba8Unorm)?;
 
             assert_eq!(renderer.get_sample_count(), 0);
             renderer.render_frame();
@@ -833,14 +784,7 @@ mod tests {
             );
 
             // Metal macOS surface format: Bgra8Unorm
-            let mut renderer = PathTracingRenderer::new(
-                ctx,
-                &scene,
-                &camera,
-                64,
-                64,
-                wgpu::TextureFormat::Bgra8Unorm,
-            )?;
+            let mut renderer = PathTracingRenderer::new(ctx, &scene, &camera, 64, 64, wgpu::TextureFormat::Bgra8Unorm)?;
 
             assert_eq!(renderer.get_sample_count(), 0);
             renderer.render_frame();
@@ -883,7 +827,7 @@ mod tests {
                         grin_profile: None,
                         profile: None,
                         aperture: None,
-                    coating: None,
+                        coating: None,
                     },
                     optics_core::OpticalSurface {
                         surface_index: 2,
@@ -898,7 +842,7 @@ mod tests {
                         grin_profile: None,
                         profile: None,
                         aperture: None,
-                    coating: None,
+                        coating: None,
                     },
                     optics_core::OpticalSurface {
                         surface_index: 3,
@@ -913,7 +857,7 @@ mod tests {
                         grin_profile: None,
                         profile: None,
                         aperture: None,
-                    coating: None,
+                        coating: None,
                     },
                     optics_core::OpticalSurface {
                         surface_index: 4,
@@ -928,23 +872,18 @@ mod tests {
                         grin_profile: None,
                         profile: None,
                         aperture: None,
-                    coating: None,
+                        coating: None,
                     },
                 ],
             };
 
-            let (triangles, materials) =
-                optics_bvh::prescription_to_trimesh_with_materials(&prescription, 16, 8);
+            let (triangles, materials) = optics_bvh::prescription_to_trimesh_with_materials(&prescription, 16, 8);
             assert_eq!(materials.len(), 2);
             assert_eq!(materials[0], "SK16");
             assert_eq!(materials[1], "F2");
 
-            let aabb = optics_bvh::Aabb::from_points(
-                &triangles
-                    .iter()
-                    .flat_map(|t| [t.v0, t.v1, t.v2])
-                    .collect::<Vec<_>>(),
-            );
+            let aabb =
+                optics_bvh::Aabb::from_points(&triangles.iter().flat_map(|t| [t.v0, t.v1, t.v2]).collect::<Vec<_>>());
             let inst = optics_bvh::BlasInstance::new(0, &aabb, nalgebra::Matrix4::identity());
             let scene = BvhScene::build(vec![triangles], vec![inst]);
 
@@ -957,14 +896,7 @@ mod tests {
                 30.0,
             );
 
-            let mut renderer = PathTracingRenderer::new(
-                ctx,
-                &scene,
-                &camera,
-                64,
-                64,
-                wgpu::TextureFormat::Rgba8Unorm,
-            )?;
+            let mut renderer = PathTracingRenderer::new(ctx, &scene, &camera, 64, 64, wgpu::TextureFormat::Rgba8Unorm)?;
 
             // Assign per-material Sellmeier formulas: Material 0 = SK16, Material 1 = F2
             let gpu_mats = vec![GpuMaterial::sk16(), GpuMaterial::f2()];

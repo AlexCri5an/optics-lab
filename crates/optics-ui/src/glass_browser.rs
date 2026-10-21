@@ -9,8 +9,8 @@
 //! - Exact vendor totals from database: CDGM (259), OHARA (222), SCHOTT (158), INFRARED (7), Total: 646.
 
 use egui::{
-    pos2, Align2, Button, Color32, ComboBox, CornerRadius, FontId, Frame, Margin, RichText,
-    ScrollArea, Sense, TextEdit, Ui, Vec2,
+    Align2, Button, Color32, ComboBox, CornerRadius, FontId, Frame, Margin, RichText, ScrollArea, Sense, TextEdit, Ui,
+    Vec2, pos2,
 };
 use optics_core::OpticalPrescription;
 use optics_glass::{GlassCatalog, GlassCatalogDb, GlassMaterial};
@@ -37,8 +37,6 @@ pub enum MaterialVendorFilter {
     InfraredOther,
 }
 
-
-
 /// Renders the docked Materials Catalog panel inside the left sidebar.
 ///
 /// Returns `true` if the optical prescription was modified this frame.
@@ -54,7 +52,11 @@ pub fn render_materials_panel(
     // Ensure target surface index is within valid range
     let total_surfs = prescription.surfaces.len();
     if total_surfs == 0 {
-        ui.label(RichText::new("No optical surfaces in prescription.").size(12.0).color(tokens.text_muted));
+        ui.label(
+            RichText::new("No optical surfaces in prescription.")
+                .size(12.0)
+                .color(tokens.text_muted),
+        );
         return false;
     }
 
@@ -108,7 +110,10 @@ pub fn render_materials_panel(
 
             let filters = [
                 (MaterialVendorFilter::All, format!("ALL ({})", catalog.len())),
-                (MaterialVendorFilter::Common, format!("COMMON ({})", COMMON_OPTICAL_GLASSES.len())),
+                (
+                    MaterialVendorFilter::Common,
+                    format!("COMMON ({})", COMMON_OPTICAL_GLASSES.len()),
+                ),
                 (MaterialVendorFilter::Cdgm, "CDGM (259)".to_string()),
                 (MaterialVendorFilter::Ohara, "OHARA (222)".to_string()),
                 (MaterialVendorFilter::Schott, "SCHOTT (158)".to_string()),
@@ -117,14 +122,17 @@ pub fn render_materials_panel(
 
             for (flt, label) in filters {
                 let is_active = editor_state.materials_filter == flt;
-                let btn = Button::new(
-                    RichText::new(label)
-                        .size(10.5)
-                        .strong()
-                        .color(if is_active { Color32::WHITE } else { tokens.text_muted }),
-                )
+                let btn = Button::new(RichText::new(label).size(10.5).strong().color(if is_active {
+                    Color32::WHITE
+                } else {
+                    tokens.text_muted
+                }))
                 .fill(if is_active { tokens.accent } else { tokens.bg_control })
-                .stroke(if is_active { tokens.border_hovered } else { tokens.border })
+                .stroke(if is_active {
+                    tokens.border_hovered
+                } else {
+                    tokens.border
+                })
                 .corner_radius(CornerRadius::ZERO);
 
                 if ui.add(btn).clicked() {
@@ -266,13 +274,18 @@ pub fn render_materials_panel(
 
                             Frame::NONE
                                 .fill(row_bg)
-                                .stroke(if is_current { tokens.border_hovered } else { egui::Stroke::NONE })
+                                .stroke(if is_current {
+                                    tokens.border_hovered
+                                } else {
+                                    egui::Stroke::NONE
+                                })
                                 .inner_margin(Margin::symmetric(2, 2))
                                 .show(ui, |ui| {
                                     ui.horizontal(|ui| {
                                         ui.spacing_mut().item_spacing = Vec2::new(spacing, 0.0);
 
-                                        let (rect, _) = ui.allocate_exact_size(Vec2::new(col_name_w, 20.0), Sense::hover());
+                                        let (rect, _) =
+                                            ui.allocate_exact_size(Vec2::new(col_name_w, 20.0), Sense::hover());
                                         let name_color = if is_current { tokens.accent } else { tokens.text_primary };
                                         ui.painter().text(
                                             pos2(rect.min.x + 2.0, rect.center().y),
@@ -282,7 +295,8 @@ pub fn render_materials_panel(
                                             name_color,
                                         );
 
-                                        let (rect, _) = ui.allocate_exact_size(Vec2::new(col_vendor_w, 20.0), Sense::hover());
+                                        let (rect, _) =
+                                            ui.allocate_exact_size(Vec2::new(col_vendor_w, 20.0), Sense::hover());
                                         ui.painter().text(
                                             pos2(rect.min.x + 2.0, rect.center().y),
                                             Align2::LEFT_CENTER,
@@ -291,7 +305,8 @@ pub fn render_materials_panel(
                                             tokens.text_muted,
                                         );
 
-                                        let (rect, _) = ui.allocate_exact_size(Vec2::new(col_nd_w, 20.0), Sense::hover());
+                                        let (rect, _) =
+                                            ui.allocate_exact_size(Vec2::new(col_nd_w, 20.0), Sense::hover());
                                         ui.painter().text(
                                             pos2(rect.min.x + 2.0, rect.center().y),
                                             Align2::LEFT_CENTER,
@@ -300,7 +315,8 @@ pub fn render_materials_panel(
                                             tokens.text_primary,
                                         );
 
-                                        let (rect, _) = ui.allocate_exact_size(Vec2::new(col_vd_w, 20.0), Sense::hover());
+                                        let (rect, _) =
+                                            ui.allocate_exact_size(Vec2::new(col_vd_w, 20.0), Sense::hover());
                                         ui.painter().text(
                                             pos2(rect.min.x + 2.0, rect.center().y),
                                             Align2::LEFT_CENTER,
@@ -309,7 +325,8 @@ pub fn render_materials_panel(
                                             tokens.text_muted,
                                         );
 
-                                        let (rect, _) = ui.allocate_exact_size(Vec2::new(col_action_w, 20.0), Sense::hover());
+                                        let (rect, _) =
+                                            ui.allocate_exact_size(Vec2::new(col_action_w, 20.0), Sense::hover());
                                         let btn = Button::new(
                                             RichText::new(if is_current { "Active" } else { "Set" })
                                                 .size(10.5)
@@ -317,7 +334,11 @@ pub fn render_materials_panel(
                                                 .color(if is_current { tokens.accent } else { tokens.text_primary }),
                                         )
                                         .wrap_mode(egui::TextWrapMode::Extend)
-                                        .fill(if is_current { tokens.bg_control_active } else { tokens.bg_control })
+                                        .fill(if is_current {
+                                            tokens.bg_control_active
+                                        } else {
+                                            tokens.bg_control
+                                        })
                                         .stroke(tokens.border)
                                         .corner_radius(CornerRadius::ZERO);
 
@@ -348,13 +369,18 @@ pub fn render_materials_panel(
 
                             Frame::NONE
                                 .fill(row_bg)
-                                .stroke(if is_current { tokens.border_hovered } else { egui::Stroke::NONE })
+                                .stroke(if is_current {
+                                    tokens.border_hovered
+                                } else {
+                                    egui::Stroke::NONE
+                                })
                                 .inner_margin(Margin::symmetric(2, 2))
                                 .show(ui, |ui| {
                                     ui.horizontal(|ui| {
                                         ui.spacing_mut().item_spacing = Vec2::new(spacing, 0.0);
 
-                                        let (rect, _) = ui.allocate_exact_size(Vec2::new(col_name_w, 20.0), Sense::hover());
+                                        let (rect, _) =
+                                            ui.allocate_exact_size(Vec2::new(col_name_w, 20.0), Sense::hover());
                                         let name_color = if is_current { tokens.accent } else { tokens.text_primary };
                                         let display_name = if g.name.len() > 14 {
                                             format!("{}…", &g.name[..13])
@@ -369,7 +395,8 @@ pub fn render_materials_panel(
                                             name_color,
                                         );
 
-                                        let (rect, _) = ui.allocate_exact_size(Vec2::new(col_vendor_w, 20.0), Sense::hover());
+                                        let (rect, _) =
+                                            ui.allocate_exact_size(Vec2::new(col_vendor_w, 20.0), Sense::hover());
                                         ui.painter().text(
                                             pos2(rect.min.x + 2.0, rect.center().y),
                                             Align2::LEFT_CENTER,
@@ -378,7 +405,8 @@ pub fn render_materials_panel(
                                             tokens.text_muted,
                                         );
 
-                                        let (rect, _) = ui.allocate_exact_size(Vec2::new(col_nd_w, 20.0), Sense::hover());
+                                        let (rect, _) =
+                                            ui.allocate_exact_size(Vec2::new(col_nd_w, 20.0), Sense::hover());
                                         ui.painter().text(
                                             pos2(rect.min.x + 2.0, rect.center().y),
                                             Align2::LEFT_CENTER,
@@ -387,7 +415,8 @@ pub fn render_materials_panel(
                                             tokens.text_primary,
                                         );
 
-                                        let (rect, _) = ui.allocate_exact_size(Vec2::new(col_vd_w, 20.0), Sense::hover());
+                                        let (rect, _) =
+                                            ui.allocate_exact_size(Vec2::new(col_vd_w, 20.0), Sense::hover());
                                         ui.painter().text(
                                             pos2(rect.min.x + 2.0, rect.center().y),
                                             Align2::LEFT_CENTER,
@@ -396,16 +425,22 @@ pub fn render_materials_panel(
                                             tokens.text_primary,
                                         );
 
-                                        let (rect, _) = ui.allocate_exact_size(Vec2::new(col_action_w, 20.0), Sense::hover());
+                                        let (rect, _) =
+                                            ui.allocate_exact_size(Vec2::new(col_action_w, 20.0), Sense::hover());
                                         let btn_text = if is_current { "Active" } else { "Set" };
                                         let btn = Button::new(
-                                            RichText::new(btn_text)
-                                                .size(10.5)
-                                                .strong()
-                                                .color(if is_current { tokens.accent } else { tokens.text_primary }),
+                                            RichText::new(btn_text).size(10.5).strong().color(if is_current {
+                                                tokens.accent
+                                            } else {
+                                                tokens.text_primary
+                                            }),
                                         )
                                         .wrap_mode(egui::TextWrapMode::Extend)
-                                        .fill(if is_current { tokens.bg_control_active } else { tokens.bg_control })
+                                        .fill(if is_current {
+                                            tokens.bg_control_active
+                                        } else {
+                                            tokens.bg_control
+                                        })
                                         .stroke(tokens.border)
                                         .corner_radius(CornerRadius::ZERO);
 
@@ -419,7 +454,11 @@ pub fn render_materials_panel(
                         if matches.is_empty() && query != "AIR" {
                             ui.vertical_centered(|ui| {
                                 ui.add_space(20.0);
-                                ui.label(RichText::new("No catalog glass matches query.").size(11.5).color(tokens.text_muted));
+                                ui.label(
+                                    RichText::new("No catalog glass matches query.")
+                                        .size(11.5)
+                                        .color(tokens.text_muted),
+                                );
                                 if !query.is_empty() {
                                     if ui.button(format!("Use custom name '{}'", query)).clicked() {
                                         glass_to_apply = Some(query.clone());
@@ -453,11 +492,24 @@ pub fn render_materials_panel(
 
                     let selected_text = format!("Surface {} ({})", target_idx, surf_role);
                     let cb_resp = ComboBox::from_id_salt("unified_materials_target_cb")
-                        .selected_text(RichText::new(selected_text).strong().size(11.5).color(tokens.text_primary))
+                        .selected_text(
+                            RichText::new(selected_text)
+                                .strong()
+                                .size(11.5)
+                                .color(tokens.text_primary),
+                        )
                         .width(150.0)
                         .show_ui(ui, |ui| {
                             for (idx, surf) in prescription.surfaces.iter().enumerate() {
-                                let role = if idx == 0 { "Object" } else if idx == total_surfs - 1 { "Image" } else if surf.is_stop { "Stop" } else { "Standard" };
+                                let role = if idx == 0 {
+                                    "Object"
+                                } else if idx == total_surfs - 1 {
+                                    "Image"
+                                } else if surf.is_stop {
+                                    "Stop"
+                                } else {
+                                    "Standard"
+                                };
                                 let label = format!("Surface {} ({} : {})", idx, role, surf.material_name);
                                 ui.selectable_value(&mut editor_state.materials_target_surface, idx, label);
                             }
@@ -465,17 +517,22 @@ pub fn render_materials_panel(
 
                     let cb_height = cb_resp.response.rect.height();
 
-                    let air_btn = Button::new(
-                        RichText::new("Set to AIR")
-                            .size(11.0)
-                            .strong()
-                            .color(if current_material == "AIR" { tokens.accent } else { tokens.text_primary }),
-                    )
+                    let air_btn = Button::new(RichText::new("Set to AIR").size(11.0).strong().color(
+                        if current_material == "AIR" {
+                            tokens.accent
+                        } else {
+                            tokens.text_primary
+                        },
+                    ))
                     .fill(tokens.bg_canvas)
                     .stroke(tokens.border)
                     .corner_radius(CornerRadius::ZERO);
 
-                    if ui.add_sized([72.0, cb_height], air_btn).on_hover_text("Assign AIR (Vacuum) to selected surface").clicked() {
+                    if ui
+                        .add_sized([72.0, cb_height], air_btn)
+                        .on_hover_text("Assign AIR (Vacuum) to selected surface")
+                        .clicked()
+                    {
                         if current_material != "AIR" {
                             prescription.surfaces[target_idx].material_name = "AIR".to_string();
                             modified = true;
@@ -492,21 +549,47 @@ pub fn render_materials_panel(
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing = Vec2::new(8.0, 0.0);
                         ui.label(RichText::new("Active:").strong().size(11.5).color(tokens.text_muted));
-                        ui.label(RichText::new("AIR").monospace().strong().size(13.0).color(tokens.accent));
-                        ui.label(RichText::new("(Vacuum / Free Space)").size(11.0).color(tokens.text_muted));
+                        ui.label(
+                            RichText::new("AIR")
+                                .monospace()
+                                .strong()
+                                .size(13.0)
+                                .color(tokens.accent),
+                        );
+                        ui.label(
+                            RichText::new("(Vacuum / Free Space)")
+                                .size(11.0)
+                                .color(tokens.text_muted),
+                        );
                     });
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing = Vec2::new(4.0, 0.0);
                         ui.label(RichText::new("Refractive Index:").size(11.0).color(tokens.text_muted));
-                        ui.label(RichText::new("nd = 1.00000").monospace().strong().size(11.5).color(tokens.text_primary));
+                        ui.label(
+                            RichText::new("nd = 1.00000")
+                                .monospace()
+                                .strong()
+                                .size(11.5)
+                                .color(tokens.text_primary),
+                        );
                     });
                 } else if let Some(g) = catalog.lookup(&current_material) {
                     // Line 1: Glass Name & Catalog
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing = Vec2::new(8.0, 0.0);
                         ui.label(RichText::new("Active:").strong().size(11.5).color(tokens.text_muted));
-                        ui.label(RichText::new(&g.name).monospace().strong().size(13.5).color(tokens.accent));
-                        ui.label(RichText::new(format!("[{}]", g.catalog.name())).size(11.0).color(tokens.text_muted));
+                        ui.label(
+                            RichText::new(&g.name)
+                                .monospace()
+                                .strong()
+                                .size(13.5)
+                                .color(tokens.accent),
+                        );
+                        ui.label(
+                            RichText::new(format!("[{}]", g.catalog.name()))
+                                .size(11.0)
+                                .color(tokens.text_muted),
+                        );
                     });
 
                     // Line 2: Optical Constants (Index nd & Abbe number Vd spaced apart)
@@ -516,13 +599,25 @@ pub fn render_materials_panel(
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing = Vec2::new(4.0, 0.0);
                             ui.label(RichText::new("nd:").strong().size(11.5).color(tokens.text_muted));
-                            ui.label(RichText::new(format!("{:.5}", g.nd)).monospace().strong().size(12.0).color(tokens.text_primary));
+                            ui.label(
+                                RichText::new(format!("{:.5}", g.nd))
+                                    .monospace()
+                                    .strong()
+                                    .size(12.0)
+                                    .color(tokens.text_primary),
+                            );
                         });
 
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing = Vec2::new(4.0, 0.0);
                             ui.label(RichText::new("Vd:").strong().size(11.5).color(tokens.text_muted));
-                            ui.label(RichText::new(format!("{:.2}", g.vd)).monospace().strong().size(12.0).color(tokens.text_primary));
+                            ui.label(
+                                RichText::new(format!("{:.2}", g.vd))
+                                    .monospace()
+                                    .strong()
+                                    .size(12.0)
+                                    .color(tokens.text_primary),
+                            );
                         });
                     });
 
@@ -533,7 +628,11 @@ pub fn render_materials_panel(
                         optics_glass::DispersionModel::ExtendedCauchy { .. } => "Extended Cauchy",
                         _ => "Standard",
                     };
-                    let thermal_desc = if g.thermal.is_some() { "Available (dn/dT)" } else { "20°C Reference" };
+                    let thermal_desc = if g.thermal.is_some() {
+                        "Available (dn/dT)"
+                    } else {
+                        "20°C Reference"
+                    };
 
                     // Line 3: Mathematical Model & Thermal Status
                     ui.horizontal(|ui| {
@@ -562,28 +661,46 @@ pub fn render_materials_panel(
                         ui.spacing_mut().item_spacing = Vec2::new(12.0, 2.0);
                         ui.label(RichText::new("τ(10mm):").strong().size(10.5).color(tokens.text_muted));
                         ui.label(
-                            RichText::new(format!("400nm: {:.1}%, 550nm: {:.1}%", t10_400 * 100.0, t10_550 * 100.0))
-                                .monospace()
-                                .size(10.5)
-                                .color(tokens.text_primary),
+                            RichText::new(format!(
+                                "400nm: {:.1}%, 550nm: {:.1}%",
+                                t10_400 * 100.0,
+                                t10_550 * 100.0
+                            ))
+                            .monospace()
+                            .size(10.5)
+                            .color(tokens.text_primary),
                         );
 
                         ui.label(RichText::new("τ(25mm):").strong().size(10.5).color(tokens.text_muted));
                         ui.label(
-                            RichText::new(format!("400nm: {:.1}%, 550nm: {:.1}%", t25_400 * 100.0, t25_550 * 100.0))
-                                .monospace()
-                                .size(10.5)
-                                .color(tokens.text_primary),
+                            RichText::new(format!(
+                                "400nm: {:.1}%, 550nm: {:.1}%",
+                                t25_400 * 100.0,
+                                t25_550 * 100.0
+                            ))
+                            .monospace()
+                            .size(10.5)
+                            .color(tokens.text_primary),
                         );
                     });
                 } else {
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing = Vec2::new(8.0, 0.0);
                         ui.label(RichText::new("Active:").strong().size(11.5).color(tokens.text_muted));
-                        ui.label(RichText::new(&current_material).monospace().strong().size(13.0).color(tokens.warning));
+                        ui.label(
+                            RichText::new(&current_material)
+                                .monospace()
+                                .strong()
+                                .size(13.0)
+                                .color(tokens.warning),
+                        );
                         ui.label(RichText::new("(Custom Material)").size(11.0).color(tokens.text_muted));
                     });
-                    ui.label(RichText::new("Non-catalog material — custom dispersion model.").size(10.5).color(tokens.text_muted));
+                    ui.label(
+                        RichText::new("Non-catalog material — custom dispersion model.")
+                            .size(10.5)
+                            .color(tokens.text_muted),
+                    );
                 }
             });
         });

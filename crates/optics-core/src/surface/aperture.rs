@@ -123,17 +123,14 @@ impl Aperture {
                 semi_axis_x_mm,
                 semi_axis_y_mm,
             } => semi_axis_x_mm.max(*semi_axis_y_mm),
-            ApertureShape::Annular {
-                outer_radius_mm, ..
-            } => *outer_radius_mm,
+            ApertureShape::Annular { outer_radius_mm, .. } => *outer_radius_mm,
             ApertureShape::Polygonal { vertices } => vertices
                 .iter()
                 .map(|(x, y)| (x * x + y * y).sqrt())
                 .fold(0.0_f64, f64::max),
         };
-        let decenter_offset = (self.decenter_x_mm * self.decenter_x_mm
-            + self.decenter_y_mm * self.decenter_y_mm)
-            .sqrt();
+        let decenter_offset =
+            (self.decenter_x_mm * self.decenter_x_mm + self.decenter_y_mm * self.decenter_y_mm).sqrt();
         shape_extent + decenter_offset
     }
 
@@ -143,18 +140,14 @@ impl Aperture {
     /// Returns [`OpticsError::InvalidParameter`] if coordinates are non-finite.
     pub fn transmits(&self, x: f64, y: f64) -> Result<bool, OpticsError> {
         if !x.is_finite() || !y.is_finite() {
-            return Err(OpticsError::InvalidParameter(
-                "Coordinates must be finite".to_string(),
-            ));
+            return Err(OpticsError::InvalidParameter("Coordinates must be finite".to_string()));
         }
 
         let local_x = x - self.decenter_x_mm;
         let local_y = y - self.decenter_y_mm;
 
         let inside_shape = match &self.shape {
-            ApertureShape::Circular { radius_mm } => {
-                local_x * local_x + local_y * local_y <= radius_mm * radius_mm
-            }
+            ApertureShape::Circular { radius_mm } => local_x * local_x + local_y * local_y <= radius_mm * radius_mm,
             ApertureShape::Rectangular {
                 half_width_mm,
                 half_height_mm,

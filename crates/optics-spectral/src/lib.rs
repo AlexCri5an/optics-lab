@@ -15,30 +15,24 @@ pub mod sellmeier;
 pub mod sources;
 pub mod thermal;
 
-pub use abbe::{
-    LAMBDA_C_NM, LAMBDA_C_UM, LAMBDA_D_NM, LAMBDA_D_UM, LAMBDA_F_NM, LAMBDA_F_UM, abbe_vd,
-};
+pub use abbe::{LAMBDA_C_NM, LAMBDA_C_UM, LAMBDA_D_NM, LAMBDA_D_UM, LAMBDA_F_NM, LAMBDA_F_UM, abbe_vd};
 pub use color::{
-    CIE_1931_CMF_5NM, CIE_D65_SPD_5NM, SPECTRUM_MAX_NM, SPECTRUM_MIN_NM, SPECTRUM_STEP_NM,
-    cie_1931_cmf, d65_normalization_factor, d65_spd, display_color_for_wavelength, linear_to_srgb,
-    spectrum_to_srgb, srgb_to_linear, wavelength_to_xyz, xyz_to_linear_srgb, xyz_to_srgb,
+    CIE_1931_CMF_5NM, CIE_D65_SPD_5NM, SPECTRUM_MAX_NM, SPECTRUM_MIN_NM, SPECTRUM_STEP_NM, cie_1931_cmf,
+    d65_normalization_factor, d65_spd, display_color_for_wavelength, linear_to_srgb, spectrum_to_srgb, srgb_to_linear,
+    wavelength_to_xyz, xyz_to_linear_srgb, xyz_to_srgb,
 };
 pub use dispersion::{
-    conrady_dispersion, extended_1, extended_2, extended_cauchy, handbook_of_optics_1,
-    handbook_of_optics_2, herzberger_dispersion, schott_dispersion, sellmeier_1, sellmeier_2,
-    sellmeier_3, sellmeier_4, sellmeier_5,
+    conrady_dispersion, extended_1, extended_2, extended_cauchy, handbook_of_optics_1, handbook_of_optics_2,
+    herzberger_dispersion, schott_dispersion, sellmeier_1, sellmeier_2, sellmeier_3, sellmeier_4, sellmeier_5,
 };
-pub use hero::{
-    DynamicHeroSpectrum, HeroBundle4, HeroSpectrum, hero_sample_wavelengths, sample_hero_bundle,
-};
+pub use hero::{DynamicHeroSpectrum, HeroBundle4, HeroSpectrum, hero_sample_wavelengths, sample_hero_bundle};
 pub use sellmeier::{cauchy_dispersion, sellmeier_formula_1, sellmeier_formula_2};
 pub use sources::{
-    CADMIUM_LINES, HELIUM_LINES, HYDROGEN_LINES, MERCURY_LINES, NEON_LINES, SODIUM_LINES,
-    SpectralLamp, SpectralLine, StandardColorTemp, planck_normalized_spd, planck_spectral_radiance,
+    CADMIUM_LINES, HELIUM_LINES, HYDROGEN_LINES, MERCURY_LINES, NEON_LINES, SODIUM_LINES, SpectralLamp, SpectralLine,
+    StandardColorTemp, planck_normalized_spd, planck_spectral_radiance,
 };
 pub use thermal::{
-    SchottThermalModel, edlen_air_refractive_index, internal_transmittance_to_absorption_coeff,
-    ray_path_transmittance,
+    SchottThermalModel, edlen_air_refractive_index, internal_transmittance_to_absorption_coeff, ray_path_transmittance,
 };
 
 #[cfg(test)]
@@ -78,10 +72,7 @@ mod tests {
         );
 
         // 4. Dispersion ordering: n_F > n_d > n_C
-        assert!(
-            n_f > n_d && n_d > n_c,
-            "Normal dispersion ordering violated"
-        );
+        assert!(n_f > n_d && n_d > n_c, "Normal dispersion ordering violated");
 
         // 5. Abbe number Vd = (n_d - 1) / (n_f - n_c)
         let vd = abbe_vd(n_d, n_f, n_c)?;

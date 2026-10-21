@@ -92,13 +92,7 @@ pub fn compute_fft_psf(
     let pixel_size_um = (lambda_um * f_number) / q_oversampling;
 
     // Compute OPD wavefront map
-    let wf = compute_wavefront_map(
-        prescription,
-        pupil_grid,
-        field_angle_deg,
-        wavelength_nm,
-        false,
-    )?;
+    let wf = compute_wavefront_map(prescription, pupil_grid, field_angle_deg, wavelength_nm, false)?;
 
     // Allocate complex pupil buffer of size fft_size x fft_size
     let mut real_pupil = vec![0.0_f64; fft_size * fft_size];

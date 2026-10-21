@@ -237,6 +237,7 @@ impl Detector2D {
     }
 
     /// Record an incident ray hit with full ray path provenance and classification.
+    #[allow(clippy::too_many_arguments)]
     pub fn record_hit_classified(
         &mut self,
         local_x: f64,

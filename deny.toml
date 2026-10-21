@@ -29,6 +29,8 @@ allow = [
     "OpenSSL",
     "CC0-1.0",
     "Zlib",
+    "0BSD",
+    "BSL-1.0",
 ]
 
 [bans]

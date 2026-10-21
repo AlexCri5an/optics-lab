@@ -29,11 +29,7 @@ impl DiffractivePhaseSurface {
     ///
     /// # Errors
     /// Returns [`OpticsError::InvalidParameter`] if any parameter is non-finite or design wavelength non-positive.
-    pub fn new(
-        diffraction_order: i32,
-        coefficients: Vec<f64>,
-        design_wavelength_nm: f64,
-    ) -> Result<Self, OpticsError> {
+    pub fn new(diffraction_order: i32, coefficients: Vec<f64>, design_wavelength_nm: f64) -> Result<Self, OpticsError> {
         if !design_wavelength_nm.is_finite()
             || design_wavelength_nm <= 0.0
             || !coefficients.iter().all(|c| c.is_finite())
@@ -102,11 +98,7 @@ impl DiffractivePhaseSurface {
         let dphi_dr = self.dphase_dr(r);
 
         let grad_phi = if r > 1e-14 {
-            Vec3::new(
-                dphi_dr * (hit_point.x / r),
-                dphi_dr * (hit_point.y / r),
-                0.0,
-            )
+            Vec3::new(dphi_dr * (hit_point.x / r), dphi_dr * (hit_point.y / r), 0.0)
         } else {
             Vec3::zeros()
         };

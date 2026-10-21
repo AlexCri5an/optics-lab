@@ -10,8 +10,8 @@
 use optics_core::{OpticsError, Ray, Triangle, Vec3};
 use optics_glass::catalog::GlassCatalogDb;
 use optics_nonseq::{
-    Detector2D, NonSeqMaterial, NonSeqObject, NonSeqRay, NonSeqScene, NonSeqTraceConfig,
-    NonSeqTracer, OpticalMedium, PrimitiveGeometry, Transform3D,
+    Detector2D, NonSeqMaterial, NonSeqObject, NonSeqRay, NonSeqScene, NonSeqTraceConfig, NonSeqTracer, OpticalMedium,
+    PrimitiveGeometry, Transform3D,
 };
 
 fn create_triangular_prism_mesh() -> Result<Vec<Triangle>, OpticsError> {
@@ -55,9 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let prism_object = NonSeqObject {
         id: 1,
         name: "SF11_Dispersive_Prism".to_string(),
-        geometry: PrimitiveGeometry::Mesh {
-            triangles: prism_mesh,
-        },
+        geometry: PrimitiveGeometry::Mesh { triangles: prism_mesh },
         transform: Transform3D::from_translation(0.0, 0.0, 10.0),
         material: NonSeqMaterial::dielectric(OpticalMedium::GlassCatalog {
             name: "SF11".to_string(),
@@ -112,31 +110,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         record_paths: true,
     });
 
-    println!(
-        "\nTracing {} rays with vector Snell refraction...",
-        all_rays.len()
-    );
+    println!("\nTracing {} rays with vector Snell refraction...", all_rays.len());
     let report = tracer.trace_rays(&mut scene, &all_rays, Some(&catalog))?;
 
     println!("Non-sequential trace completed:");
     println!("  Rays Traced:        {}", report.total_rays_traced);
     println!("  Interactions:       {}", report.total_interactions);
-    println!(
-        "  Launched Flux:      {:.4} Watts",
-        report.launched_flux_watts
-    );
-    println!(
-        "  Detected Flux:      {:.4} Watts",
-        report.detected_flux_watts
-    );
-    println!(
-        "  Escaped Flux:       {:.4} Watts",
-        report.escaped_flux_watts
-    );
-    println!(
-        "  Conservation Ratio: {:.6}\n",
-        report.energy_conservation_ratio()
-    );
+    println!("  Launched Flux:      {:.4} Watts", report.launched_flux_watts);
+    println!("  Detected Flux:      {:.4} Watts", report.detected_flux_watts);
+    println!("  Escaped Flux:       {:.4} Watts", report.escaped_flux_watts);
+    println!("  Conservation Ratio: {:.6}\n", report.energy_conservation_ratio());
 
     let det = &scene.detectors[0];
     println!("Detector Results ({})", det.name);

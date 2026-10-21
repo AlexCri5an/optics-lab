@@ -147,8 +147,7 @@ impl OpticsProject {
     /// # Errors
     /// Returns [`OpticsError::SerializationError`] if serialization fails.
     pub fn to_json_string(&self) -> Result<String, OpticsError> {
-        serde_json::to_string_pretty(self)
-            .map_err(|e| OpticsError::SerializationError(e.to_string()))
+        serde_json::to_string_pretty(self).map_err(|e| OpticsError::SerializationError(e.to_string()))
     }
 
     /// Deserializes a project from a JSON string, validating the schema version.
@@ -156,8 +155,7 @@ impl OpticsProject {
     /// # Errors
     /// Returns [`OpticsError::SerializationError`] if parsing fails or version is unsupported.
     pub fn from_json_str(json: &str) -> Result<Self, OpticsError> {
-        let project: Self = serde_json::from_str(json)
-            .map_err(|e| OpticsError::SerializationError(e.to_string()))?;
+        let project: Self = serde_json::from_str(json).map_err(|e| OpticsError::SerializationError(e.to_string()))?;
         if project.version > PROJECT_SCHEMA_VERSION {
             return Err(OpticsError::SerializationError(format!(
                 "Unsupported project version {} (max supported: {})",
@@ -187,8 +185,8 @@ impl OpticsProject {
     /// Returns [`OpticsError::IoError`] if opening or reading the file fails, or
     /// [`OpticsError::SerializationError`] if JSON parsing fails.
     pub fn load_from_json<P: AsRef<Path>>(path: P) -> Result<Self, OpticsError> {
-        let mut file = File::open(path.as_ref())
-            .map_err(|e| OpticsError::IoError(format!("Failed to open project file: {e}")))?;
+        let mut file =
+            File::open(path.as_ref()).map_err(|e| OpticsError::IoError(format!("Failed to open project file: {e}")))?;
         let mut contents = String::new();
         file.read_to_string(&mut contents)
             .map_err(|e| OpticsError::IoError(format!("Failed to read project file: {e}")))?;

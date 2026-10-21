@@ -8,8 +8,7 @@
 //! to eliminate chromatic noise in GPU path tracing.
 
 use crate::color::{
-    SPECTRUM_MAX_NM, SPECTRUM_MIN_NM, cie_1931_cmf, d65_normalization_factor, d65_spd,
-    xyz_to_linear_srgb, xyz_to_srgb,
+    SPECTRUM_MAX_NM, SPECTRUM_MIN_NM, cie_1931_cmf, d65_normalization_factor, d65_spd, xyz_to_linear_srgb, xyz_to_srgb,
 };
 
 /// A bundle of $N$ stratified hero wavelengths and their Monte Carlo integration weights.
@@ -96,19 +95,9 @@ impl<const N: usize> HeroSpectrum<N> {
 /// # Panics
 /// Panics in debug mode if $N == 0$ or if $\lambda_{\max} \le \lambda_{\min}$.
 #[must_use]
-pub fn sample_hero_bundle<const N: usize>(
-    hero_nm: f64,
-    lambda_min: f64,
-    lambda_max: f64,
-) -> HeroSpectrum<N> {
-    assert!(
-        N > 0,
-        "HeroSpectrum bundle must contain at least 1 wavelength"
-    );
-    assert!(
-        lambda_max > lambda_min,
-        "Spectral range maximum must exceed minimum"
-    );
+pub fn sample_hero_bundle<const N: usize>(hero_nm: f64, lambda_min: f64, lambda_max: f64) -> HeroSpectrum<N> {
+    assert!(N > 0, "HeroSpectrum bundle must contain at least 1 wavelength");
+    assert!(lambda_max > lambda_min, "Spectral range maximum must exceed minimum");
 
     let delta_lambda = lambda_max - lambda_min;
     let step = delta_lambda / N as f64;

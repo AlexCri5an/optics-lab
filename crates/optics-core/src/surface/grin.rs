@@ -231,12 +231,7 @@ mod tests {
         // Radial GRIN focuses off-axis parallel rays toward the axis
         let profile = GrinProfile::Radial { n0: 1.6, a: 0.01 };
 
-        let ray = Ray::new(
-            Vec3::new(2.0, 0.0, 0.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )?;
+        let ray = Ray::new(Vec3::new(2.0, 0.0, 0.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0)?;
 
         let exit_ray = trace_grin_rk4(&ray, &profile, 10.0, 0.1, 500)?;
         assert!(exit_ray.origin.z >= 10.0);
@@ -254,12 +249,7 @@ mod tests {
             n2: 0.0,
         };
 
-        let ray = Ray::new(
-            Vec3::new(0.0, 0.0, 0.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )?;
+        let ray = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0)?;
 
         let exit_ray = trace_grin_rk4(&ray, &profile, 5.0, 0.2, 200)?;
         assert!((exit_ray.origin.x).abs() < 1e-10);
@@ -275,12 +265,7 @@ mod tests {
         let z_f = std::f64::consts::PI / (2.0 * 0.1);
 
         for &h in &[1.0, 2.0, 3.0] {
-            let ray = Ray::new(
-                Vec3::new(h, 0.0, 0.0),
-                Vec3::new(0.0, 0.0, 1.0),
-                587.56,
-                1.0,
-            )?;
+            let ray = Ray::new(Vec3::new(h, 0.0, 0.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0)?;
             let (exit_ray, pts) = trace_grin_rk4_path(&ray, &profile, z_f, 0.05, 1000)?;
             assert!(pts.len() > 10, "Curved path must record intermediate points");
             // At quarter pitch, rays focus to near axis (accounting for third-order spherical aberration)
@@ -301,12 +286,7 @@ mod tests {
             radius_mm: 10.0,
         };
 
-        let ray = Ray::new(
-            Vec3::new(3.0, 0.0, 0.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )?;
+        let ray = Ray::new(Vec3::new(3.0, 0.0, 0.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0)?;
 
         let exit_ray = trace_grin_rk4(&ray, &profile, 8.0, 0.05, 500)?;
         // Luneburg lens must strongly bend the parallel ray toward the axis

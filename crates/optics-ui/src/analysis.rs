@@ -1,6 +1,6 @@
 //! Academic optical analysis & diagnostics panel.
 //!
-//! Conforms to classic engineering desktop CAD standards (Zemax OpticStudio / CODE V):
+//! Conforms to classic engineering desktop CAD standards:
 //! - **Centered Layout:** Entire instrument panel (plots, tables, tabs) stays centered horizontally on resize.
 //! - **Structured 1px Engineering Tables:** High-legibility typography, clear borders, and zero rounded fluff.
 //! - **Spot Diagram 2D:** Centered coordinate canvas, Airy diffraction disk, auto-fit framing, and RMS/GEO blur metrics.
@@ -11,15 +11,13 @@
 use std::sync::Arc;
 
 use egui::{
-    Button, Color32, CornerRadius, Frame, Grid, Image, Painter, Pos2, Rect, RichText, ScrollArea,
-    Stroke, Ui, Vec2,
+    Button, Color32, CornerRadius, Frame, Grid, Image, Painter, Pos2, Rect, RichText, ScrollArea, Stroke, Ui, Vec2,
 };
-use optics_core::analysis::{
-    compute_diffraction_mtf, compute_seidel_coefficients, trace_spot_diagram, MtfCurve,
-    PupilPattern, SpotDiagram,
-};
-use optics_core::prescription::{calculate_paraxial_properties, ParaxialProperties, ResolvedPrescription};
 use optics_core::OpticalPrescription;
+use optics_core::analysis::{
+    MtfCurve, PupilPattern, SpotDiagram, compute_diffraction_mtf, compute_seidel_coefficients, trace_spot_diagram,
+};
+use optics_core::prescription::{ParaxialProperties, ResolvedPrescription, calculate_paraxial_properties};
 use optics_glass::GlassCatalogDb;
 
 use crate::icons::LucideIcon;
@@ -115,7 +113,10 @@ pub fn render_analysis_panel(
         }
         f
     };
-    if !initial_fields.iter().any(|&f| (f - state.selected_field_deg).abs() < 1e-3) {
+    if !initial_fields
+        .iter()
+        .any(|&f| (f - state.selected_field_deg).abs() < 1e-3)
+    {
         state.selected_field_deg = *initial_fields.first().unwrap_or(&0.0);
     }
 
@@ -132,18 +133,14 @@ pub fn render_analysis_panel(
         .iter()
         .filter_map(|s| {
             let g = s.material_name.trim();
-            if g.is_empty() || g.eq_ignore_ascii_case("AIR") {
-                None
-            } else if catalog.lookup(g).is_some()
+            let known = g.is_empty()
+                || g.eq_ignore_ascii_case("AIR")
+                || catalog.lookup(g).is_some()
                 || g.eq_ignore_ascii_case("WATER")
                 || g.eq_ignore_ascii_case("H2O")
                 || g.eq_ignore_ascii_case("MIRROR")
-                || (g.starts_with("N_") && g.contains("_V"))
-            {
-                None
-            } else {
-                Some(g)
-            }
+                || (g.starts_with("N_") && g.contains("_V"));
+            if known { None } else { Some(g) }
         })
         .collect();
 
@@ -186,13 +183,8 @@ pub fn render_analysis_panel(
 
     // Active Tab Content
     if state.active_tab == AnalysisTab::Tolerancing {
-        tolerancing_action = crate::tolerancing::render_tolerancing_panel_view(
-            ui,
-            tolerancing_state,
-            prescription,
-            catalog,
-            tokens,
-        );
+        tolerancing_action =
+            crate::tolerancing::render_tolerancing_panel_view(ui, tolerancing_state, prescription, catalog, tokens);
     } else {
         ScrollArea::vertical()
             .id_salt("analysis_panel_content_scroll")
@@ -283,15 +275,33 @@ fn render_cardinal_header(
             ui.columns(3, |cols| {
                 cols[0].vertical_centered(|ui| {
                     ui.label(RichText::new("EFL").size(10.0).monospace().color(tokens.text_muted));
-                    ui.label(RichText::new(&efl_str).size(12.5).strong().monospace().color(tokens.accent));
+                    ui.label(
+                        RichText::new(&efl_str)
+                            .size(12.5)
+                            .strong()
+                            .monospace()
+                            .color(tokens.accent),
+                    );
                 });
                 cols[1].vertical_centered(|ui| {
                     ui.label(RichText::new("F/#").size(10.0).monospace().color(tokens.text_muted));
-                    ui.label(RichText::new(&fnum_str).size(12.5).strong().monospace().color(tokens.text_primary));
+                    ui.label(
+                        RichText::new(&fnum_str)
+                            .size(12.5)
+                            .strong()
+                            .monospace()
+                            .color(tokens.text_primary),
+                    );
                 });
                 cols[2].vertical_centered(|ui| {
                     ui.label(RichText::new("EPD").size(10.0).monospace().color(tokens.text_muted));
-                    ui.label(RichText::new(&epd_str).size(12.5).strong().monospace().color(tokens.text_primary));
+                    ui.label(
+                        RichText::new(&epd_str)
+                            .size(12.5)
+                            .strong()
+                            .monospace()
+                            .color(tokens.text_primary),
+                    );
                 });
             });
         });
@@ -332,11 +342,7 @@ fn render_analysis_tabs(ui: &mut Ui, state: &mut AnalysisPanelState, tokens: &Op
                 } else {
                     tokens.bg_control
                 };
-                let text_color = if is_selected {
-                    tokens.accent
-                } else {
-                    tokens.text_muted
-                };
+                let text_color = if is_selected { tokens.accent } else { tokens.text_muted };
                 let border_stroke = if is_selected {
                     Stroke::new(1.0, tokens.accent)
                 } else {
@@ -347,14 +353,11 @@ fn render_analysis_tabs(ui: &mut Ui, state: &mut AnalysisPanelState, tokens: &Op
                     .tint(text_color)
                     .fit_to_exact_size(Vec2::splat(12.0));
 
-                let btn = Button::image_and_text(
-                    img,
-                    RichText::new(*label).size(11.0).strong().color(text_color),
-                )
-                .min_size(Vec2::new(btn_w, btn_h))
-                .fill(bg_color)
-                .stroke(border_stroke)
-                .corner_radius(CornerRadius::ZERO);
+                let btn = Button::image_and_text(img, RichText::new(*label).size(11.0).strong().color(text_color))
+                    .min_size(Vec2::new(btn_w, btn_h))
+                    .fill(bg_color)
+                    .stroke(border_stroke)
+                    .corner_radius(CornerRadius::ZERO);
 
                 if ui.add(btn).clicked() {
                     state.active_tab = *tab;
@@ -382,7 +385,13 @@ fn render_spot_diagram_view(
     // 1. Trace Spot Diagram
     // 1. Field Selection Bar (Wrapping)
     ui.horizontal_wrapped(|ui| {
-        ui.label(RichText::new("FIELD:").size(11.0).strong().monospace().color(tokens.text_muted));
+        ui.label(
+            RichText::new("FIELD:")
+                .size(11.0)
+                .strong()
+                .monospace()
+                .color(tokens.text_muted),
+        );
         let available_fields = if prescription.field_angles_deg.is_empty() {
             vec![0.0, 10.0, 14.0]
         } else {
@@ -393,7 +402,10 @@ fn render_spot_diagram_view(
             f
         };
 
-        if !available_fields.iter().any(|&f| (f - state.selected_field_deg).abs() < 1e-3) {
+        if !available_fields
+            .iter()
+            .any(|&f| (f - state.selected_field_deg).abs() < 1e-3)
+        {
             state.selected_field_deg = *available_fields.first().unwrap_or(&0.0);
         }
 
@@ -437,12 +449,16 @@ fn render_spot_diagram_view(
                 .inner_margin(egui::Margin::symmetric(10, 8))
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
-                    ui.label(RichText::new("SPOT DIAGNOSTIC").size(11.0).strong().monospace().color(tokens.warning));
+                    ui.label(
+                        RichText::new("SPOT DIAGNOSTIC")
+                            .size(11.0)
+                            .strong()
+                            .monospace()
+                            .color(tokens.warning),
+                    );
                     ui.add_space(4.0);
                     ui.add(
-                        egui::Label::new(
-                            RichText::new(format!("{}", err)).size(10.5).color(tokens.text_muted)
-                        ).wrap()
+                        egui::Label::new(RichText::new(format!("{}", err)).size(10.5).color(tokens.text_muted)).wrap(),
                     );
                 });
             return;
@@ -451,7 +467,11 @@ fn render_spot_diagram_view(
 
     // Zoom & scaling controls
     ui.horizontal(|ui| {
-        if ui.button(RichText::new("Fit Spot").size(11.0).monospace()).on_hover_text("Auto-scale canvas to fit spot blur and Airy disk").clicked() {
+        if ui
+            .button(RichText::new("Fit Spot").size(11.0).monospace())
+            .on_hover_text("Auto-scale canvas to fit spot blur and Airy disk")
+            .clicked()
+        {
             let target_r = (spot.metrics.geo_radius_um as f32)
                 .max(spot.metrics.airy_radius_um as f32)
                 .max(4.0);
@@ -508,7 +528,13 @@ fn render_spot_diagram_view(
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
                 ui.label(RichText::new("REGIME:").size(10.5).monospace().color(tokens.text_muted));
-                ui.label(RichText::new(status_text).size(11.0).strong().monospace().color(status_color));
+                ui.label(
+                    RichText::new(status_text)
+                        .size(11.0)
+                        .strong()
+                        .monospace()
+                        .color(status_color),
+                );
             });
         });
 
@@ -551,11 +577,32 @@ fn render_spot_diagram_view(
     };
 
     let rows = [
-        ("RMS Radius:", rms_str, if is_vignetted { tokens.text_muted } else { tokens.accent }),
+        (
+            "RMS Radius:",
+            rms_str,
+            if is_vignetted { tokens.text_muted } else { tokens.accent },
+        ),
         ("GEO Radius:", geo_str, tokens.text_primary),
         ("Airy Radius:", format!("{:.2} µm", m.airy_radius_um), tokens.warning),
-        ("Pupil Rays:", format!("{}/{} ({:.0}%)", m.passed_rays_count, m.total_rays_traced, m.vignetting_factor * 100.0), if is_vignetted { tokens.warning } else { tokens.text_muted }),
-        ("Centroid:", format!("({:.3}, {:.3}) mm", m.centroid_x_mm, m.centroid_y_mm), tokens.text_muted),
+        (
+            "Pupil Rays:",
+            format!(
+                "{}/{} ({:.0}%)",
+                m.passed_rays_count,
+                m.total_rays_traced,
+                m.vignetting_factor * 100.0
+            ),
+            if is_vignetted {
+                tokens.warning
+            } else {
+                tokens.text_muted
+            },
+        ),
+        (
+            "Centroid:",
+            format!("({:.3}, {:.3}) mm", m.centroid_x_mm, m.centroid_y_mm),
+            tokens.text_muted,
+        ),
     ];
 
     Frame::NONE
@@ -599,14 +646,24 @@ fn draw_spot_canvas(
 
     // Crosshairs
     let axis_stroke = Stroke::new(1.0, tokens.canvas_fg_muted.gamma_multiply(0.5));
-    painter.line_segment([Pos2::new(rect.min.x, center.y), Pos2::new(rect.max.x, center.y)], axis_stroke);
-    painter.line_segment([Pos2::new(center.x, rect.min.y), Pos2::new(center.x, rect.max.y)], axis_stroke);
+    painter.line_segment(
+        [Pos2::new(rect.min.x, center.y), Pos2::new(rect.max.x, center.y)],
+        axis_stroke,
+    );
+    painter.line_segment(
+        [Pos2::new(center.x, rect.min.y), Pos2::new(center.x, rect.max.y)],
+        axis_stroke,
+    );
 
     // Calibration concentric rings (25 µm, 50 µm, 100 µm)
     for &r_um in &[25.0f32, 50.0f32, 100.0f32] {
         let r_px = r_um * zoom;
         if r_px < rect.width() * 0.48 {
-            painter.circle_stroke(center, r_px, Stroke::new(1.0, tokens.canvas_fg_muted.gamma_multiply(0.28)));
+            painter.circle_stroke(
+                center,
+                r_px,
+                Stroke::new(1.0, tokens.canvas_fg_muted.gamma_multiply(0.28)),
+            );
         }
     }
 
@@ -648,15 +705,33 @@ fn draw_spot_canvas(
     }
 
     // Scale bar in bottom-left corner
-    let bar_um = if zoom > 4.0 { 10.0f32 } else if zoom > 1.5 { 25.0f32 } else { 50.0f32 };
+    let bar_um = if zoom > 4.0 {
+        10.0f32
+    } else if zoom > 1.5 {
+        25.0f32
+    } else {
+        50.0f32
+    };
     let bar_px = bar_um * zoom;
     if bar_px > 12.0 && bar_px < rect.width() * 0.45 {
         let bar_start = Pos2::new(rect.min.x + 8.0, rect.max.y - 12.0);
         let bar_end = Pos2::new(bar_start.x + bar_px, bar_start.y);
         let bar_stroke = Stroke::new(1.5, tokens.canvas_fg);
         painter.line_segment([bar_start, bar_end], bar_stroke);
-        painter.line_segment([Pos2::new(bar_start.x, bar_start.y - 3.0), Pos2::new(bar_start.x, bar_start.y + 3.0)], bar_stroke);
-        painter.line_segment([Pos2::new(bar_end.x, bar_end.y - 3.0), Pos2::new(bar_end.x, bar_end.y + 3.0)], bar_stroke);
+        painter.line_segment(
+            [
+                Pos2::new(bar_start.x, bar_start.y - 3.0),
+                Pos2::new(bar_start.x, bar_start.y + 3.0),
+            ],
+            bar_stroke,
+        );
+        painter.line_segment(
+            [
+                Pos2::new(bar_end.x, bar_end.y - 3.0),
+                Pos2::new(bar_end.x, bar_end.y + 3.0),
+            ],
+            bar_stroke,
+        );
 
         painter.text(
             Pos2::new(bar_start.x + bar_px * 0.5, bar_start.y - 4.0),
@@ -691,12 +766,21 @@ fn render_seidel_view(
         f
     };
 
-    if !available_fields.iter().any(|&f| (f - state.selected_field_deg).abs() < 1e-3) {
+    if !available_fields
+        .iter()
+        .any(|&f| (f - state.selected_field_deg).abs() < 1e-3)
+    {
         state.selected_field_deg = *available_fields.first().unwrap_or(&0.0);
     }
 
     ui.horizontal_wrapped(|ui| {
-        ui.label(RichText::new("EVAL FIELD:").size(11.0).strong().monospace().color(tokens.text_muted));
+        ui.label(
+            RichText::new("EVAL FIELD:")
+                .size(11.0)
+                .strong()
+                .monospace()
+                .color(tokens.text_muted),
+        );
         for &f in &available_fields {
             let active = (state.selected_field_deg - f).abs() < 1e-3;
             let (bg, stroke, text_color) = if active {
@@ -704,10 +788,16 @@ fn render_seidel_view(
             } else {
                 (tokens.bg_control, tokens.border, tokens.text_muted)
             };
-            let btn = Button::new(RichText::new(format!("{:.1}°", f)).size(11.0).monospace().strong().color(text_color))
-                .fill(bg)
-                .stroke(stroke)
-                .corner_radius(CornerRadius::ZERO);
+            let btn = Button::new(
+                RichText::new(format!("{:.1}°", f))
+                    .size(11.0)
+                    .monospace()
+                    .strong()
+                    .color(text_color),
+            )
+            .fill(bg)
+            .stroke(stroke)
+            .corner_radius(CornerRadius::ZERO);
             if ui.add(btn).clicked() {
                 state.selected_field_deg = f;
             }
@@ -721,14 +811,7 @@ fn render_seidel_view(
         } else {
             "Note: On-axis (0.0°), off-axis Coma, Astigmatism, and Distortion are zero by rotational symmetry. Configure non-zero field angles in System Setup to inspect off-axis aberrations."
         };
-        ui.add(
-            egui::Label::new(
-                RichText::new(note_text)
-                    .size(10.5)
-                    .color(tokens.text_muted),
-            )
-            .wrap(),
-        );
+        ui.add(egui::Label::new(RichText::new(note_text).size(10.5).color(tokens.text_muted)).wrap());
     }
 
     ui.add_space(4.0);
@@ -745,12 +828,16 @@ fn render_seidel_view(
                 .inner_margin(egui::Margin::symmetric(10, 8))
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
-                    ui.label(RichText::new("SEIDEL DIAGNOSTIC").size(11.0).strong().monospace().color(tokens.warning));
+                    ui.label(
+                        RichText::new("SEIDEL DIAGNOSTIC")
+                            .size(11.0)
+                            .strong()
+                            .monospace()
+                            .color(tokens.warning),
+                    );
                     ui.add_space(4.0);
                     ui.add(
-                        egui::Label::new(
-                            RichText::new(format!("{}", err)).size(10.5).color(tokens.text_muted)
-                        ).wrap()
+                        egui::Label::new(RichText::new(format!("{}", err)).size(10.5).color(tokens.text_muted)).wrap(),
                     );
                 });
             return;
@@ -796,14 +883,37 @@ fn render_seidel_view(
                 .spacing([10.0, 4.0])
                 .show(ui, |ui| {
                     // Header
-                    ui.label(RichText::new("ABERRATION").size(10.0).strong().monospace().color(tokens.text_muted));
-                    ui.label(RichText::new("TERM").size(10.0).strong().monospace().color(tokens.text_muted));
-                    ui.label(RichText::new("VALUE (MM)").size(10.0).strong().monospace().color(tokens.text_muted));
+                    ui.label(
+                        RichText::new("ABERRATION")
+                            .size(10.0)
+                            .strong()
+                            .monospace()
+                            .color(tokens.text_muted),
+                    );
+                    ui.label(
+                        RichText::new("TERM")
+                            .size(10.0)
+                            .strong()
+                            .monospace()
+                            .color(tokens.text_muted),
+                    );
+                    ui.label(
+                        RichText::new("VALUE (MM)")
+                            .size(10.0)
+                            .strong()
+                            .monospace()
+                            .color(tokens.text_muted),
+                    );
                     ui.end_row();
 
                     for (name, symbol, wave_term, val) in sums {
                         ui.label(RichText::new(name).size(11.0).color(tokens.text_primary));
-                        ui.label(RichText::new(format!("{} ({})", symbol, wave_term)).size(10.0).monospace().color(tokens.text_muted));
+                        ui.label(
+                            RichText::new(format!("{} ({})", symbol, wave_term))
+                                .size(10.0)
+                                .monospace()
+                                .color(tokens.text_muted),
+                        );
                         let color = if val.abs() < 1e-4 {
                             tokens.accent
                         } else if val.abs() < 0.05 {
@@ -811,7 +921,13 @@ fn render_seidel_view(
                         } else {
                             tokens.warning
                         };
-                        ui.label(RichText::new(format!("{:+.5} mm", val)).size(11.0).strong().monospace().color(color));
+                        ui.label(
+                            RichText::new(format!("{:+.5} mm", val))
+                                .size(11.0)
+                                .strong()
+                                .monospace()
+                                .color(color),
+                        );
                         ui.end_row();
                     }
                 });
@@ -852,21 +968,92 @@ fn render_seidel_view(
                         .min_col_width(52.0)
                         .spacing([8.0, 4.0])
                         .show(ui, |ui| {
-                            ui.label(RichText::new("SURF").size(10.0).strong().monospace().color(tokens.text_muted));
-                            ui.label(RichText::new("S_I (Sph)").size(10.0).strong().monospace().color(tokens.text_muted)).on_hover_text("Spherical Aberration W040");
-                            ui.label(RichText::new("S_II (Coma)").size(10.0).strong().monospace().color(tokens.text_muted)).on_hover_text("Coma W131");
-                            ui.label(RichText::new("S_III (Ast)").size(10.0).strong().monospace().color(tokens.text_muted)).on_hover_text("Astigmatism W222");
-                            ui.label(RichText::new("S_IV (Curv)").size(10.0).strong().monospace().color(tokens.text_muted)).on_hover_text("Petzval Field Curvature W220");
-                            ui.label(RichText::new("S_V (Dist)").size(10.0).strong().monospace().color(tokens.text_muted)).on_hover_text("Distortion W311");
+                            ui.label(
+                                RichText::new("SURF")
+                                    .size(10.0)
+                                    .strong()
+                                    .monospace()
+                                    .color(tokens.text_muted),
+                            );
+                            ui.label(
+                                RichText::new("S_I (Sph)")
+                                    .size(10.0)
+                                    .strong()
+                                    .monospace()
+                                    .color(tokens.text_muted),
+                            )
+                            .on_hover_text("Spherical Aberration W040");
+                            ui.label(
+                                RichText::new("S_II (Coma)")
+                                    .size(10.0)
+                                    .strong()
+                                    .monospace()
+                                    .color(tokens.text_muted),
+                            )
+                            .on_hover_text("Coma W131");
+                            ui.label(
+                                RichText::new("S_III (Ast)")
+                                    .size(10.0)
+                                    .strong()
+                                    .monospace()
+                                    .color(tokens.text_muted),
+                            )
+                            .on_hover_text("Astigmatism W222");
+                            ui.label(
+                                RichText::new("S_IV (Curv)")
+                                    .size(10.0)
+                                    .strong()
+                                    .monospace()
+                                    .color(tokens.text_muted),
+                            )
+                            .on_hover_text("Petzval Field Curvature W220");
+                            ui.label(
+                                RichText::new("S_V (Dist)")
+                                    .size(10.0)
+                                    .strong()
+                                    .monospace()
+                                    .color(tokens.text_muted),
+                            )
+                            .on_hover_text("Distortion W311");
                             ui.end_row();
 
                             for s in &seidel.surfaces {
-                                ui.label(RichText::new(format!("S{}", s.surface_index)).size(10.5).monospace().color(tokens.accent));
-                                ui.label(RichText::new(format!("{:+.4}", s.s1_spherical)).size(10.5).monospace().color(tokens.text_primary));
-                                ui.label(RichText::new(format!("{:+.4}", s.s2_coma)).size(10.5).monospace().color(tokens.text_muted));
-                                ui.label(RichText::new(format!("{:+.4}", s.s3_astigmatism)).size(10.5).monospace().color(tokens.text_muted));
-                                ui.label(RichText::new(format!("{:+.4}", s.s4_field_curvature)).size(10.5).monospace().color(tokens.text_muted));
-                                ui.label(RichText::new(format!("{:+.4}", s.s5_distortion)).size(10.5).monospace().color(tokens.text_muted));
+                                ui.label(
+                                    RichText::new(format!("S{}", s.surface_index))
+                                        .size(10.5)
+                                        .monospace()
+                                        .color(tokens.accent),
+                                );
+                                ui.label(
+                                    RichText::new(format!("{:+.4}", s.s1_spherical))
+                                        .size(10.5)
+                                        .monospace()
+                                        .color(tokens.text_primary),
+                                );
+                                ui.label(
+                                    RichText::new(format!("{:+.4}", s.s2_coma))
+                                        .size(10.5)
+                                        .monospace()
+                                        .color(tokens.text_muted),
+                                );
+                                ui.label(
+                                    RichText::new(format!("{:+.4}", s.s3_astigmatism))
+                                        .size(10.5)
+                                        .monospace()
+                                        .color(tokens.text_muted),
+                                );
+                                ui.label(
+                                    RichText::new(format!("{:+.4}", s.s4_field_curvature))
+                                        .size(10.5)
+                                        .monospace()
+                                        .color(tokens.text_muted),
+                                );
+                                ui.label(
+                                    RichText::new(format!("{:+.4}", s.s5_distortion))
+                                        .size(10.5)
+                                        .monospace()
+                                        .color(tokens.text_muted),
+                                );
                                 ui.end_row();
                             }
                         });
@@ -891,7 +1078,13 @@ fn render_mtf_view(
 
     // 1. Field Selection Bar for MTF (Wrapping)
     ui.horizontal_wrapped(|ui| {
-        ui.label(RichText::new("FIELD:").size(11.0).strong().monospace().color(tokens.text_muted));
+        ui.label(
+            RichText::new("FIELD:")
+                .size(11.0)
+                .strong()
+                .monospace()
+                .color(tokens.text_muted),
+        );
         let available_fields = if prescription.field_angles_deg.is_empty() {
             vec![0.0, 10.0, 14.0]
         } else {
@@ -902,7 +1095,10 @@ fn render_mtf_view(
             f
         };
 
-        if !available_fields.iter().any(|&f| (f - state.selected_field_deg).abs() < 1e-3) {
+        if !available_fields
+            .iter()
+            .any(|&f| (f - state.selected_field_deg).abs() < 1e-3)
+        {
             state.selected_field_deg = *available_fields.first().unwrap_or(&0.0);
         }
         for &field in &available_fields {
@@ -936,12 +1132,16 @@ fn render_mtf_view(
                 .inner_margin(egui::Margin::symmetric(10, 8))
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
-                    ui.label(RichText::new("MTF DIAGNOSTIC").size(11.0).strong().monospace().color(tokens.warning));
+                    ui.label(
+                        RichText::new("MTF DIAGNOSTIC")
+                            .size(11.0)
+                            .strong()
+                            .monospace()
+                            .color(tokens.warning),
+                    );
                     ui.add_space(4.0);
                     ui.add(
-                        egui::Label::new(
-                            RichText::new(format!("{}", err)).size(10.5).color(tokens.text_muted)
-                        ).wrap()
+                        egui::Label::new(RichText::new(format!("{}", err)).size(10.5).color(tokens.text_muted)).wrap(),
                     );
                 });
             return;
@@ -994,17 +1194,32 @@ fn render_mtf_view(
             // Uniform solid line segment legend
             ui.horizontal_wrapped(|ui| {
                 draw_legend_line(ui, tokens.text_muted);
-                ui.label(RichText::new("Diff Limit").size(10.0).monospace().color(tokens.text_muted));
+                ui.label(
+                    RichText::new("Diff Limit")
+                        .size(10.0)
+                        .monospace()
+                        .color(tokens.text_muted),
+                );
 
                 ui.add_space(6.0);
 
                 draw_legend_line(ui, tokens.plot_tangential);
-                ui.label(RichText::new("T (Tang)").size(10.0).monospace().color(tokens.plot_tangential));
+                ui.label(
+                    RichText::new("T (Tang)")
+                        .size(10.0)
+                        .monospace()
+                        .color(tokens.plot_tangential),
+                );
 
                 ui.add_space(6.0);
 
                 draw_legend_line(ui, tokens.plot_sagittal);
-                ui.label(RichText::new("S (Sagit)").size(10.0).monospace().color(tokens.plot_sagittal));
+                ui.label(
+                    RichText::new("S (Sagit)")
+                        .size(10.0)
+                        .monospace()
+                        .color(tokens.plot_sagittal),
+                );
             });
 
             ui.separator();
@@ -1016,16 +1231,48 @@ fn render_mtf_view(
                 .num_columns(2)
                 .spacing([18.0, 5.0])
                 .show(ui, |ui| {
-                    ui.label(RichText::new("Contrast @ 20 lp/mm:").size(11.0).monospace().color(tokens.text_muted));
-                    ui.label(RichText::new(format!("{:.1}%", mtf_20 * 100.0)).size(12.5).strong().monospace().color(tokens.accent));
+                    ui.label(
+                        RichText::new("Contrast @ 20 lp/mm:")
+                            .size(11.0)
+                            .monospace()
+                            .color(tokens.text_muted),
+                    );
+                    ui.label(
+                        RichText::new(format!("{:.1}%", mtf_20 * 100.0))
+                            .size(12.5)
+                            .strong()
+                            .monospace()
+                            .color(tokens.accent),
+                    );
                     ui.end_row();
 
-                    ui.label(RichText::new("Contrast @ 50 lp/mm:").size(11.0).monospace().color(tokens.text_muted));
-                    ui.label(RichText::new(format!("{:.1}%", mtf_50 * 100.0)).size(12.5).strong().monospace().color(tokens.text_primary));
+                    ui.label(
+                        RichText::new("Contrast @ 50 lp/mm:")
+                            .size(11.0)
+                            .monospace()
+                            .color(tokens.text_muted),
+                    );
+                    ui.label(
+                        RichText::new(format!("{:.1}%", mtf_50 * 100.0))
+                            .size(12.5)
+                            .strong()
+                            .monospace()
+                            .color(tokens.text_primary),
+                    );
                     ui.end_row();
 
-                    ui.label(RichText::new("Cutoff Frequency:").size(11.0).monospace().color(tokens.text_muted));
-                    ui.label(RichText::new(format!("{:.1} lp/mm", mtf.cutoff_frequency_lpm)).size(11.5).monospace().color(tokens.text_muted));
+                    ui.label(
+                        RichText::new("Cutoff Frequency:")
+                            .size(11.0)
+                            .monospace()
+                            .color(tokens.text_muted),
+                    );
+                    ui.label(
+                        RichText::new(format!("{:.1} lp/mm", mtf.cutoff_frequency_lpm))
+                            .size(11.5)
+                            .monospace()
+                            .color(tokens.text_muted),
+                    );
                     ui.end_row();
                 });
         });
@@ -1036,7 +1283,10 @@ fn draw_legend_line(ui: &mut Ui, color: Color32) {
     let (rect, _) = ui.allocate_exact_size(Vec2::new(16.0, 10.0), egui::Sense::hover());
     let y = rect.center().y;
     let painter = ui.painter();
-    painter.line_segment([Pos2::new(rect.min.x, y), Pos2::new(rect.max.x, y)], Stroke::new(2.0, color));
+    painter.line_segment(
+        [Pos2::new(rect.min.x, y), Pos2::new(rect.max.x, y)],
+        Stroke::new(2.0, color),
+    );
 }
 
 fn sample_mtf_at_freq(mtf: &MtfCurve, target_freq: f64) -> f64 {
@@ -1045,7 +1295,10 @@ fn sample_mtf_at_freq(mtf: &MtfCurve, target_freq: f64) -> f64 {
             return (pt.tangential_mtf + pt.sagittal_mtf) * 0.5;
         }
     }
-    mtf.points.last().map(|p| (p.tangential_mtf + p.sagittal_mtf) * 0.5).unwrap_or(0.0)
+    mtf.points
+        .last()
+        .map(|p| (p.tangential_mtf + p.sagittal_mtf) * 0.5)
+        .unwrap_or(0.0)
 }
 
 fn draw_mtf_plot(painter: &Painter, rect: Rect, mtf: &MtfCurve, tokens: &OpticsTokens) {
@@ -1187,9 +1440,18 @@ fn render_cardinal_view(
             ("Back Focal Length (BFL):", bfl_str),
             ("F-Number (F/#):", fnum_str),
             ("Numerical Aperture (NA):", na_str),
-            ("Entrance Pupil Diameter (EPD):", format!("{:.2} mm", prescription.entrance_pupil_diameter_mm)),
-            ("Entrance Pupil Position (z_ENP):", format!("{:+.3} mm", p.entrance_pupil_pos_mm)),
-            ("Exit Pupil Position (z_EXP):", format!("{:+.3} mm", p.exit_pupil_pos_mm)),
+            (
+                "Entrance Pupil Diameter (EPD):",
+                format!("{:.2} mm", prescription.entrance_pupil_diameter_mm),
+            ),
+            (
+                "Entrance Pupil Position (z_ENP):",
+                format!("{:+.3} mm", p.entrance_pupil_pos_mm),
+            ),
+            (
+                "Exit Pupil Position (z_EXP):",
+                format!("{:+.3} mm", p.exit_pupil_pos_mm),
+            ),
             ("Total Track Length:", format!("{:.2} mm", total_track_mm)),
             ("Primary Wavelength:", format!("{:.2} nm", primary_wl)),
             ("Total Surfaces:", format!("{}", prescription.surfaces.len())),
@@ -1211,7 +1473,13 @@ fn render_cardinal_view(
                 .show(ui, |ui| {
                     for (label, val) in items {
                         ui.label(RichText::new(label).size(11.0).monospace().color(tokens.text_muted));
-                        ui.label(RichText::new(val).size(11.5).strong().monospace().color(tokens.text_primary));
+                        ui.label(
+                            RichText::new(val)
+                                .size(11.5)
+                                .strong()
+                                .monospace()
+                                .color(tokens.text_primary),
+                        );
                         ui.end_row();
                     }
                 });
@@ -1227,8 +1495,8 @@ fn render_polarization_view(
     state: &mut AnalysisPanelState,
     tokens: &OpticsTokens,
 ) {
-    use optics_core::polarization::JonesVector;
     use optics_core::aiming::trace_polarized_ray;
+    use optics_core::polarization::JonesVector;
     use optics_core::types::{Field, Pupil, Ray, Vec3, Wavelength};
 
     ui.vertical(|ui| {
@@ -1243,7 +1511,12 @@ fn render_polarization_view(
             .show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing = Vec2::new(6.0, 3.0);
-                    ui.label(RichText::new("Input Polarization:").strong().size(11.0).color(tokens.text_primary));
+                    ui.label(
+                        RichText::new("Input Polarization:")
+                            .strong()
+                            .size(11.0)
+                            .color(tokens.text_primary),
+                    );
 
                     let modes = [
                         (1, "Linear Horizontal (s)"),
@@ -1268,7 +1541,11 @@ fn render_polarization_view(
                     ui.label(RichText::new("Field Angle:").size(10.5).color(tokens.text_muted));
                     for &f in &prescription.field_angles_deg {
                         let is_sel = (state.selected_field_deg - f).abs() < 1e-4;
-                        let lbl = if f == 0.0 { "0.0° (On-Axis)".to_string() } else { format!("{:.1}°", f) };
+                        let lbl = if f == 0.0 {
+                            "0.0° (On-Axis)".to_string()
+                        } else {
+                            format!("{:.1}°", f)
+                        };
                         if ui.selectable_label(is_sel, lbl).clicked() {
                             state.selected_field_deg = f;
                         }
@@ -1291,8 +1568,11 @@ fn render_polarization_view(
         // Aim marginal / chief ray at selected field
         let chief_ray_res = optics_core::aiming::trace_aimed_ray(
             resolved,
-            Field::AngleDegrees { x: 0.0, y: state.selected_field_deg },
-            Pupil::new(0.0, 0.707).unwrap_or_else(|_| Pupil::new(0.0, 0.0).unwrap()),
+            Field::AngleDegrees {
+                x: 0.0,
+                y: state.selected_field_deg,
+            },
+            Pupil::new(0.0, 0.707).unwrap_or_else(|_| Pupil::center()),
             Wavelength::from_nanometers(primary_wl).unwrap_or(Wavelength::D_LINE),
             optics_core::RayAimingMode::RealIterative,
         );
@@ -1301,12 +1581,12 @@ fn render_polarization_view(
             Ok(r) => r,
             Err(_) => {
                 // Fallback straight on-axis ray
-                Ray::new(
-                    Vec3::new(0.0, 0.0, -10.0),
-                    Vec3::new(0.0, 0.0, 1.0),
-                    primary_wl,
-                    1.0,
-                ).unwrap()
+                Ray {
+                    origin: Vec3::new(0.0, 0.0, -10.0),
+                    direction: Vec3::new(0.0, 0.0, 1.0),
+                    wavelength_nm: primary_wl,
+                    energy: 1.0,
+                }
             }
         };
 
@@ -1329,20 +1609,59 @@ fn render_polarization_view(
             .show(ui, |ui| {
                 ui.columns(4, |cols| {
                     cols[0].vertical_centered(|ui| {
-                        ui.label(RichText::new("Throughput").size(10.0).monospace().color(tokens.text_muted));
-                        ui.label(RichText::new(format!("{:.1}%", pol_result.throughput * 100.0)).size(13.0).strong().monospace().color(tokens.accent));
+                        ui.label(
+                            RichText::new("Throughput")
+                                .size(10.0)
+                                .monospace()
+                                .color(tokens.text_muted),
+                        );
+                        ui.label(
+                            RichText::new(format!("{:.1}%", pol_result.throughput * 100.0))
+                                .size(13.0)
+                                .strong()
+                                .monospace()
+                                .color(tokens.accent),
+                        );
                     });
                     cols[1].vertical_centered(|ui| {
                         ui.label(RichText::new("DoP").size(10.0).monospace().color(tokens.text_muted));
-                        ui.label(RichText::new(format!("{:.2}", pol_result.dop)).size(13.0).strong().monospace().color(tokens.text_primary));
+                        ui.label(
+                            RichText::new(format!("{:.2}", pol_result.dop))
+                                .size(13.0)
+                                .strong()
+                                .monospace()
+                                .color(tokens.text_primary),
+                        );
                     });
                     cols[2].vertical_centered(|ui| {
-                        ui.label(RichText::new("Azimuth (ψ)").size(10.0).monospace().color(tokens.text_muted));
-                        ui.label(RichText::new(format!("{:+.1}°", pol_result.orientation_deg)).size(13.0).strong().monospace().color(tokens.text_primary));
+                        ui.label(
+                            RichText::new("Azimuth (ψ)")
+                                .size(10.0)
+                                .monospace()
+                                .color(tokens.text_muted),
+                        );
+                        ui.label(
+                            RichText::new(format!("{:+.1}°", pol_result.orientation_deg))
+                                .size(13.0)
+                                .strong()
+                                .monospace()
+                                .color(tokens.text_primary),
+                        );
                     });
                     cols[3].vertical_centered(|ui| {
-                        ui.label(RichText::new("Ellipticity (χ)").size(10.0).monospace().color(tokens.text_muted));
-                        ui.label(RichText::new(format!("{:+.1}°", pol_result.ellipticity_deg)).size(13.0).strong().monospace().color(tokens.text_primary));
+                        ui.label(
+                            RichText::new("Ellipticity (χ)")
+                                .size(10.0)
+                                .monospace()
+                                .color(tokens.text_muted),
+                        );
+                        ui.label(
+                            RichText::new(format!("{:+.1}°", pol_result.ellipticity_deg))
+                                .size(13.0)
+                                .strong()
+                                .monospace()
+                                .color(tokens.text_primary),
+                        );
                     });
                 });
             });
@@ -1359,7 +1678,13 @@ fn render_polarization_view(
             .inner_margin(egui::Margin::symmetric(8, 8))
             .show(ui, |ui| {
                 ui.vertical_centered(|ui| {
-                    ui.label(RichText::new("POLARIZATION ELLIPSE (TRANSVERSE ELECTRIC FIELD)").size(10.5).strong().monospace().color(tokens.text_primary));
+                    ui.label(
+                        RichText::new("POLARIZATION ELLIPSE (TRANSVERSE ELECTRIC FIELD)")
+                            .size(10.5)
+                            .strong()
+                            .monospace()
+                            .color(tokens.text_primary),
+                    );
                 });
                 ui.add_space(4.0);
 
@@ -1370,11 +1695,17 @@ fn render_polarization_view(
 
                 // Axes
                 painter.line_segment(
-                    [Pos2::new((center.x as f64 - scale * 1.15) as f32, center.y), Pos2::new((center.x as f64 + scale * 1.15) as f32, center.y)],
+                    [
+                        Pos2::new((center.x as f64 - scale * 1.15) as f32, center.y),
+                        Pos2::new((center.x as f64 + scale * 1.15) as f32, center.y),
+                    ],
                     tokens.border,
                 );
                 painter.line_segment(
-                    [Pos2::new(center.x, (center.y as f64 - scale * 1.15) as f32), Pos2::new(center.x, (center.y as f64 + scale * 1.15) as f32)],
+                    [
+                        Pos2::new(center.x, (center.y as f64 - scale * 1.15) as f32),
+                        Pos2::new(center.x, (center.y as f64 + scale * 1.15) as f32),
+                    ],
                     tokens.border,
                 );
 
@@ -1428,7 +1759,12 @@ fn render_polarization_view(
             .corner_radius(CornerRadius::ZERO)
             .inner_margin(egui::Margin::symmetric(10, 8))
             .show(ui, |ui| {
-                ui.label(RichText::new("SURFACE POLARIZATION CONTRIBUTIONS").strong().size(11.0).color(tokens.text_primary));
+                ui.label(
+                    RichText::new("SURFACE POLARIZATION CONTRIBUTIONS")
+                        .strong()
+                        .size(11.0)
+                        .color(tokens.text_primary),
+                );
                 ui.add_space(4.0);
 
                 Grid::new("polarization_table_grid")
@@ -1441,25 +1777,63 @@ fn render_polarization_view(
                         ui.label(RichText::new("AOI (°)").size(10.0).monospace().color(tokens.text_muted));
                         ui.label(RichText::new("Ts (%)").size(10.0).monospace().color(tokens.text_muted));
                         ui.label(RichText::new("Tp (%)").size(10.0).monospace().color(tokens.text_muted));
-                        ui.label(RichText::new("Diattenuation").size(10.0).monospace().color(tokens.text_muted));
-                        ui.label(RichText::new("Phase Shift Δ").size(10.0).monospace().color(tokens.text_muted));
+                        ui.label(
+                            RichText::new("Diattenuation")
+                                .size(10.0)
+                                .monospace()
+                                .color(tokens.text_muted),
+                        );
+                        ui.label(
+                            RichText::new("Phase Shift Δ")
+                                .size(10.0)
+                                .monospace()
+                                .color(tokens.text_muted),
+                        );
                         ui.end_row();
 
                         for rec in &pol_result.surface_records {
-                            ui.label(RichText::new(format!("S{}", rec.surface_index)).size(10.5).monospace().color(tokens.text_primary));
-                            ui.label(RichText::new(format!("{:.1}°", rec.incident_angle_deg)).size(10.5).monospace().color(tokens.text_primary));
-                            ui.label(RichText::new(format!("{:.1}%", rec.ts * 100.0)).size(10.5).monospace().color(tokens.accent));
-                            ui.label(RichText::new(format!("{:.1}%", rec.tp * 100.0)).size(10.5).monospace().color(tokens.text_primary));
-                            ui.label(RichText::new(format!("{:.3}", rec.diattenuation)).size(10.5).monospace().color(tokens.text_primary));
-                            ui.label(RichText::new(format!("{:+.1}°", rec.phase_shift_deg)).size(10.5).monospace().color(tokens.text_muted));
+                            ui.label(
+                                RichText::new(format!("S{}", rec.surface_index))
+                                    .size(10.5)
+                                    .monospace()
+                                    .color(tokens.text_primary),
+                            );
+                            ui.label(
+                                RichText::new(format!("{:.1}°", rec.incident_angle_deg))
+                                    .size(10.5)
+                                    .monospace()
+                                    .color(tokens.text_primary),
+                            );
+                            ui.label(
+                                RichText::new(format!("{:.1}%", rec.ts * 100.0))
+                                    .size(10.5)
+                                    .monospace()
+                                    .color(tokens.accent),
+                            );
+                            ui.label(
+                                RichText::new(format!("{:.1}%", rec.tp * 100.0))
+                                    .size(10.5)
+                                    .monospace()
+                                    .color(tokens.text_primary),
+                            );
+                            ui.label(
+                                RichText::new(format!("{:.3}", rec.diattenuation))
+                                    .size(10.5)
+                                    .monospace()
+                                    .color(tokens.text_primary),
+                            );
+                            ui.label(
+                                RichText::new(format!("{:+.1}°", rec.phase_shift_deg))
+                                    .size(10.5)
+                                    .monospace()
+                                    .color(tokens.text_muted),
+                            );
                             ui.end_row();
                         }
                     });
             });
     });
 }
-
-
 
 #[cfg(test)]
 mod tests {
@@ -1469,7 +1843,7 @@ mod tests {
     fn test_analysis_tabs_interaction() {
         let ctx = egui::Context::default();
         let mut state = AnalysisPanelState::default();
-        let tokens = crate::theme::ThemeMode::ZemaxClassic.tokens();
+        let tokens = crate::theme::ThemeMode::ClassicCad.tokens();
 
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
@@ -1480,4 +1854,3 @@ mod tests {
         assert_eq!(state.active_tab, AnalysisTab::SpotDiagram);
     }
 }
-

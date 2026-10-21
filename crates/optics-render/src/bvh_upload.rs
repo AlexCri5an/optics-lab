@@ -1,6 +1,6 @@
 //! GPU buffer allocation and upload routines for BVH nodes and triangle primitives.
 
-use optics_bvh::{BvhScene, pack_bvh_to_gpu_buffer, pack_triangles_to_gpu_buffer, Triangle};
+use optics_bvh::{BvhScene, Triangle, pack_bvh_to_gpu_buffer, pack_triangles_to_gpu_buffer};
 use wgpu::util::DeviceExt;
 
 use crate::context::GpuContext;
@@ -27,10 +27,7 @@ impl BvhBuffer {
         let (all_nodes, all_triangles) = if let Some(blas_nodes) = scene.blas.first() {
             let sorted_tris: Vec<Triangle> = if let Some(indices) = scene.blas_indices.first() {
                 if let Some(mesh_tris) = scene.triangles.first() {
-                    indices
-                        .iter()
-                        .filter_map(|&idx| mesh_tris.get(idx).cloned())
-                        .collect()
+                    indices.iter().filter_map(|&idx| mesh_tris.get(idx).cloned()).collect()
                 } else {
                     Vec::new()
                 }
@@ -41,10 +38,7 @@ impl BvhBuffer {
             };
             (blas_nodes.clone(), sorted_tris)
         } else {
-            (
-                scene.tlas.clone(),
-                scene.triangles.iter().flatten().cloned().collect(),
-            )
+            (scene.tlas.clone(), scene.triangles.iter().flatten().cloned().collect())
         };
 
         let node_bytes = pack_bvh_to_gpu_buffer(&all_nodes);
@@ -62,21 +56,17 @@ impl BvhBuffer {
             tri_bytes
         };
 
-        let node_buf = ctx
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("BVH Node Storage Buffer"),
-                contents: &node_bytes,
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            });
+        let node_buf = ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("BVH Node Storage Buffer"),
+            contents: &node_bytes,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        });
 
-        let triangle_buf = ctx
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Triangle Storage Buffer"),
-                contents: &tri_bytes,
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            });
+        let triangle_buf = ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Triangle Storage Buffer"),
+            contents: &tri_bytes,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        });
 
         Self {
             node_buf,

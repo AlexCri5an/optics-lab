@@ -57,8 +57,7 @@ impl BlasInstance {
     #[must_use]
     pub fn transform_ray(&self, ray: &Ray) -> Option<Ray> {
         let o4 = self.inv_transform * Vector4::new(ray.origin.x, ray.origin.y, ray.origin.z, 1.0);
-        let d4 = self.inv_transform
-            * Vector4::new(ray.direction.x, ray.direction.y, ray.direction.z, 0.0);
+        let d4 = self.inv_transform * Vector4::new(ray.direction.x, ray.direction.y, ray.direction.z, 0.0);
 
         let local_origin = Vec3::new(o4.x / o4.w, o4.y / o4.w, o4.z / o4.w);
         let local_dir = Vec3::new(d4.x, d4.y, d4.z);
@@ -159,29 +158,15 @@ impl BvhScene {
                                 let tris = &self.triangles[inst.blas_index];
                                 let tri_indices = &self.blas_indices[inst.blas_index];
 
-                                if let Some(hit) = intersect_blas(
-                                    &local_ray,
-                                    blas_nodes,
-                                    tris,
-                                    tri_indices,
-                                    inst_idx,
-                                ) {
+                                if let Some(hit) = intersect_blas(&local_ray, blas_nodes, tris, tri_indices, inst_idx) {
                                     // Transform hit back to world space
-                                    let hit_pt4 = inst.transform
-                                        * Vector4::new(hit.point.x, hit.point.y, hit.point.z, 1.0);
-                                    let world_pt = Vec3::new(
-                                        hit_pt4.x / hit_pt4.w,
-                                        hit_pt4.y / hit_pt4.w,
-                                        hit_pt4.z / hit_pt4.w,
-                                    );
+                                    let hit_pt4 =
+                                        inst.transform * Vector4::new(hit.point.x, hit.point.y, hit.point.z, 1.0);
+                                    let world_pt =
+                                        Vec3::new(hit_pt4.x / hit_pt4.w, hit_pt4.y / hit_pt4.w, hit_pt4.z / hit_pt4.w);
 
                                     let n4 = inst.inv_transform.transpose()
-                                        * Vector4::new(
-                                            hit.normal.x,
-                                            hit.normal.y,
-                                            hit.normal.z,
-                                            0.0,
-                                        );
+                                        * Vector4::new(hit.normal.x, hit.normal.y, hit.normal.z, 0.0);
                                     let world_normal = Vec3::new(n4.x, n4.y, n4.z).normalize();
 
                                     let world_t = (world_pt - ray.origin).dot(&ray.direction);
@@ -281,12 +266,7 @@ mod tests {
 
         let scene = BvhScene::build(vec![mesh], vec![instance]);
 
-        let ray = Ray::new(
-            Vec3::new(0.0, 0.0, 0.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )?;
+        let ray = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0)?;
 
         let hit = scene.intersect(&ray);
         assert!(hit.is_some(), "Ray must intersect the instanced triangle");
@@ -335,12 +315,7 @@ mod tests {
             let oy = next_f64(-15.0, 15.0);
             let dx = next_f64(-0.2, 0.2);
             let dy = next_f64(-0.2, 0.2);
-            let ray = Ray::new(
-                Vec3::new(ox, oy, 0.0),
-                Vec3::new(dx, dy, 1.0).normalize(),
-                587.56,
-                1.0,
-            )?;
+            let ray = Ray::new(Vec3::new(ox, oy, 0.0), Vec3::new(dx, dy, 1.0).normalize(), 587.56, 1.0)?;
 
             // 1. BVH Traversal
             let bvh_hit = scene.intersect(&ray);
@@ -372,11 +347,7 @@ mod tests {
                     return Err(format!("BVH found false positive hit at t={}", h_bvh.t).into());
                 }
                 (None, Some(h_brute)) => {
-                    return Err(format!(
-                        "BVH missed hit that brute force found at t={}",
-                        h_brute.t
-                    )
-                    .into());
+                    return Err(format!("BVH missed hit that brute force found at t={}", h_brute.t).into());
                 }
             }
         }

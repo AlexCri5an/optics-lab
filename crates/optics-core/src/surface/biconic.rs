@@ -32,13 +32,7 @@ impl BiconicSurface {
     ///
     /// # Errors
     /// Returns [`OpticsError::InvalidParameter`] if any input is non-finite or `semi_diameter_mm < 0.0`.
-    pub fn new(
-        cx: f64,
-        kx: f64,
-        cy: f64,
-        ky: f64,
-        semi_diameter_mm: f64,
-    ) -> Result<Self, OpticsError> {
+    pub fn new(cx: f64, kx: f64, cy: f64, ky: f64, semi_diameter_mm: f64) -> Result<Self, OpticsError> {
         if !cx.is_finite()
             || !kx.is_finite()
             || !cy.is_finite()
@@ -47,8 +41,7 @@ impl BiconicSurface {
             || semi_diameter_mm < 0.0
         {
             return Err(OpticsError::InvalidParameter(
-                "BiconicSurface parameters must be finite and semi-diameter non-negative"
-                    .to_string(),
+                "BiconicSurface parameters must be finite and semi-diameter non-negative".to_string(),
             ));
         }
 
@@ -65,13 +58,7 @@ impl BiconicSurface {
     ///
     /// # Errors
     /// Returns [`OpticsError::InvalidParameter`] if any input is non-finite or `semi_diameter_mm < 0.0`.
-    pub fn from_radii(
-        rx_mm: f64,
-        kx: f64,
-        ry_mm: f64,
-        ky: f64,
-        semi_diameter_mm: f64,
-    ) -> Result<Self, OpticsError> {
+    pub fn from_radii(rx_mm: f64, kx: f64, ry_mm: f64, ky: f64, semi_diameter_mm: f64) -> Result<Self, OpticsError> {
         let cx = if rx_mm.is_infinite() || rx_mm.abs() < 1e-15 {
             0.0
         } else {
@@ -111,15 +98,11 @@ impl BiconicSurface {
     /// Returns [`OpticsError::GeometryOutsideAperture`] if $(x, y)$ falls outside the real surface domain.
     pub fn sag(&self, x: f64, y: f64) -> Result<f64, OpticsError> {
         if !x.is_finite() || !y.is_finite() {
-            return Err(OpticsError::InvalidParameter(
-                "Coordinates must be finite".to_string(),
-            ));
+            return Err(OpticsError::InvalidParameter("Coordinates must be finite".to_string()));
         }
 
         let num = self.cx * x * x + self.cy * y * y;
-        let radicand = 1.0
-            - (1.0 + self.kx) * self.cx * self.cx * x * x
-            - (1.0 + self.ky) * self.cy * self.cy * y * y;
+        let radicand = 1.0 - (1.0 + self.kx) * self.cx * self.cx * x * x - (1.0 + self.ky) * self.cy * self.cy * y * y;
 
         if radicand < -1e-12 {
             return Err(OpticsError::GeometryOutsideAperture);
@@ -139,9 +122,7 @@ impl BiconicSurface {
         }
 
         let num = self.cx * x * x + self.cy * y * y;
-        let radicand = 1.0
-            - (1.0 + self.kx) * self.cx * self.cx * x * x
-            - (1.0 + self.ky) * self.cy * self.cy * y * y;
+        let radicand = 1.0 - (1.0 + self.kx) * self.cx * self.cx * x * x - (1.0 + self.ky) * self.cy * self.cy * y * y;
 
         if radicand < -1e-12 {
             return Err(OpticsError::GeometryOutsideAperture);
@@ -158,12 +139,10 @@ impl BiconicSurface {
         let denom_sq = one_plus_s * one_plus_s;
 
         // dz/dx = (2 * cx * x) / (1 + s) + (num * (1 + kx) * cx^2 * x) / (s * (1 + s)^2)
-        let dz_dx = (2.0 * self.cx * x) / one_plus_s
-            + (num * (1.0 + self.kx) * self.cx * self.cx * x) / (s * denom_sq);
+        let dz_dx = (2.0 * self.cx * x) / one_plus_s + (num * (1.0 + self.kx) * self.cx * self.cx * x) / (s * denom_sq);
 
         // dz/dy = (2 * cy * y) / (1 + s) + (num * (1 + ky) * cy^2 * y) / (s * denom_sq)
-        let dz_dy = (2.0 * self.cy * y) / one_plus_s
-            + (num * (1.0 + self.ky) * self.cy * self.cy * y) / (s * denom_sq);
+        let dz_dy = (2.0 * self.cy * y) / one_plus_s + (num * (1.0 + self.ky) * self.cy * self.cy * y) / (s * denom_sq);
 
         Ok((dz_dx, dz_dy))
     }
@@ -210,9 +189,7 @@ impl BiconicSurface {
             let sag = match self.sag(p.x, p.y) {
                 Ok(s) => s,
                 Err(_) => {
-                    return Err(OpticsError::RayMissedSurface(
-                        "Outside biconic sag domain".to_string(),
-                    ));
+                    return Err(OpticsError::RayMissedSurface("Outside biconic sag domain".to_string()));
                 }
             };
 
@@ -307,8 +284,7 @@ impl ToroidalSurface {
             || semi_diameter_mm < 0.0
         {
             return Err(OpticsError::InvalidParameter(
-                "Toroidal surface requires finite parameters and non-zero rotation radius"
-                    .to_string(),
+                "Toroidal surface requires finite parameters and non-zero rotation radius".to_string(),
             ));
         }
 
@@ -392,11 +368,7 @@ impl ToroidalSurface {
         // dzy/dy = (cy * y) / sqrt(1 - (1+ky)*cy^2*y^2)
         let base_rad = 1.0 - (1.0 + self.ky) * self.cy * self.cy * y * y;
         let base_s = base_rad.max(0.0).sqrt();
-        let dzy_dy = if base_s > 1e-14 {
-            (self.cy * y) / base_s
-        } else {
-            0.0
-        };
+        let dzy_dy = if base_s > 1e-14 { (self.cy * y) / base_s } else { 0.0 };
 
         // dz/dy = sign * (term / s) * dzy/dy
         let dz_dy = sign * (term / s) * dzy_dy;
@@ -446,9 +418,7 @@ impl ToroidalSurface {
             let sag = match self.sag(p.x, p.y) {
                 Ok(s) => s,
                 Err(_) => {
-                    return Err(OpticsError::RayMissedSurface(
-                        "Outside toroidal sag domain".to_string(),
-                    ));
+                    return Err(OpticsError::RayMissedSurface("Outside toroidal sag domain".to_string()));
                 }
             };
 
@@ -567,12 +537,7 @@ mod tests {
         let biconic = BiconicSurface::new(c, 0.0, c, 0.0, 25.0)?;
 
         // Ray launched from z = -50 towards vertex at z = 0, off-axis at (x=10, y=0)
-        let ray = Ray::new(
-            Vec3::new(10.0, 0.0, -50.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )?;
+        let ray = Ray::new(Vec3::new(10.0, 0.0, -50.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0)?;
 
         let (t, hit_pt) = biconic.intersect_ray(&ray, 0.0)?;
         let expected_sag = biconic.sag(10.0, 0.0)?;
@@ -613,12 +578,7 @@ mod tests {
     #[test]
     fn test_toroidal_ray_intersection() -> TestResult {
         let toroid = ToroidalSurface::new(120.0, 1.0 / 60.0, 0.0, 25.0)?;
-        let ray = Ray::new(
-            Vec3::new(5.0, 5.0, -40.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )?;
+        let ray = Ray::new(Vec3::new(5.0, 5.0, -40.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0)?;
 
         let (t, hit_pt) = toroid.intersect_ray(&ray, 0.0)?;
         let expected_sag = toroid.sag(5.0, 5.0)?;

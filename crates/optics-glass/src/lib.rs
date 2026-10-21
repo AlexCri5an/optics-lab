@@ -19,9 +19,7 @@ pub use yaml_loader::parse_refractiveindex_yaml;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use optics_core::{
-        Air, BounceEvent, Ray, RayBranchPolicy, RefractiveIndex, Scene, Triangle, Vec3,
-    };
+    use optics_core::{Air, BounceEvent, Ray, RayBranchPolicy, RefractiveIndex, Scene, Triangle, Vec3};
     use optics_spectral::{LAMBDA_C_NM, LAMBDA_D_NM, LAMBDA_F_NM};
 
     type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -41,9 +39,7 @@ mod tests {
         let test_wavelengths = [LAMBDA_F_NM, LAMBDA_D_NM, LAMBDA_C_NM];
 
         for (name, preset) in test_cases {
-            let cat_entry = db
-                .lookup(name)
-                .ok_or_else(|| format!("Catalog missing glass {name}"))?;
+            let cat_entry = db.lookup(name).ok_or_else(|| format!("Catalog missing glass {name}"))?;
 
             // 1. Refractive index at d line matches within 1e-5
             assert!(
@@ -115,8 +111,7 @@ mod tests {
         let tri3b = Triangle::new(v1_front, v0_back, v1_back, 3, 1, 0)?;
 
         let triangles = vec![tri1a, tri1b, tri2a, tri2b, tri3a, tri3b];
-        let media: Vec<Box<dyn RefractiveIndex>> =
-            vec![Box::new(Air), Box::new(GlassMaterial::n_bk7())];
+        let media: Vec<Box<dyn RefractiveIndex>> = vec![Box::new(Air), Box::new(GlassMaterial::n_bk7())];
 
         let scene = Scene::new(triangles, media);
 
@@ -128,16 +123,13 @@ mod tests {
 
         for &wl in &wavelengths {
             let ray = Ray::new(origin, incident_dir, wl, 1.0)?;
-            let path =
-                optics_core::trace_path(&scene, &ray, RayBranchPolicy::FollowTransmission, 10)?;
+            let path = optics_core::trace_path(&scene, &ray, RayBranchPolicy::FollowTransmission, 10)?;
 
             assert_eq!(path.bounces.len(), 2);
             assert_eq!(path.bounces[0].event, BounceEvent::Refract);
             assert_eq!(path.bounces[1].event, BounceEvent::Refract);
 
-            let exit_dir = path.bounces[1]
-                .refracted_dir
-                .ok_or("Expected exit refraction")?;
+            let exit_dir = path.bounces[1].refracted_dir.ok_or("Expected exit refraction")?;
             exit_directions.push(exit_dir);
         }
 
@@ -158,10 +150,7 @@ mod tests {
         // Search around N-BK7: nd in [1.51, 1.53], vd in [60.0, 66.0]
         let results = db.search_by_nd_vd((1.51, 1.53), (60.0, 66.0));
         assert!(!results.is_empty(), "Expected matches in N-BK7 region");
-        assert!(
-            results.iter().any(|g| g.name == "N-BK7"),
-            "Expected N-BK7 to be found"
-        );
+        assert!(results.iter().any(|g| g.name == "N-BK7"), "Expected N-BK7 to be found");
 
         for glass in &results {
             assert!(glass.nd >= 1.51 && glass.nd <= 1.53);
@@ -184,12 +173,7 @@ mod tests {
         let mut glass = GlassMaterial::n_bk7();
         // N-BK7 standard Schott transmittance at 10 mm:
         // 350 nm: 0.720, 400 nm: 0.992, 550 nm: 0.998, 700 nm: 0.998
-        glass.internal_transmittance = vec![
-            (350.0, 0.720),
-            (400.0, 0.992),
-            (550.0, 0.998),
-            (700.0, 0.998),
-        ];
+        glass.internal_transmittance = vec![(350.0, 0.720), (400.0, 0.992), (550.0, 0.998), (700.0, 0.998)];
         glass.test_thickness_mm = 10.0;
 
         // Exact tabulated point

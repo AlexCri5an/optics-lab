@@ -9,8 +9,8 @@
 
 use optics_core::{Ray, Vec3};
 use optics_nonseq::{
-    Detector2D, NonSeqMaterial, NonSeqObject, NonSeqRay, NonSeqScene, NonSeqTraceConfig,
-    NonSeqTracer, OpticalMedium, PrimitiveGeometry, Transform3D,
+    Detector2D, NonSeqMaterial, NonSeqObject, NonSeqRay, NonSeqScene, NonSeqTraceConfig, NonSeqTracer, OpticalMedium,
+    PrimitiveGeometry, Transform3D,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -91,22 +91,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\nTrace Execution Report:");
     println!("  Total Rays Traced:     {}", report.total_rays_traced);
     println!("  Total Interactions:    {}", report.total_interactions);
-    println!(
-        "  Launched Flux:         {:.4} Watts",
-        report.launched_flux_watts
-    );
-    println!(
-        "  Collected Exit Flux:   {:.4} Watts",
-        report.detected_flux_watts
-    );
-    println!(
-        "  Fresnel Reflection / Escape: {:.4} Watts",
-        report.escaped_flux_watts
-    );
-    println!(
-        "  Energy Conservation:   {:.6}",
-        report.energy_conservation_ratio()
-    );
+    println!("  Launched Flux:         {:.4} Watts", report.launched_flux_watts);
+    println!("  Collected Exit Flux:   {:.4} Watts", report.detected_flux_watts);
+    println!("  Fresnel Reflection / Escape: {:.4} Watts", report.escaped_flux_watts);
+    println!("  Energy Conservation:   {:.6}", report.energy_conservation_ratio());
 
     let det = &scene.detectors[0];
     println!("\nExit Detector Metrics ({}):", det.name);

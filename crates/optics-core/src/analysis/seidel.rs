@@ -119,8 +119,7 @@ pub fn compute_seidel_coefficients(
 ) -> Result<SeidelCoefficients, OpticsError> {
     if prescription.surfaces.len() < 2 {
         return Err(OpticsError::InvalidSurface(
-            "Prescription must contain at least 2 surfaces to compute Seidel coefficients"
-                .to_string(),
+            "Prescription must contain at least 2 surfaces to compute Seidel coefficients".to_string(),
         ));
     }
 
@@ -265,8 +264,8 @@ mod tests {
     use std::sync::Arc;
 
     #[test]
-    fn test_plano_convex_singlet_petzval_sum_agrees_with_analytical_formula()
-    -> Result<(), Box<dyn std::error::Error>> {
+    fn test_plano_convex_singlet_petzval_sum_agrees_with_analytical_formula() -> Result<(), Box<dyn std::error::Error>>
+    {
         // For a thin plano-convex singlet with index n and focal length f:
         // Petzval sum = 1 / (n * f)
         let n = 1.5;

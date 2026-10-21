@@ -199,10 +199,7 @@ pub fn trace_path(
         )?;
     }
 
-    Ok(PathRecord {
-        bounces,
-        terminated,
-    })
+    Ok(PathRecord { bounces, terminated })
 }
 
 /// Traces a fan of rays across a spectrum of wavelengths through an optical scene.
@@ -222,13 +219,7 @@ pub fn spectral_fan(
         .iter()
         .copied()
         .filter_map(|wl| {
-            let ray = Ray::new(
-                ray_template.origin,
-                ray_template.direction,
-                wl,
-                ray_template.energy,
-            )
-            .ok()?;
+            let ray = Ray::new(ray_template.origin, ray_template.direction, wl, ray_template.energy).ok()?;
             let path = trace_path(scene, &ray, policy, max_bounces).ok()?;
             Some((wl, path))
         })

@@ -12,11 +12,7 @@ impl Rng64 {
     /// Initialize with a non-zero seed.
     pub fn new(seed: u64) -> Self {
         Self {
-            state: if seed == 0 {
-                0x5a17_98e1_b3c2_4d5e
-            } else {
-                seed
-            },
+            state: if seed == 0 { 0x5a17_98e1_b3c2_4d5e } else { seed },
         }
     }
 
@@ -119,11 +115,7 @@ impl ToleranceDistribution {
                         return x;
                     }
                 }
-                if rng.next_f64() < 0.5 {
-                    -half_width
-                } else {
-                    half_width
-                }
+                if rng.next_f64() < 0.5 { -half_width } else { half_width }
             }
         }
     }

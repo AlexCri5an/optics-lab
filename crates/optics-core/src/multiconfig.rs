@@ -116,9 +116,7 @@ impl Pickup {
                         }
                     })
                     .ok_or_else(|| {
-                        OpticsError::InvalidParameter(format!(
-                            "Pickup source surface {source_surface} not found"
-                        ))
+                        OpticsError::InvalidParameter(format!("Pickup source surface {source_surface} not found"))
                     })?;
 
                 let target_curv = scale * src_curv + offset;
@@ -127,9 +125,7 @@ impl Pickup {
                     .iter_mut()
                     .find(|s| s.surface_index == *target_surface)
                     .ok_or_else(|| {
-                        OpticsError::InvalidParameter(format!(
-                            "Pickup target surface {target_surface} not found"
-                        ))
+                        OpticsError::InvalidParameter(format!("Pickup target surface {target_surface} not found"))
                     })?;
 
                 target_surf.radius_mm = if target_curv.abs() < 1e-12 {
@@ -150,9 +146,7 @@ impl Pickup {
                     .find(|s| s.surface_index == *source_surface)
                     .map(|s| s.thickness_mm)
                     .ok_or_else(|| {
-                        OpticsError::InvalidParameter(format!(
-                            "Pickup source surface {source_surface} not found"
-                        ))
+                        OpticsError::InvalidParameter(format!("Pickup source surface {source_surface} not found"))
                     })?;
 
                 let target_thick = scale * src_thick + offset_mm;
@@ -161,9 +155,7 @@ impl Pickup {
                     .iter_mut()
                     .find(|s| s.surface_index == *target_surface)
                     .ok_or_else(|| {
-                        OpticsError::InvalidParameter(format!(
-                            "Pickup target surface {target_surface} not found"
-                        ))
+                        OpticsError::InvalidParameter(format!("Pickup target surface {target_surface} not found"))
                     })?;
 
                 target_surf.thickness_mm = target_thick;
@@ -178,9 +170,7 @@ impl Pickup {
                     .find(|s| s.surface_index == *source_surface)
                     .map(|s| s.material_name.clone())
                     .ok_or_else(|| {
-                        OpticsError::InvalidParameter(format!(
-                            "Pickup source surface {source_surface} not found"
-                        ))
+                        OpticsError::InvalidParameter(format!("Pickup source surface {source_surface} not found"))
                     })?;
 
                 let target_surf = prescription
@@ -188,9 +178,7 @@ impl Pickup {
                     .iter_mut()
                     .find(|s| s.surface_index == *target_surface)
                     .ok_or_else(|| {
-                        OpticsError::InvalidParameter(format!(
-                            "Pickup target surface {target_surface} not found"
-                        ))
+                        OpticsError::InvalidParameter(format!("Pickup target surface {target_surface} not found"))
                     })?;
 
                 target_surf.material_name = src_glass;
@@ -252,11 +240,7 @@ impl MultiConfigSystem {
                     surface_index,
                     curvature,
                 } => {
-                    if let Some(surf) = presc
-                        .surfaces
-                        .iter_mut()
-                        .find(|s| s.surface_index == *surface_index)
-                    {
+                    if let Some(surf) = presc.surfaces.iter_mut().find(|s| s.surface_index == *surface_index) {
                         surf.radius_mm = if curvature.abs() < 1e-12 {
                             f64::INFINITY
                         } else {
@@ -268,11 +252,7 @@ impl MultiConfigSystem {
                     surface_index,
                     thickness_mm,
                 } => {
-                    if let Some(surf) = presc
-                        .surfaces
-                        .iter_mut()
-                        .find(|s| s.surface_index == *surface_index)
-                    {
+                    if let Some(surf) = presc.surfaces.iter_mut().find(|s| s.surface_index == *surface_index) {
                         surf.thickness_mm = *thickness_mm;
                     }
                 }
@@ -280,11 +260,7 @@ impl MultiConfigSystem {
                     surface_index,
                     conic_constant,
                 } => {
-                    if let Some(surf) = presc
-                        .surfaces
-                        .iter_mut()
-                        .find(|s| s.surface_index == *surface_index)
-                    {
+                    if let Some(surf) = presc.surfaces.iter_mut().find(|s| s.surface_index == *surface_index) {
                         surf.conic_constant = *conic_constant;
                     }
                 }
@@ -292,11 +268,7 @@ impl MultiConfigSystem {
                     surface_index,
                     material_name,
                 } => {
-                    if let Some(surf) = presc
-                        .surfaces
-                        .iter_mut()
-                        .find(|s| s.surface_index == *surface_index)
-                    {
+                    if let Some(surf) = presc.surfaces.iter_mut().find(|s| s.surface_index == *surface_index) {
                         surf.material_name = material_name.clone();
                     }
                 }
@@ -355,9 +327,7 @@ where
             .surfaces
             .iter_mut()
             .find(|s| s.surface_index == surface_index)
-            .ok_or_else(|| {
-                OpticsError::InvalidParameter(format!("Surface {surface_index} not found"))
-            })?;
+            .ok_or_else(|| OpticsError::InvalidParameter(format!("Surface {surface_index} not found")))?;
 
         let cur_c = if surf.radius_mm.abs() < 1e-12 || surf.radius_mm.is_infinite() {
             0.0

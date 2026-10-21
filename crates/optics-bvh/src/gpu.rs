@@ -37,17 +37,9 @@ impl GpuBvhNode {
     #[must_use]
     pub fn from_cpu(node: &BvhNode) -> Self {
         Self {
-            min: [
-                node.aabb.min.x as f32,
-                node.aabb.min.y as f32,
-                node.aabb.min.z as f32,
-            ],
+            min: [node.aabb.min.x as f32, node.aabb.min.y as f32, node.aabb.min.z as f32],
             left_or_first: node.left_or_first,
-            max: [
-                node.aabb.max.x as f32,
-                node.aabb.max.y as f32,
-                node.aabb.max.z as f32,
-            ],
+            max: [node.aabb.max.x as f32, node.aabb.max.y as f32, node.aabb.max.z as f32],
             count: node.count,
         }
     }

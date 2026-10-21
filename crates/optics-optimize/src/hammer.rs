@@ -77,13 +77,7 @@ impl GlassHammerOptimizer {
         let local_optimizer = DlsOptimizer::new(self.config.local_dls_config.clone());
 
         // Baseline polish
-        let mut best_result = local_optimizer.optimize(
-            base_prescription,
-            variables,
-            merit_function,
-            catalog,
-            None,
-        )?;
+        let mut best_result = local_optimizer.optimize(base_prescription, variables, merit_function, catalog, None)?;
 
         let mut current_presc = best_result.optimized_prescription.clone();
         let candidate_list = if self.config.candidate_glasses.is_empty() {
@@ -124,13 +118,8 @@ impl GlassHammerOptimizer {
                     trial_presc.surfaces[surf_idx].material_name = candidate.clone();
 
                     // Re-optimize geometry
-                    if let Ok(result) = local_optimizer.optimize(
-                        &trial_presc,
-                        variables,
-                        merit_function,
-                        catalog,
-                        None,
-                    ) {
+                    if let Ok(result) = local_optimizer.optimize(&trial_presc, variables, merit_function, catalog, None)
+                    {
                         if result.final_merit < best_result.final_merit {
                             best_result = result;
                             current_presc = best_result.optimized_prescription.clone();
@@ -140,9 +129,7 @@ impl GlassHammerOptimizer {
 
                     // Progress reporting
                     if let Some(cb) = callback.as_deref_mut() {
-                        if cb.on_iteration(total_swaps, best_result.final_merit, &[])
-                            == ControlFlow::Stop
-                        {
+                        if cb.on_iteration(total_swaps, best_result.final_merit, &[]) == ControlFlow::Stop {
                             return Ok(best_result);
                         }
                     }

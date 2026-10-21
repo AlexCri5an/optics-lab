@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=OpticsLab
+GenericName=Optical Engineering Workbench
+Comment=Precision optical design, sequential & non-sequential ray tracing
+Exec=optics-desktop %F
+TryExec=optics-desktop
+Icon=optics-lab
+Terminal=false
+StartupNotify=true
+StartupWMClass=optics-desktop
+Categories=Science;Engineering;Physics;Graphics;
+Keywords=optics;lens;raytracing;spectrometry;engineering;cad;
+MimeType=application/x-opticslab;

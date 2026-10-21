@@ -41,14 +41,8 @@ impl SchottThermalModel {
     /// # Errors
     /// Returns [`OpticsError::InvalidParameter`] or [`OpticsError::NumericalSingularity`]
     /// if wavelength is near thermal resonance $\lambda_{\text{TK}}$.
-    pub fn delta_n(
-        &self,
-        n_ref: f64,
-        wavelength_um: f64,
-        delta_t: f64,
-    ) -> Result<f64, OpticsError> {
-        if !n_ref.is_finite() || n_ref <= 0.0 || !wavelength_um.is_finite() || !delta_t.is_finite()
-        {
+    pub fn delta_n(&self, n_ref: f64, wavelength_um: f64, delta_t: f64) -> Result<f64, OpticsError> {
+        if !n_ref.is_finite() || n_ref <= 0.0 || !wavelength_um.is_finite() || !delta_t.is_finite() {
             return Err(OpticsError::InvalidParameter(
                 "Inputs to thermal model must be finite and n_ref positive".to_string(),
             ));
@@ -67,10 +61,7 @@ impl SchottThermalModel {
         let dt2 = delta_t * delta_t;
         let dt3 = dt2 * delta_t;
 
-        let bracket = self.d0 * delta_t
-            + self.d1 * dt2
-            + self.d2 * dt3
-            + (self.e0 * delta_t + self.e1 * dt2) / denom;
+        let bracket = self.d0 * delta_t + self.d1 * dt2 + self.d2 * dt3 + (self.e0 * delta_t + self.e1 * dt2) / denom;
 
         let factor = (n_ref * n_ref - 1.0) / (2.0 * n_ref);
         Ok(factor * bracket)
@@ -146,10 +137,7 @@ pub fn edlen_air_refractive_index(
 ///
 /// # Errors
 /// Returns [`OpticsError::InvalidParameter`] if $\tau_i \le 0$, $\tau_i > 1.0$, or $t_0 \le 0$.
-pub fn internal_transmittance_to_absorption_coeff(
-    tau_internal: f64,
-    thickness_mm: f64,
-) -> Result<f64, OpticsError> {
+pub fn internal_transmittance_to_absorption_coeff(tau_internal: f64, thickness_mm: f64) -> Result<f64, OpticsError> {
     if !tau_internal.is_finite() || tau_internal <= 0.0 || tau_internal > 1.0 {
         return Err(OpticsError::InvalidParameter(
             "Internal transmittance must be in range (0.0, 1.0]".to_string(),
@@ -198,10 +186,7 @@ mod tests {
         let n_ref = 1.5168; // d-line index at 20 C
         let dn = thermal.delta_n(n_ref, 0.58756, 20.0)?; // delta T = +20 C (at 40 C)
         assert!(dn > 0.0, "Glass index increases with temperature");
-        assert!(
-            dn < 1e-3,
-            "Index shift should be on order of 10^-5 to 10^-4"
-        );
+        assert!(dn < 1e-3, "Index shift should be on order of 10^-5 to 10^-4");
         Ok(())
     }
 
@@ -209,10 +194,7 @@ mod tests {
     fn test_edlen_air_standard_conditions() -> TestResult {
         // Standard air at 15 C, 101325 Pa, visible 587.56 nm
         let n_air = edlen_air_refractive_index(0.58756, 15.0, 101_325.0)?;
-        assert!(
-            (n_air - 1.000277).abs() < 1e-5,
-            "Air index mismatch: got {n_air}"
-        );
+        assert!((n_air - 1.000277).abs() < 1e-5, "Air index mismatch: got {n_air}");
 
         // At higher temperature (lower density), refractive index should decrease toward 1.0
         let n_air_hot = edlen_air_refractive_index(0.58756, 40.0, 101_325.0)?;

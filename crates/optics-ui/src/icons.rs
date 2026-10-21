@@ -239,11 +239,7 @@ pub fn lucide_toolbar_button(
     is_active: bool,
     tokens: &OpticsTokens,
 ) -> Response {
-    let icon_color = if is_active {
-        tokens.accent
-    } else {
-        tokens.text_muted
-    };
+    let icon_color = if is_active { tokens.accent } else { tokens.text_muted };
 
     let bg_color = if is_active {
         tokens.bg_control_active
@@ -272,12 +268,7 @@ pub fn lucide_toolbar_button(
 }
 
 /// Renders a compact academic button with a Lucide icon and text label.
-pub fn lucide_text_button(
-    ui: &mut Ui,
-    icon: LucideIcon,
-    label: &str,
-    tokens: &OpticsTokens,
-) -> Response {
+pub fn lucide_text_button(ui: &mut Ui, icon: LucideIcon, label: &str, tokens: &OpticsTokens) -> Response {
     let icon_size = 14.0;
     let img = Image::from_bytes(icon.uri(), icon.svg_content().as_bytes())
         .tint(tokens.accent)
@@ -292,12 +283,7 @@ pub fn lucide_text_button(
 }
 
 /// Renders a tiny icon-only square button (e.g. for close X or delete).
-pub fn lucide_small_icon_button(
-    ui: &mut Ui,
-    icon: LucideIcon,
-    tooltip: &str,
-    tokens: &OpticsTokens,
-) -> Response {
+pub fn lucide_small_icon_button(ui: &mut Ui, icon: LucideIcon, tooltip: &str, tokens: &OpticsTokens) -> Response {
     let icon_size = 12.0;
     let img = Image::from_bytes(icon.uri(), icon.svg_content().as_bytes())
         .tint(tokens.text_muted)
@@ -356,7 +342,11 @@ mod tests {
             let svg = icon.svg_content();
             assert!(svg.starts_with("<svg"), "Icon {:?} must start with <svg", icon);
             assert!(svg.ends_with("</svg>"), "Icon {:?} must end with </svg>", icon);
-            assert!(icon.uri().starts_with("bytes://lucide/"), "Icon {:?} URI must be namespaced", icon);
+            assert!(
+                icon.uri().starts_with("bytes://lucide/"),
+                "Icon {:?} URI must be namespaced",
+                icon
+            );
         }
     }
 }

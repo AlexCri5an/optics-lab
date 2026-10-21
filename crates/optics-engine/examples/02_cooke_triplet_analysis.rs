@@ -8,12 +8,12 @@
 //! - Diffraction Modulation Transfer Function (MTF) vs spatial frequency
 
 use optics_core::analysis::{
-    PupilPattern, compute_diffraction_mtf, compute_seidel_coefficients, compute_wavefront_map,
-    fit_zernike_noll, trace_spot_diagram,
+    PupilPattern, compute_diffraction_mtf, compute_seidel_coefficients, compute_wavefront_map, fit_zernike_noll,
+    trace_spot_diagram,
 };
 use optics_core::prescription::calculate_paraxial_properties;
+use optics_formats::presets::cooke_triplet_f4_5;
 use optics_glass::catalog::GlassCatalogDb;
-use optics_zemax::presets::cooke_triplet_f4_5;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== OpticsLab Example 02: Cooke Triplet F/4.5 Optical Analysis ===\n");
@@ -32,10 +32,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "  Entrance Pupil Position:         {:.4} mm",
         parax.entrance_pupil_pos_mm
     );
-    println!(
-        "  Exit Pupil Position:             {:.4} mm\n",
-        parax.exit_pupil_pos_mm
-    );
+    println!("  Exit Pupil Position:             {:.4} mm\n", parax.exit_pupil_pos_mm);
 
     // 2. Seidel 3rd-Order Aberrations
     let seidel = compute_seidel_coefficients(&resolved, 0.0, 587.56)?;
@@ -43,15 +40,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  S_I   (Spherical):      {:+.6}", seidel.s1_spherical);
     println!("  S_II  (Coma):           {:+.6}", seidel.s2_coma);
     println!("  S_III (Astigmatism):    {:+.6}", seidel.s3_astigmatism);
-    println!(
-        "  S_IV  (Field Curvature):{:+.6}",
-        seidel.s4_field_curvature
-    );
+    println!("  S_IV  (Field Curvature):{:+.6}", seidel.s4_field_curvature);
     println!("  S_V   (Distortion):     {:+.6}", seidel.s5_distortion);
-    println!(
-        "  Petzval Curvature Sum:   {:.6} mm^-1\n",
-        seidel.petzval_sum
-    );
+    println!("  Petzval Curvature Sum:   {:.6} mm^-1\n", seidel.petzval_sum);
 
     // 3. Multi-Field Spot Diagrams
     println!("3. Spot Diagram Analysis (Hexapolar 6 rings, 127 rays per field):");
@@ -90,10 +81,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 5. Diffraction MTF
     let mtf = compute_diffraction_mtf(&resolved, 10, 0.0, 587.56)?;
     println!("5. On-Axis Diffraction Modulation Transfer Function (MTF):");
-    println!(
-        "  Cutoff Frequency: {:.1} cycles/mm",
-        mtf.cutoff_frequency_lpm
-    );
+    println!("  Cutoff Frequency: {:.1} cycles/mm", mtf.cutoff_frequency_lpm);
     println!("  Freq (cyc/mm) | Tangential MTF | Sagittal MTF");
     println!("  -------------+----------------+-------------");
     for pt in &mtf.points {

@@ -68,12 +68,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 5. Evaluate and Compare Sags and Normal Vectors across Aperture Radius
     println!("Evaluating Surface Profiles across Radial Aperture (r from 0 to 15 mm):");
-    println!(
-        "  Radius (mm) | Sphere Sag | Parabola Sag | Hyperbola Sag | Even Asph Sag | Forbes Qcon | Zernike Sag"
-    );
-    println!(
-        "  ------------+------------+--------------+---------------+---------------+-------------+------------"
-    );
+    println!("  Radius (mm) | Sphere Sag | Parabola Sag | Hyperbola Sag | Even Asph Sag | Forbes Qcon | Zernike Sag");
+    println!("  ------------+------------+--------------+---------------+---------------+-------------+------------");
 
     let radii = [0.0, 3.0, 6.0, 9.0, 12.0, 15.0];
     for &r in &radii {

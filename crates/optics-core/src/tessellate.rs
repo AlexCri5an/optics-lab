@@ -18,11 +18,7 @@ fn evaluate_surface_sag(r: f64, radius_mm: f64, conic_constant: f64) -> f64 {
     }
     let c = 1.0 / radius_mm;
     let radicand = 1.0 - (1.0 + conic_constant) * c * c * r * r;
-    let s = if radicand <= 0.0 {
-        0.0
-    } else {
-        radicand.sqrt()
-    };
+    let s = if radicand <= 0.0 { 0.0 } else { radicand.sqrt() };
     (c * r * r) / (1.0 + s)
 }
 
@@ -89,23 +85,9 @@ pub fn tessellate_conic_surface(
         let v_next = vertices[1][next_slice as usize];
 
         let tri_res = if normal_faces_positive_z {
-            Triangle::new(
-                center,
-                v_curr,
-                v_next,
-                surface_index,
-                medium_inside,
-                medium_outside,
-            )
+            Triangle::new(center, v_curr, v_next, surface_index, medium_inside, medium_outside)
         } else {
-            Triangle::new(
-                center,
-                v_next,
-                v_curr,
-                surface_index,
-                medium_inside,
-                medium_outside,
-            )
+            Triangle::new(center, v_next, v_curr, surface_index, medium_inside, medium_outside)
         };
 
         if let Ok(tri) = tri_res {
@@ -129,25 +111,17 @@ pub fn tessellate_conic_surface(
             let v11 = vertices[r_next][s_next];
 
             if normal_faces_positive_z {
-                if let Ok(t1) =
-                    Triangle::new(v00, v10, v11, surface_index, medium_inside, medium_outside)
-                {
+                if let Ok(t1) = Triangle::new(v00, v10, v11, surface_index, medium_inside, medium_outside) {
                     triangles.push(t1);
                 }
-                if let Ok(t2) =
-                    Triangle::new(v00, v11, v01, surface_index, medium_inside, medium_outside)
-                {
+                if let Ok(t2) = Triangle::new(v00, v11, v01, surface_index, medium_inside, medium_outside) {
                     triangles.push(t2);
                 }
             } else {
-                if let Ok(t1) =
-                    Triangle::new(v00, v11, v10, surface_index, medium_inside, medium_outside)
-                {
+                if let Ok(t1) = Triangle::new(v00, v11, v10, surface_index, medium_inside, medium_outside) {
                     triangles.push(t1);
                 }
-                if let Ok(t2) =
-                    Triangle::new(v00, v01, v11, surface_index, medium_inside, medium_outside)
-                {
+                if let Ok(t2) = Triangle::new(v00, v01, v11, surface_index, medium_inside, medium_outside) {
                     triangles.push(t2);
                 }
             }
@@ -199,11 +173,7 @@ pub fn tessellate_lens_rim(
 /// * `slices` - Azimuthal angular divisions (e.g. 32).
 /// * `rings` - Radial concentric rings per surface (e.g. 16).
 #[must_use]
-pub fn prescription_to_trimesh(
-    prescription: &OpticalPrescription,
-    slices: u32,
-    rings: u32,
-) -> Vec<Triangle> {
+pub fn prescription_to_trimesh(prescription: &OpticalPrescription, slices: u32, rings: u32) -> Vec<Triangle> {
     let (triangles, _) = prescription_to_trimesh_with_materials(prescription, slices, rings);
     triangles
 }
@@ -242,14 +212,13 @@ pub fn prescription_to_trimesh_with_materials(
     let mut vertex_z = Vec::with_capacity(prescription.surfaces.len());
     let mut current_z = 0.0_f64;
 
-    let start_idx = if prescription.surfaces[0].thickness_mm.is_infinite()
-        || prescription.surfaces[0].thickness_mm > 1e5
-    {
-        vertex_z.push(0.0);
-        1
-    } else {
-        0
-    };
+    let start_idx =
+        if prescription.surfaces[0].thickness_mm.is_infinite() || prescription.surfaces[0].thickness_mm > 1e5 {
+            vertex_z.push(0.0);
+            1
+        } else {
+            0
+        };
 
     for surf in prescription.surfaces.iter().skip(start_idx) {
         vertex_z.push(current_z);
@@ -326,8 +295,7 @@ pub fn prescription_to_trimesh_with_materials(
                 back_perimeter.push(Vec3::new(r_back * cos_t, r_back * sin_t, z_edge_b));
             }
 
-            let rim_triangles =
-                tessellate_lens_rim(&front_perimeter, &back_perimeter, i, mat_id, 0);
+            let rim_triangles = tessellate_lens_rim(&front_perimeter, &back_perimeter, i, mat_id, 0);
             all_triangles.extend(rim_triangles);
 
             // Advance past the back surface of this element

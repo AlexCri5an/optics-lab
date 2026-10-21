@@ -6,17 +6,13 @@
 //! - Step-by-step single cycle execution and multi-iteration runs.
 //! - Non-destructive experimentation with instantaneous "Revert" functionality.
 
-use egui::{
-    Button, Color32, CornerRadius, DragValue, Frame, Image, Margin, RichText, ScrollArea, Stroke,
-    Ui, Vec2,
-};
+use egui::{Button, Color32, CornerRadius, DragValue, Frame, Image, Margin, RichText, ScrollArea, Stroke, Ui, Vec2};
 use optics_core::OpticalPrescription;
 use optics_core::prescription::calculate_paraxial_properties;
 use optics_glass::catalog::GlassCatalogDb;
 use optics_optimize::{
-    DlsConfig, DlsOptimizer, GlassHammerConfig, GlassHammerOptimizer, MeritFunction, MeritOperand,
-    MultiStartConfig, MultiStartOptimizer, OperandType, SimulatedAnnealingConfig,
-    SimulatedAnnealingOptimizer, VariableSet, VariableType,
+    DlsConfig, DlsOptimizer, GlassHammerConfig, GlassHammerOptimizer, MeritFunction, MeritOperand, MultiStartConfig,
+    MultiStartOptimizer, OperandType, SimulatedAnnealingConfig, SimulatedAnnealingOptimizer, VariableSet, VariableType,
 };
 
 use crate::icons::LucideIcon;
@@ -168,10 +164,7 @@ impl OptimizationModalState {
 
 /// Constructs the `VariableSet` from the active flags in `LensEditorState`.
 #[must_use]
-pub fn build_variable_set(
-    editor_state: &LensEditorState,
-    prescription: &OpticalPrescription,
-) -> VariableSet {
+pub fn build_variable_set(editor_state: &LensEditorState, prescription: &OpticalPrescription) -> VariableSet {
     let mut vars = VariableSet::new();
     let n_surfaces = prescription.surfaces.len();
 
@@ -198,10 +191,7 @@ pub fn build_variable_set(
 
 /// Constructs the `MeritFunction` based on active user constraints.
 #[must_use]
-pub fn build_merit_function(
-    prescription: &OpticalPrescription,
-    opt_state: &OptimizationModalState,
-) -> MeritFunction {
+pub fn build_merit_function(prescription: &OpticalPrescription, opt_state: &OptimizationModalState) -> MeritFunction {
     let mut mf = MeritFunction::new();
     let prim_wl = prescription
         .wavelengths_nm
@@ -236,9 +226,7 @@ pub fn build_merit_function(
     if opt_state.target_efl_enabled {
         mf.add_operand(MeritOperand::new(
             "TARGET_EFL",
-            OperandType::EffectiveFocalLength {
-                wavelength_nm: prim_wl,
-            },
+            OperandType::EffectiveFocalLength { wavelength_nm: prim_wl },
             opt_state.target_efl_value,
             opt_state.target_efl_weight,
         ));
@@ -299,14 +287,19 @@ pub fn execute_optimization_cycle(
     // Check prerequisites based on algorithm
     if opt_state.algorithm == OptimizationAlgorithm::GlassSubstitution {
         // Hammer requires at least one lens element (non-air surface)
-        let has_elements = prescription.surfaces.iter().take(n_surfaces.saturating_sub(1)).any(|s| {
-            !s.material_name.is_empty() && s.material_name.to_uppercase() != "AIR"
-        });
+        let has_elements = prescription
+            .surfaces
+            .iter()
+            .take(n_surfaces.saturating_sub(1))
+            .any(|s| !s.material_name.is_empty() && s.material_name.to_uppercase() != "AIR");
         if !has_elements {
             return Err("Glass Substitution requires at least one optical element with glass material.".to_string());
         }
     } else if vars.num_active() == 0 {
-        return Err("No active variables. Toggle [V] on Radii, Thicknesses, or Conics in the Lens Data Editor first.".to_string());
+        return Err(
+            "No active variables. Toggle [V] on Radii, Thicknesses, or Conics in the Lens Data Editor first."
+                .to_string(),
+        );
     }
 
     let mf = build_merit_function(prescription, opt_state);
@@ -325,7 +318,8 @@ pub fn execute_optimization_cycle(
     let result = match opt_state.algorithm {
         OptimizationAlgorithm::Dls => {
             let optimizer = DlsOptimizer::new(local_dls_config);
-            optimizer.optimize(prescription, &vars, &mf, catalog, None)
+            optimizer
+                .optimize(prescription, &vars, &mf, catalog, None)
                 .map_err(|e| format!("DLS Optimization error: {}", e))?
         }
         OptimizationAlgorithm::Annealing => {
@@ -337,7 +331,8 @@ pub fn execute_optimization_cycle(
                 seed: 42,
             };
             let optimizer = SimulatedAnnealingOptimizer::new(config);
-            optimizer.optimize(prescription, &vars, &mf, catalog, None)
+            optimizer
+                .optimize(prescription, &vars, &mf, catalog, None)
                 .map_err(|e| format!("Annealing Optimization error: {}", e))?
         }
         OptimizationAlgorithm::GlobalSearch => {
@@ -348,11 +343,15 @@ pub fn execute_optimization_cycle(
                 seed: 42,
             };
             let optimizer = MultiStartOptimizer::new(config);
-            optimizer.optimize(prescription, &vars, &mf, catalog, None)
+            optimizer
+                .optimize(prescription, &vars, &mf, catalog, None)
                 .map_err(|e| format!("Global Search error: {}", e))?
         }
         OptimizationAlgorithm::GlassSubstitution => {
-            let target_surfaces: Vec<usize> = prescription.surfaces.iter().enumerate()
+            let target_surfaces: Vec<usize> = prescription
+                .surfaces
+                .iter()
+                .enumerate()
                 .take(n_surfaces.saturating_sub(1))
                 .filter(|(_, s)| !s.material_name.is_empty() && s.material_name.to_uppercase() != "AIR")
                 .map(|(i, _)| i)
@@ -366,7 +365,8 @@ pub fn execute_optimization_cycle(
                 local_dls_config,
             };
             let optimizer = GlassHammerOptimizer::new(config);
-            optimizer.optimize(prescription, &vars, &mf, catalog, None)
+            optimizer
+                .optimize(prescription, &vars, &mf, catalog, None)
                 .map_err(|e| format!("Glass Substitution error: {}", e))?
         }
     };
@@ -416,12 +416,11 @@ pub fn academic_square_checkbox_with_label(
         ui.spacing_mut().item_spacing = Vec2::new(7.0, 0.0);
         let (rect, mut box_resp) = ui.allocate_exact_size(size, egui::Sense::click());
         let label_resp = ui.add(
-            egui::Label::new(
-                RichText::new(label)
-                    .size(11.0)
-                    .strong()
-                    .color(if *checked { tokens.text_primary } else { tokens.text_muted }),
-            )
+            egui::Label::new(RichText::new(label).size(11.0).strong().color(if *checked {
+                tokens.text_primary
+            } else {
+                tokens.text_muted
+            }))
             .sense(egui::Sense::click()),
         );
 
@@ -1339,4 +1338,3 @@ mod tests {
         assert!(opt_state.history.is_empty());
     }
 }
-

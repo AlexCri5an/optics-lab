@@ -14,21 +14,17 @@
 use std::sync::Arc;
 
 use egui::{
-    Button, Color32, CornerRadius, Frame, Image, Margin, Pos2, Rect, RichText,
-    ScrollArea, Stroke, TextEdit, Ui, Vec2,
+    Button, Color32, CornerRadius, Frame, Image, Margin, Pos2, Rect, RichText, ScrollArea, Stroke, TextEdit, Ui, Vec2,
 };
 use optics_core::OpticalPrescription;
 use optics_glass::catalog::GlassCatalogDb;
 use optics_tolerance::{
-    Compensator, InverseToleranceConfig, InverseToleranceReport, InverseTolerancing,
-    MonteCarloConfig, MonteCarloReport, MonteCarloSimulator, SensitivityAnalyzer, SensitivityReport,
-    ToleranceCriterion, ToleranceDistribution, ToleranceGrade, ToleranceOperand,
-    ToleranceOperandType,
+    Compensator, InverseToleranceConfig, InverseToleranceReport, InverseTolerancing, MonteCarloConfig,
+    MonteCarloReport, MonteCarloSimulator, SensitivityAnalyzer, SensitivityReport, ToleranceCriterion,
+    ToleranceDistribution, ToleranceGrade, ToleranceOperand, ToleranceOperandType,
 };
 
-use crate::icons::{
-    lucide_small_icon_button, lucide_text_button, LucideIcon,
-};
+use crate::icons::{LucideIcon, lucide_small_icon_button, lucide_text_button};
 use crate::theme::OpticsTokens;
 
 /// Sub-navigation tabs within the Tolerancing dialog hub.
@@ -231,14 +227,9 @@ impl TolerancingModalState {
     }
 
     /// Initialize default tolerance operands if the list is empty.
-    pub fn init_if_needed(
-        &mut self,
-        prescription: &OpticalPrescription,
-        catalog: &GlassCatalogDb,
-    ) {
+    pub fn init_if_needed(&mut self, prescription: &OpticalPrescription, catalog: &GlassCatalogDb) {
         if self.operands.is_empty() {
-            self.operands =
-                ToleranceOperand::generate_default_operands(prescription, self.grade);
+            self.operands = ToleranceOperand::generate_default_operands(prescription, self.grade);
             self.operands_status = Some(format!(
                 "Generated {} default {} tolerance operands",
                 self.operands.len(),
@@ -260,8 +251,7 @@ impl TolerancingModalState {
 
     /// Reset operands to the standard defaults for the selected grade.
     pub fn reset_operands(&mut self, prescription: &OpticalPrescription) {
-        self.operands =
-            ToleranceOperand::generate_default_operands(prescription, self.grade);
+        self.operands = ToleranceOperand::generate_default_operands(prescription, self.grade);
         let msg = format!(
             "Generated {} default {} tolerance operands",
             self.operands.len(),
@@ -272,11 +262,7 @@ impl TolerancingModalState {
     }
 
     /// Execute sensitivity analysis across configured operands.
-    pub fn execute_sensitivity(
-        &mut self,
-        prescription: &OpticalPrescription,
-        catalog: &GlassCatalogDb,
-    ) {
+    pub fn execute_sensitivity(&mut self, prescription: &OpticalPrescription, catalog: &GlassCatalogDb) {
         if self.operands.is_empty() {
             self.sensitivity_status = Some("No tolerance operands defined".to_string());
             self.status_message = self.sensitivity_status.clone();
@@ -290,13 +276,7 @@ impl TolerancingModalState {
             .compensator_choice
             .to_compensator(self.compensator_surface_index, self.wavelength_nm);
 
-        match SensitivityAnalyzer::analyze(
-            prescription,
-            &self.operands,
-            &criterion,
-            &compensator,
-            catalog,
-        ) {
+        match SensitivityAnalyzer::analyze(prescription, &self.operands, &criterion, &compensator, catalog) {
             Ok(rep) => {
                 let msg = format!(
                     "Sensitivity analysis complete: {} operands evaluated. RSS degradation = {:.3} {}",
@@ -317,11 +297,7 @@ impl TolerancingModalState {
     }
 
     /// Execute Monte Carlo simulation across configured operands.
-    pub fn execute_monte_carlo(
-        &mut self,
-        prescription: &OpticalPrescription,
-        catalog: &GlassCatalogDb,
-    ) {
+    pub fn execute_monte_carlo(&mut self, prescription: &OpticalPrescription, catalog: &GlassCatalogDb) {
         if self.operands.is_empty() {
             self.monte_carlo_status = Some("No tolerance operands defined".to_string());
             self.status_message = self.monte_carlo_status.clone();
@@ -346,13 +322,7 @@ impl TolerancingModalState {
         };
 
         let sim = MonteCarloSimulator::new(config);
-        match sim.run(
-            prescription,
-            &self.operands,
-            &criterion,
-            &compensator,
-            catalog,
-        ) {
+        match sim.run(prescription, &self.operands, &criterion, &compensator, catalog) {
             Ok(rep) => {
                 let yield_str = rep
                     .yield_percent
@@ -380,11 +350,7 @@ impl TolerancingModalState {
     }
 
     /// Execute inverse tolerancing budget calculation.
-    pub fn execute_inverse(
-        &mut self,
-        prescription: &OpticalPrescription,
-        catalog: &GlassCatalogDb,
-    ) {
+    pub fn execute_inverse(&mut self, prescription: &OpticalPrescription, catalog: &GlassCatalogDb) {
         if self.operands.is_empty() {
             self.inverse_status = Some("No tolerance operands defined".to_string());
             self.status_message = self.inverse_status.clone();
@@ -404,14 +370,7 @@ impl TolerancingModalState {
             validation_trials: self.inverse_validation_trials.max(10),
         };
 
-        match InverseTolerancing::budget(
-            prescription,
-            &self.operands,
-            &criterion,
-            &compensator,
-            catalog,
-            &config,
-        ) {
+        match InverseTolerancing::budget(prescription, &self.operands, &criterion, &compensator, catalog, &config) {
             Ok(rep) => {
                 let msg = format!(
                     "Inverse budgeting complete: target yield {:.1}%, achieved yield {:.1}%.",
@@ -523,7 +482,12 @@ pub fn render_tolerancing_panel_view(
 
     let tabs: [(TolerancingSubtab, &str, LucideIcon, f32); 4] = [
         (TolerancingSubtab::Operands, "Operands", LucideIcon::Layers, w1),
-        (TolerancingSubtab::Sensitivity, "Sensitivity", LucideIcon::TrendingUp, w2),
+        (
+            TolerancingSubtab::Sensitivity,
+            "Sensitivity",
+            LucideIcon::TrendingUp,
+            w2,
+        ),
         (TolerancingSubtab::MonteCarlo, "Monte Carlo", LucideIcon::BarChart2, w3),
         (TolerancingSubtab::Inverse, "Inverse Budget", LucideIcon::Target, w4),
     ];
@@ -539,17 +503,15 @@ pub fn render_tolerancing_panel_view(
                 .tint(text_color)
                 .fit_to_exact_size(Vec2::splat(12.0));
 
-            let btn = Button::image_and_text(
-                img,
-                RichText::new(title)
-                    .size(10.5)
-                    .strong()
-                    .color(text_color),
-            )
-            .min_size(Vec2::new(btn_w, 24.0))
-            .fill(bg_color)
-            .stroke(if selected { Stroke::new(1.0, tokens.accent) } else { tokens.border })
-            .corner_radius(CornerRadius::ZERO);
+            let btn = Button::image_and_text(img, RichText::new(title).size(10.5).strong().color(text_color))
+                .min_size(Vec2::new(btn_w, 24.0))
+                .fill(bg_color)
+                .stroke(if selected {
+                    Stroke::new(1.0, tokens.accent)
+                } else {
+                    tokens.border
+                })
+                .corner_radius(CornerRadius::ZERO);
 
             if ui.add(btn).clicked() {
                 state.subtab = tab;
@@ -570,10 +532,8 @@ pub fn render_tolerancing_panel_view(
                 ui.set_width(ui.available_width());
                 ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
                     ui.add(
-                        egui::Label::new(
-                            RichText::new(msg).monospace().size(10.0).color(tokens.text_muted),
-                        )
-                        .wrap_mode(egui::TextWrapMode::Wrap),
+                        egui::Label::new(RichText::new(msg).monospace().size(10.0).color(tokens.text_muted))
+                            .wrap_mode(egui::TextWrapMode::Wrap),
                     );
                 });
             });
@@ -693,10 +653,7 @@ fn render_operands_tab(
         ] {
             let selected = state.grade == grade;
             if ui
-                .selectable_label(
-                    selected,
-                    RichText::new(grade.display_name()).monospace().size(10.5),
-                )
+                .selectable_label(selected, RichText::new(grade.display_name()).monospace().size(10.5))
                 .clicked()
             {
                 state.grade = grade;
@@ -785,7 +742,11 @@ fn render_operands_tab(
                                 ToleranceOperandType::SurfaceTilt { surface_index, .. } => {
                                     format!("Surf {} Tilt (TSTI)", surface_index + 1)
                                 }
-                                ToleranceOperandType::ElementWedge { front_surface, back_surface, .. } => {
+                                ToleranceOperandType::ElementWedge {
+                                    front_surface,
+                                    back_surface,
+                                    ..
+                                } => {
                                     format!("El {}-{} Wedge (TWED)", front_surface + 1, back_surface + 1)
                                 }
                                 ToleranceOperandType::GlassIndexAbbe { surface_index, .. } => {
@@ -809,7 +770,8 @@ fn render_operands_tab(
                             );
 
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                if lucide_small_icon_button(ui, LucideIcon::Trash2, "Remove operand", tokens).clicked() {
+                                if lucide_small_icon_button(ui, LucideIcon::Trash2, "Remove operand", tokens).clicked()
+                                {
                                     to_remove = Some(idx);
                                 }
                             });
@@ -874,19 +836,49 @@ fn render_operands_tab(
                                 .selected_text(RichText::new(dist_name).monospace().size(10.0))
                                 .width(95.0)
                                 .show_ui(ui, |ui| {
-                                    if ui.selectable_label(matches!(op.distribution, ToleranceDistribution::NormalTruncated { .. }), "Gaussian (3σ)").clicked() {
+                                    if ui
+                                        .selectable_label(
+                                            matches!(op.distribution, ToleranceDistribution::NormalTruncated { .. }),
+                                            "Gaussian (3σ)",
+                                        )
+                                        .clicked()
+                                    {
                                         op.distribution = ToleranceDistribution::NormalTruncated { sigma_cutoff: 3.0 };
                                     }
-                                    if ui.selectable_label(matches!(op.distribution, ToleranceDistribution::Uniform), "Uniform").clicked() {
+                                    if ui
+                                        .selectable_label(
+                                            matches!(op.distribution, ToleranceDistribution::Uniform),
+                                            "Uniform",
+                                        )
+                                        .clicked()
+                                    {
                                         op.distribution = ToleranceDistribution::Uniform;
                                     }
-                                    if ui.selectable_label(matches!(op.distribution, ToleranceDistribution::Parabolic), "Parabolic").clicked() {
+                                    if ui
+                                        .selectable_label(
+                                            matches!(op.distribution, ToleranceDistribution::Parabolic),
+                                            "Parabolic",
+                                        )
+                                        .clicked()
+                                    {
                                         op.distribution = ToleranceDistribution::Parabolic;
                                     }
-                                    if ui.selectable_label(matches!(op.distribution, ToleranceDistribution::Bimodal), "Bimodal").clicked() {
+                                    if ui
+                                        .selectable_label(
+                                            matches!(op.distribution, ToleranceDistribution::Bimodal),
+                                            "Bimodal",
+                                        )
+                                        .clicked()
+                                    {
                                         op.distribution = ToleranceDistribution::Bimodal;
                                     }
-                                    if ui.selectable_label(matches!(op.distribution, ToleranceDistribution::WorstCaseEdge), "Worst-Case Edge").clicked() {
+                                    if ui
+                                        .selectable_label(
+                                            matches!(op.distribution, ToleranceDistribution::WorstCaseEdge),
+                                            "Worst-Case Edge",
+                                        )
+                                        .clicked()
+                                    {
                                         op.distribution = ToleranceDistribution::WorstCaseEdge;
                                     }
                                 });
@@ -928,11 +920,20 @@ fn render_sensitivity_tab(
             Vec2::new(label_w, 20.0),
             egui::Layout::left_to_right(egui::Align::Center),
             |ui| {
-                ui.label(RichText::new("Criterion:").monospace().size(10.5).color(tokens.text_muted));
+                ui.label(
+                    RichText::new("Criterion:")
+                        .monospace()
+                        .size(10.5)
+                        .color(tokens.text_muted),
+                );
             },
         );
         egui::ComboBox::from_id_salt("sens_criterion")
-            .selected_text(RichText::new(state.criterion_choice.display_name()).monospace().size(10.0))
+            .selected_text(
+                RichText::new(state.criterion_choice.display_name())
+                    .monospace()
+                    .size(10.0),
+            )
             .width(combo_w)
             .show_ui(ui, |ui| {
                 for choice in [
@@ -941,7 +942,10 @@ fn render_sensitivity_tab(
                     CriterionChoice::EffectiveFocalLength,
                     CriterionChoice::BackFocalLength,
                 ] {
-                    if ui.selectable_label(state.criterion_choice == choice, choice.display_name()).clicked() {
+                    if ui
+                        .selectable_label(state.criterion_choice == choice, choice.display_name())
+                        .clicked()
+                    {
                         state.criterion_choice = choice;
                     }
                 }
@@ -956,11 +960,20 @@ fn render_sensitivity_tab(
             Vec2::new(label_w, 20.0),
             egui::Layout::left_to_right(egui::Align::Center),
             |ui| {
-                ui.label(RichText::new("Compensator:").monospace().size(10.5).color(tokens.text_muted));
+                ui.label(
+                    RichText::new("Compensator:")
+                        .monospace()
+                        .size(10.5)
+                        .color(tokens.text_muted),
+                );
             },
         );
         egui::ComboBox::from_id_salt("sens_compensator")
-            .selected_text(RichText::new(state.compensator_choice.display_name()).monospace().size(10.0))
+            .selected_text(
+                RichText::new(state.compensator_choice.display_name())
+                    .monospace()
+                    .size(10.0),
+            )
             .width(combo_w)
             .show_ui(ui, |ui| {
                 for comp in [
@@ -968,7 +981,10 @@ fn render_sensitivity_tab(
                     CompensatorChoice::ParaxialRefocus,
                     CompensatorChoice::VariableThickness,
                 ] {
-                    if ui.selectable_label(state.compensator_choice == comp, comp.display_name()).clicked() {
+                    if ui
+                        .selectable_label(state.compensator_choice == comp, comp.display_name())
+                        .clicked()
+                    {
                         state.compensator_choice = comp;
                     }
                 }
@@ -982,14 +998,11 @@ fn render_sensitivity_tab(
         let img = Image::from_bytes(icon.uri(), icon.svg_content().as_bytes())
             .tint(tokens.accent)
             .fit_to_exact_size(Vec2::splat(13.0));
-        let btn = egui::Button::image_and_text(
-            img,
-            RichText::new("Run Sensitivity Analysis").monospace().size(10.5),
-        )
-        .min_size(Vec2::new(ctrl_w, 22.0))
-        .fill(tokens.bg_control)
-        .stroke(tokens.border)
-        .corner_radius(CornerRadius::ZERO);
+        let btn = egui::Button::image_and_text(img, RichText::new("Run Sensitivity Analysis").monospace().size(10.5))
+            .min_size(Vec2::new(ctrl_w, 22.0))
+            .fill(tokens.bg_control)
+            .stroke(tokens.border)
+            .corner_radius(CornerRadius::ZERO);
 
         if ui.add(btn).clicked() {
             state.execute_sensitivity(prescription, catalog);
@@ -1030,7 +1043,12 @@ fn render_sensitivity_tab(
                         );
                     });
                     cols[2].vertical_centered(|ui| {
-                        ui.label(RichText::new("WORST SUM").monospace().size(9.0).color(tokens.text_muted));
+                        ui.label(
+                            RichText::new("WORST SUM")
+                                .monospace()
+                                .size(9.0)
+                                .color(tokens.text_muted),
+                        );
                         ui.label(
                             RichText::new(format!("{:.3}", rep.worst_case_degradation))
                                 .monospace()
@@ -1097,18 +1115,17 @@ fn render_sensitivity_tab(
 
                                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                     ui.label(
-                                        RichText::new(format!("{:.4} {}", rec.max_degradation, state.criterion_choice.unit()))
-                                            .monospace()
-                                            .strong()
-                                            .size(10.5)
-                                            .color(tokens.warning),
+                                        RichText::new(format!(
+                                            "{:.4} {}",
+                                            rec.max_degradation,
+                                            state.criterion_choice.unit()
+                                        ))
+                                        .monospace()
+                                        .strong()
+                                        .size(10.5)
+                                        .color(tokens.warning),
                                     );
-                                    ui.label(
-                                        RichText::new("Impact:")
-                                            .monospace()
-                                            .size(9.5)
-                                            .color(tokens.text_muted),
-                                    );
+                                    ui.label(RichText::new("Impact:").monospace().size(9.5).color(tokens.text_muted));
                                 });
                             });
 
@@ -1118,7 +1135,8 @@ fn render_sensitivity_tab(
                             let bar_ratio = (rec.max_degradation / max_deg_overall).clamp(0.0, 1.0) as f32;
                             let full_w = ui.available_width();
                             let (rect, _) = ui.allocate_exact_size(Vec2::new(full_w, 5.0), egui::Sense::hover());
-                            ui.painter().rect_filled(rect, CornerRadius::ZERO, tokens.bg_control_hovered);
+                            ui.painter()
+                                .rect_filled(rect, CornerRadius::ZERO, tokens.bg_control_hovered);
                             let fill_rect = Rect::from_min_size(rect.min, Vec2::new(full_w * bar_ratio, 5.0));
                             ui.painter().rect_filled(fill_rect, CornerRadius::ZERO, tokens.accent);
 
@@ -1137,14 +1155,22 @@ fn render_sensitivity_tab(
                                     RichText::new(format!("+T: {:+.3}", rec.delta_plus))
                                         .monospace()
                                         .size(9.5)
-                                        .color(if rec.delta_plus > 0.0 { tokens.warning } else { tokens.success }),
+                                        .color(if rec.delta_plus > 0.0 {
+                                            tokens.warning
+                                        } else {
+                                            tokens.success
+                                        }),
                                 );
                                 ui.label(RichText::new("|").size(9.0).color(tokens.border.color));
                                 ui.label(
                                     RichText::new(format!("-T: {:+.3}", rec.delta_minus))
                                         .monospace()
                                         .size(9.5)
-                                        .color(if rec.delta_minus > 0.0 { tokens.warning } else { tokens.success }),
+                                        .color(if rec.delta_minus > 0.0 {
+                                            tokens.warning
+                                        } else {
+                                            tokens.success
+                                        }),
                                 );
                             });
                         });
@@ -1187,7 +1213,13 @@ fn render_monte_carlo_tab(
         );
         if state.yield_threshold_enabled {
             let unit = state.criterion_choice.unit();
-            float_input(ui, egui::Id::new("mc_spec_limit_inp"), &mut state.yield_threshold_value, 46.0, 2);
+            float_input(
+                ui,
+                egui::Id::new("mc_spec_limit_inp"),
+                &mut state.yield_threshold_value,
+                46.0,
+                2,
+            );
             ui.label(RichText::new(unit).monospace().size(10.0).color(tokens.text_muted));
         }
     });
@@ -1199,14 +1231,11 @@ fn render_monte_carlo_tab(
         let img = Image::from_bytes(icon.uri(), icon.svg_content().as_bytes())
             .tint(tokens.accent)
             .fit_to_exact_size(Vec2::splat(13.0));
-        let btn = egui::Button::image_and_text(
-            img,
-            RichText::new("Run Monte Carlo Simulation").monospace().size(10.5),
-        )
-        .min_size(Vec2::new(240.0, 22.0))
-        .fill(tokens.bg_control)
-        .stroke(tokens.border)
-        .corner_radius(CornerRadius::ZERO);
+        let btn = egui::Button::image_and_text(img, RichText::new("Run Monte Carlo Simulation").monospace().size(10.5))
+            .min_size(Vec2::new(240.0, 22.0))
+            .fill(tokens.bg_control)
+            .stroke(tokens.border)
+            .corner_radius(CornerRadius::ZERO);
 
         if ui.add(btn).clicked() {
             state.execute_monte_carlo(prescription, catalog);
@@ -1232,26 +1261,49 @@ fn render_monte_carlo_tab(
                         ui.set_width(ui.available_width());
                         ui.columns(2, |cols| {
                             cols[0].vertical(|ui| {
-                                ui.label(RichText::new("NOMINAL VALUE").monospace().size(9.0).color(tokens.text_muted));
                                 ui.label(
-                                    RichText::new(format!("{:.3} {}", rep.nominal_value, state.criterion_choice.unit()))
+                                    RichText::new("NOMINAL VALUE")
                                         .monospace()
-                                        .strong()
-                                        .size(10.5)
-                                        .color(tokens.text_primary),
+                                        .size(9.0)
+                                        .color(tokens.text_muted),
+                                );
+                                ui.label(
+                                    RichText::new(format!(
+                                        "{:.3} {}",
+                                        rep.nominal_value,
+                                        state.criterion_choice.unit()
+                                    ))
+                                    .monospace()
+                                    .strong()
+                                    .size(10.5)
+                                    .color(tokens.text_primary),
                                 );
                                 ui.add_space(4.0);
-                                ui.label(RichText::new("MEDIAN P50").monospace().size(9.0).color(tokens.text_muted));
                                 ui.label(
-                                    RichText::new(format!("{:.3} {}", rep.percentiles.p50, state.criterion_choice.unit()))
+                                    RichText::new("MEDIAN P50")
                                         .monospace()
-                                        .strong()
-                                        .size(10.5)
-                                        .color(tokens.accent),
+                                        .size(9.0)
+                                        .color(tokens.text_muted),
+                                );
+                                ui.label(
+                                    RichText::new(format!(
+                                        "{:.3} {}",
+                                        rep.percentiles.p50,
+                                        state.criterion_choice.unit()
+                                    ))
+                                    .monospace()
+                                    .strong()
+                                    .size(10.5)
+                                    .color(tokens.accent),
                                 );
                             });
                             cols[1].vertical(|ui| {
-                                ui.label(RichText::new("MEAN ± 1σ").monospace().size(9.0).color(tokens.text_muted));
+                                ui.label(
+                                    RichText::new("MEAN ± 1σ")
+                                        .monospace()
+                                        .size(9.0)
+                                        .color(tokens.text_muted),
+                                );
                                 ui.label(
                                     RichText::new(format!("{:.3} ± {:.3}", rep.mean, rep.std_dev))
                                         .monospace()
@@ -1260,7 +1312,12 @@ fn render_monte_carlo_tab(
                                         .color(tokens.text_primary),
                                 );
                                 ui.add_space(4.0);
-                                ui.label(RichText::new("P90 / P99").monospace().size(9.0).color(tokens.text_muted));
+                                ui.label(
+                                    RichText::new("P90 / P99")
+                                        .monospace()
+                                        .size(9.0)
+                                        .color(tokens.text_muted),
+                                );
                                 ui.label(
                                     RichText::new(format!("{:.2} / {:.2}", rep.percentiles.p90, rep.percentiles.p99))
                                         .monospace()
@@ -1289,14 +1346,24 @@ fn render_monte_carlo_tab(
                         .show(ui, |ui| {
                             ui.set_width(ui.available_width());
                             ui.horizontal(|ui| {
-                                ui.label(RichText::new("ESTIMATED PRODUCTION YIELD:").monospace().size(9.5).color(tokens.text_muted));
+                                ui.label(
+                                    RichText::new("ESTIMATED PRODUCTION YIELD:")
+                                        .monospace()
+                                        .size(9.5)
+                                        .color(tokens.text_muted),
+                                );
                                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                     ui.label(
-                                        RichText::new(format!("{:.1}% (Spec: {:.2} {})", y, state.yield_threshold_value, state.criterion_choice.unit()))
-                                            .monospace()
-                                            .strong()
-                                            .size(10.5)
-                                            .color(y_color),
+                                        RichText::new(format!(
+                                            "{:.1}% (Spec: {:.2} {})",
+                                            y,
+                                            state.yield_threshold_value,
+                                            state.criterion_choice.unit()
+                                        ))
+                                        .monospace()
+                                        .strong()
+                                        .size(10.5)
+                                        .color(y_color),
                                     );
                                 });
                             });
@@ -1324,7 +1391,8 @@ fn render_monte_carlo_tab(
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing.x = 3.0;
                         let (rect, _) = ui.allocate_exact_size(Vec2::new(8.0, 3.0), egui::Sense::hover());
-                        ui.painter().rect_filled(rect, CornerRadius::ZERO, Color32::from_rgb(0, 210, 255));
+                        ui.painter()
+                            .rect_filled(rect, CornerRadius::ZERO, Color32::from_rgb(0, 210, 255));
                         ui.label(RichText::new("Nominal").monospace().size(9.0).color(tokens.text_muted));
                     });
 
@@ -1349,8 +1417,14 @@ fn render_monte_carlo_tab(
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = 3.0;
                             let (rect, _) = ui.allocate_exact_size(Vec2::new(8.0, 3.0), egui::Sense::hover());
-                            ui.painter().rect_filled(rect, CornerRadius::ZERO, Color32::from_rgb(220, 50, 50));
-                            ui.label(RichText::new("Limit").monospace().size(9.0).color(Color32::from_rgb(220, 50, 50)));
+                            ui.painter()
+                                .rect_filled(rect, CornerRadius::ZERO, Color32::from_rgb(220, 50, 50));
+                            ui.label(
+                                RichText::new("Limit")
+                                    .monospace()
+                                    .size(9.0)
+                                    .color(Color32::from_rgb(220, 50, 50)),
+                            );
                         });
                     }
                 });
@@ -1391,7 +1465,8 @@ fn render_monte_carlo_tab(
 
                         if ui.add(load_btn).clicked() {
                             action = Some(TolerancingAction::PrescriptionModified(worst_presc.clone()));
-                            state.monte_carlo_status = Some("Loaded worst-case Monte Carlo prescription into editor".to_string());
+                            state.monte_carlo_status =
+                                Some("Loaded worst-case Monte Carlo prescription into editor".to_string());
                             state.status_message = state.monte_carlo_status.clone();
                         }
                     });
@@ -1471,10 +1546,7 @@ fn render_production_histogram(
         let x_end = x_start + bin_w_px - 1.0;
         let y_top = plot_rect.max.y - bar_h;
 
-        let bar_rect = Rect::from_min_max(
-            Pos2::new(x_start, y_top),
-            Pos2::new(x_end, plot_rect.max.y),
-        );
+        let bar_rect = Rect::from_min_max(Pos2::new(x_start, y_top), Pos2::new(x_end, plot_rect.max.y));
 
         // Color coding: If bin is beyond threshold limit, color amber/red
         let is_failed = state.yield_threshold_enabled && *b_start > state.yield_threshold_value;
@@ -1515,7 +1587,10 @@ fn render_production_histogram(
     if state.yield_threshold_enabled {
         let x_thresh = val_to_x(state.yield_threshold_value);
         painter.line_segment(
-            [Pos2::new(x_thresh, plot_rect.min.y), Pos2::new(x_thresh, plot_rect.max.y)],
+            [
+                Pos2::new(x_thresh, plot_rect.min.y),
+                Pos2::new(x_thresh, plot_rect.max.y),
+            ],
             Stroke::new(2.0, Color32::from_rgb(220, 50, 50)),
         );
         painter.text(
@@ -1553,13 +1628,35 @@ fn render_inverse_tab(
     tokens: &OpticsTokens,
 ) {
     ui.horizontal_wrapped(|ui| {
-        ui.label(RichText::new("Target Yield:").monospace().size(10.5).color(tokens.text_muted));
-        float_input(ui, egui::Id::new("inv_target_yield_inp"), &mut state.target_yield_percent, 46.0, 1);
+        ui.label(
+            RichText::new("Target Yield:")
+                .monospace()
+                .size(10.5)
+                .color(tokens.text_muted),
+        );
+        float_input(
+            ui,
+            egui::Id::new("inv_target_yield_inp"),
+            &mut state.target_yield_percent,
+            46.0,
+            1,
+        );
         ui.label(RichText::new("%").monospace().size(10.0).color(tokens.text_muted));
 
-        ui.label(RichText::new("Spec Limit:").monospace().size(10.5).color(tokens.text_muted));
+        ui.label(
+            RichText::new("Spec Limit:")
+                .monospace()
+                .size(10.5)
+                .color(tokens.text_muted),
+        );
         let unit = state.criterion_choice.unit();
-        float_input(ui, egui::Id::new("inv_spec_limit_inp"), &mut state.inverse_performance_threshold, 52.0, 2);
+        float_input(
+            ui,
+            egui::Id::new("inv_spec_limit_inp"),
+            &mut state.inverse_performance_threshold,
+            52.0,
+            2,
+        );
         ui.label(RichText::new(unit).monospace().size(10.0).color(tokens.text_muted));
     });
 
@@ -1602,7 +1699,12 @@ fn render_inverse_tab(
                 ui.set_width(ui.available_width());
                 ui.columns(2, |cols| {
                     cols[0].vertical_centered(|ui| {
-                        ui.label(RichText::new("TARGET YIELD").monospace().size(9.0).color(tokens.text_muted));
+                        ui.label(
+                            RichText::new("TARGET YIELD")
+                                .monospace()
+                                .size(9.0)
+                                .color(tokens.text_muted),
+                        );
                         ui.label(
                             RichText::new(format!("{:.1}%", rep.target_yield_percent))
                                 .monospace()
@@ -1612,7 +1714,12 @@ fn render_inverse_tab(
                         );
                     });
                     cols[1].vertical_centered(|ui| {
-                        ui.label(RichText::new("ACHIEVED YIELD").monospace().size(9.0).color(tokens.text_muted));
+                        ui.label(
+                            RichText::new("ACHIEVED YIELD")
+                                .monospace()
+                                .size(9.0)
+                                .color(tokens.text_muted),
+                        );
                         let yield_color = if rep.achieved_yield_percent >= rep.target_yield_percent {
                             tokens.success
                         } else {
@@ -1700,13 +1807,7 @@ fn render_inverse_tab(
                                 };
 
                                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                    ui.label(
-                                        RichText::new(tag)
-                                            .monospace()
-                                            .strong()
-                                            .size(10.0)
-                                            .color(color),
-                                    );
+                                    ui.label(RichText::new(tag).monospace().strong().size(10.0).color(color));
                                 });
                             });
 
@@ -1720,12 +1821,7 @@ fn render_inverse_tab(
                                         .size(10.0)
                                         .color(tokens.text_muted),
                                 );
-                                ui.label(
-                                    RichText::new("->")
-                                        .monospace()
-                                        .size(10.0)
-                                        .color(tokens.accent),
-                                );
+                                ui.label(RichText::new("->").monospace().size(10.0).color(tokens.accent));
                                 ui.label(
                                     RichText::new(format!("Rec: ±{:.4}", item.recommended_half_width))
                                         .monospace()
@@ -1761,10 +1857,6 @@ fn render_inverse_tab(
     }
 }
 
-
-
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1783,7 +1875,7 @@ mod tests {
 
     #[test]
     fn test_tolerancing_state_initialization() -> TestResult {
-        let cooke = optics_zemax::presets::cooke_triplet_f4_5()?;
+        let cooke = optics_formats::presets::cooke_triplet_f4_5()?;
         let catalog = GlassCatalogDb::load_bundled()?;
         let mut state = TolerancingModalState::default();
 
@@ -1796,7 +1888,7 @@ mod tests {
 
     #[test]
     fn test_tolerancing_sensitivity_execution() -> TestResult {
-        let cooke = optics_zemax::presets::cooke_triplet_f4_5()?;
+        let cooke = optics_formats::presets::cooke_triplet_f4_5()?;
         let catalog = GlassCatalogDb::load_bundled()?;
         let mut state = TolerancingModalState::default();
         state.init_if_needed(&cooke, &catalog);
@@ -1813,7 +1905,7 @@ mod tests {
 
     #[test]
     fn test_tolerancing_monte_carlo_execution() -> TestResult {
-        let cooke = optics_zemax::presets::cooke_triplet_f4_5()?;
+        let cooke = optics_formats::presets::cooke_triplet_f4_5()?;
         let catalog = GlassCatalogDb::load_bundled()?;
         let mut state = TolerancingModalState::default();
         state.init_if_needed(&cooke, &catalog);
@@ -1837,7 +1929,7 @@ mod tests {
 
     #[test]
     fn test_tolerancing_inverse_budgeting_and_application() -> TestResult {
-        let cooke = optics_zemax::presets::cooke_triplet_f4_5()?;
+        let cooke = optics_formats::presets::cooke_triplet_f4_5()?;
         let catalog = GlassCatalogDb::load_bundled()?;
         let mut state = TolerancingModalState::default();
         state.init_if_needed(&cooke, &catalog);
@@ -1857,7 +1949,7 @@ mod tests {
 
     #[test]
     fn test_tolerancing_grade_reset() -> TestResult {
-        let cooke = optics_zemax::presets::cooke_triplet_f4_5()?;
+        let cooke = optics_formats::presets::cooke_triplet_f4_5()?;
         let mut state = TolerancingModalState::default();
         state.grade = ToleranceGrade::Commercial;
         state.reset_operands(&cooke);

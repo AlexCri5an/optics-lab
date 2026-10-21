@@ -2,9 +2,8 @@
 
 use optics_core::RefractiveIndex;
 use optics_spectral::dispersion::{
-    conrady_dispersion, extended_1, extended_2, extended_cauchy, handbook_of_optics_1,
-    handbook_of_optics_2, herzberger_dispersion, schott_dispersion, sellmeier_2, sellmeier_3,
-    sellmeier_4, sellmeier_5,
+    conrady_dispersion, extended_1, extended_2, extended_cauchy, handbook_of_optics_1, handbook_of_optics_2,
+    herzberger_dispersion, schott_dispersion, sellmeier_2, sellmeier_3, sellmeier_4, sellmeier_5,
 };
 use optics_spectral::sellmeier::{cauchy_dispersion, sellmeier_formula_1};
 use optics_spectral::thermal::SchottThermalModel;
@@ -204,30 +203,16 @@ impl GlassMaterial {
     pub fn refractive_index(&self, wavelength_nm: f64) -> f64 {
         let wavelength_um = wavelength_nm / 1000.0;
         match &self.dispersion {
-            DispersionModel::Sellmeier1 { b, c } => {
-                sellmeier_formula_1(wavelength_um, *b, *c).unwrap_or(self.nd)
-            }
-            DispersionModel::Sellmeier2 { a, b, c } => {
-                sellmeier_2(wavelength_um, *a, *b, *c).unwrap_or(self.nd)
-            }
-            DispersionModel::Sellmeier3 { k, l } => {
-                sellmeier_3(wavelength_um, *k, *l).unwrap_or(self.nd)
-            }
+            DispersionModel::Sellmeier1 { b, c } => sellmeier_formula_1(wavelength_um, *b, *c).unwrap_or(self.nd),
+            DispersionModel::Sellmeier2 { a, b, c } => sellmeier_2(wavelength_um, *a, *b, *c).unwrap_or(self.nd),
+            DispersionModel::Sellmeier3 { k, l } => sellmeier_3(wavelength_um, *k, *l).unwrap_or(self.nd),
             DispersionModel::Sellmeier4 { a, b, c, d, e } => {
                 sellmeier_4(wavelength_um, *a, *b, *c, *d, *e).unwrap_or(self.nd)
             }
-            DispersionModel::Sellmeier5 { k, l } => {
-                sellmeier_5(wavelength_um, *k, *l).unwrap_or(self.nd)
-            }
-            DispersionModel::Schott { a } => {
-                schott_dispersion(wavelength_um, *a).unwrap_or(self.nd)
-            }
-            DispersionModel::Herzberger { coeffs } => {
-                herzberger_dispersion(wavelength_um, *coeffs).unwrap_or(self.nd)
-            }
-            DispersionModel::Conrady { n0, a, b } => {
-                conrady_dispersion(wavelength_um, *n0, *a, *b).unwrap_or(self.nd)
-            }
+            DispersionModel::Sellmeier5 { k, l } => sellmeier_5(wavelength_um, *k, *l).unwrap_or(self.nd),
+            DispersionModel::Schott { a } => schott_dispersion(wavelength_um, *a).unwrap_or(self.nd),
+            DispersionModel::Herzberger { coeffs } => herzberger_dispersion(wavelength_um, *coeffs).unwrap_or(self.nd),
+            DispersionModel::Conrady { n0, a, b } => conrady_dispersion(wavelength_um, *n0, *a, *b).unwrap_or(self.nd),
             DispersionModel::HandbookOfOptics1 { a, b, c, d } => {
                 handbook_of_optics_1(wavelength_um, *a, *b, *c, *d).unwrap_or(self.nd)
             }
@@ -236,9 +221,7 @@ impl GlassMaterial {
             }
             DispersionModel::Extended1 { a } => extended_1(wavelength_um, *a).unwrap_or(self.nd),
             DispersionModel::Extended2 { a } => extended_2(wavelength_um, *a).unwrap_or(self.nd),
-            DispersionModel::Cauchy { a, b } => {
-                cauchy_dispersion(wavelength_um, *a, *b).unwrap_or(self.nd)
-            }
+            DispersionModel::Cauchy { a, b } => cauchy_dispersion(wavelength_um, *a, *b).unwrap_or(self.nd),
             DispersionModel::ExtendedCauchy { a, b, c, d } => {
                 extended_cauchy(wavelength_um, *a, *b, *c, *d).unwrap_or(self.nd)
             }
@@ -262,9 +245,7 @@ impl GlassMaterial {
         let n_base = self.refractive_index(wavelength_nm);
         if let Some(ref thermal) = self.thermal {
             let delta_t = temperature_c - 20.0;
-            let dn = thermal
-                .delta_n(n_base, wavelength_nm / 1000.0, delta_t)
-                .unwrap_or(0.0);
+            let dn = thermal.delta_n(n_base, wavelength_nm / 1000.0, delta_t).unwrap_or(0.0);
             n_base + dn
         } else {
             n_base
@@ -285,12 +266,16 @@ impl GlassMaterial {
         }
 
         // Below lowest tabulated wavelength
-        if wavelength_nm <= self.internal_transmittance.first().unwrap().0 {
-            return self.internal_transmittance.first().unwrap().1.clamp(0.0, 1.0);
+        if let Some(first) = self.internal_transmittance.first() {
+            if wavelength_nm <= first.0 {
+                return first.1.clamp(0.0, 1.0);
+            }
         }
         // Above highest tabulated wavelength
-        if wavelength_nm >= self.internal_transmittance.last().unwrap().0 {
-            return self.internal_transmittance.last().unwrap().1.clamp(0.0, 1.0);
+        if let Some(last) = self.internal_transmittance.last() {
+            if wavelength_nm >= last.0 {
+                return last.1.clamp(0.0, 1.0);
+            }
         }
 
         // Linear interpolation between bracketing wavelengths

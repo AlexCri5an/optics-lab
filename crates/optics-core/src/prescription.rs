@@ -21,8 +21,8 @@ use crate::fresnel::fresnel_unpolarized;
 use crate::geometry::{Air, RefractiveIndex};
 use crate::snell::snell_refract;
 use crate::surface::{
-    Aperture, BiconicSurface, CoordinateBreak, EvenAsphere, GrinProfile,
-    SurfaceProfile, SurfaceTransform, ToroidalSurface,
+    Aperture, BiconicSurface, CoordinateBreak, EvenAsphere, GrinProfile, SurfaceProfile, SurfaceTransform,
+    ToroidalSurface,
 };
 use crate::thin_film::SurfaceCoating;
 use crate::types::{BounceEvent, HitRecord, Ray, RayBounce, Vec3};
@@ -279,7 +279,12 @@ impl Default for ResolvedSurface {
     fn default() -> Self {
         Self {
             surface_index: 0,
-            conic: ConicSurface::plane(10.0).unwrap(),
+            conic: ConicSurface {
+                vertex_z: 0.0,
+                curvature: 0.0,
+                conic_constant: 0.0,
+                semi_diam_mm: 10.0,
+            },
             asphere: None,
             profile: None,
             coordinate_break: None,
@@ -323,10 +328,7 @@ impl ResolvedSurface {
     #[must_use]
     pub fn transform(&self) -> SurfaceTransform {
         self.global_transform.unwrap_or_else(|| {
-            SurfaceTransform::new(
-                Vec3::new(0.0, 0.0, self.conic.vertex_z),
-                nalgebra::Matrix3::identity(),
-            )
+            SurfaceTransform::new(Vec3::new(0.0, 0.0, self.conic.vertex_z), nalgebra::Matrix3::identity())
         })
     }
 }
@@ -356,10 +358,7 @@ impl OpticalPrescription {
     ///
     /// # Errors
     /// Returns [`OpticsError::MaterialNotFound`] if the resolver cannot locate a specified glass name.
-    pub fn resolve<R: MaterialResolver + ?Sized>(
-        &self,
-        resolver: &R,
-    ) -> Result<ResolvedPrescription, OpticsError> {
+    pub fn resolve<R: MaterialResolver + ?Sized>(&self, resolver: &R) -> Result<ResolvedPrescription, OpticsError> {
         let mut resolved_surfaces = Vec::with_capacity(self.surfaces.len());
         let mut current_origin = Vec3::zeros();
         let mut current_rotation = nalgebra::Matrix3::identity();
@@ -371,11 +370,11 @@ impl OpticalPrescription {
                 let cb_r = cb.rotation_matrix();
                 let cb_d = cb.translation();
                 if cb.tilt_first {
-                    current_rotation = current_rotation * cb_r;
+                    current_rotation *= cb_r;
                     current_origin += current_rotation * cb_d;
                 } else {
                     current_origin += current_rotation * cb_d;
-                    current_rotation = current_rotation * cb_r;
+                    current_rotation *= cb_r;
                 }
             }
 
@@ -391,12 +390,8 @@ impl OpticalPrescription {
                 surf.semi_diameter_mm
             };
 
-            let conic = ConicSurface::from_radius(
-                surf.radius_mm,
-                surf.conic_constant,
-                effective_semi_diam,
-            )?
-            .with_vertex_z(current_z);
+            let conic = ConicSurface::from_radius(surf.radius_mm, surf.conic_constant, effective_semi_diam)?
+                .with_vertex_z(current_z);
 
             let c = if surf.radius_mm.is_infinite() || surf.radius_mm.abs() < 1e-15 {
                 0.0
@@ -463,7 +458,11 @@ impl OpticalPrescription {
                         radius_mm: surf.semi_diameter_mm,
                     })
                 } else if upper.contains("AXIAL") {
-                    Some(GrinProfile::Axial { n0: 1.5, n1: 0.05, n2: 0.0 })
+                    Some(GrinProfile::Axial {
+                        n0: 1.5,
+                        n1: 0.05,
+                        n2: 0.0,
+                    })
                 } else {
                     Some(GrinProfile::Radial { n0: 1.6, a: 0.01 })
                 }
@@ -472,14 +471,13 @@ impl OpticalPrescription {
             };
 
             let trimmed = surf.material_name.trim();
-            let material: Arc<dyn RefractiveIndex + Send + Sync> =
-                if let Some(ref grin) = grin_profile {
-                    Arc::new(grin.clone())
-                } else if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("air") {
-                    Arc::new(Air)
-                } else {
-                    resolver.resolve(trimmed)?
-                };
+            let material: Arc<dyn RefractiveIndex + Send + Sync> = if let Some(ref grin) = grin_profile {
+                Arc::new(grin.clone())
+            } else if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("air") {
+                Arc::new(Air)
+            } else {
+                resolver.resolve(trimmed)?
+            };
 
             resolved_surfaces.push(ResolvedSurface {
                 surface_index: surf.surface_index,
@@ -515,11 +513,7 @@ impl OpticalPrescription {
     ///
     /// # Errors
     /// Returns [`OpticsError`] if resolution or ray tracing fails.
-    pub fn optical_throughput(
-        &self,
-        wavelength_nm: f64,
-        catalog: &dyn MaterialResolver,
-    ) -> Result<f64, OpticsError> {
+    pub fn optical_throughput(&self, wavelength_nm: f64, catalog: &dyn MaterialResolver) -> Result<f64, OpticsError> {
         let resolved = self.resolve(catalog)?;
         resolved.optical_throughput(wavelength_nm)
     }
@@ -531,12 +525,7 @@ impl ResolvedPrescription {
     /// # Errors
     /// Returns [`OpticsError`] if ray tracing fails.
     pub fn optical_throughput(&self, wavelength_nm: f64) -> Result<f64, OpticsError> {
-        let ray = Ray::new(
-            Vec3::new(0.0, 0.0, -10.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            wavelength_nm,
-            1.0,
-        )?;
+        let ray = Ray::new(Vec3::new(0.0, 0.0, -10.0), Vec3::new(0.0, 0.0, 1.0), wavelength_nm, 1.0)?;
         let path = trace_sequential(self, &ray)?;
         Ok(path.cumulative_throughput)
     }
@@ -707,9 +696,7 @@ pub fn calculate_paraxial_properties(
         let prev_surf = &prescription.surfaces[n_surfs - 2];
         let n_before = prev_surf.material.n(wavelength_nm);
         let n_after = last_surf.material.n(wavelength_nm);
-        (n_before - n_after).abs() < 1e-12
-            && last_surf.conic.curvature.abs() < 1e-12
-            && last_surf.thickness_mm == 0.0
+        (n_before - n_after).abs() < 1e-12 && last_surf.conic.curvature.abs() < 1e-12 && last_surf.thickness_mm == 0.0
     };
 
     let (efl_mm, bfl_mm, f_number) = if final_u.abs() < 1e-12 {
@@ -731,11 +718,7 @@ pub fn calculate_paraxial_properties(
     };
 
     // Entrance pupil: distance from surface 1 to stop viewed from object space
-    let stop_idx = prescription
-        .surfaces
-        .iter()
-        .position(|s| s.is_stop)
-        .unwrap_or(0);
+    let stop_idx = prescription.surfaces.iter().position(|s| s.is_stop).unwrap_or(0);
 
     let enp_pos_mm = if stop_idx == 0 {
         0.0
@@ -802,10 +785,7 @@ pub struct SequentialPathRecord {
 /// Returns [`OpticsError::RayMissedSurface`] if the ray misses any optical surface.
 /// Returns [`OpticsError::TotalInternalReflection`] if total internal reflection occurs.
 /// Returns [`OpticsError::RayVignetted`] if the ray is clipped by an aperture.
-pub fn trace_sequential(
-    prescription: &ResolvedPrescription,
-    ray: &Ray,
-) -> Result<SequentialPathRecord, OpticsError> {
+pub fn trace_sequential(prescription: &ResolvedPrescription, ray: &Ray) -> Result<SequentialPathRecord, OpticsError> {
     if prescription.surfaces.is_empty() {
         return Err(OpticsError::InvalidSurface(
             "Cannot trace through empty prescription".to_string(),
@@ -995,13 +975,8 @@ pub fn trace_sequential(
                     current_ray.energy * t_total,
                 )?;
                 let step = (surf.thickness_mm / 50.0).clamp(0.01, 0.5);
-                let (local_exit_ray, curved_pts) = crate::surface::grin::trace_grin_rk4_path(
-                    &local_in_ray,
-                    grin,
-                    surf.thickness_mm,
-                    step,
-                    2000,
-                )?;
+                let (local_exit_ray, curved_pts) =
+                    crate::surface::grin::trace_grin_rk4_path(&local_in_ray, grin, surf.thickness_mm, step, 2000)?;
                 for pt in curved_pts.into_iter().skip(1) {
                     points.push(trans.to_global_point(pt));
                 }
@@ -1278,9 +1253,7 @@ mod tests {
                 },
                 ResolvedSurface {
                     surface_index: 2,
-                    conic: ConicSurface::sphere(-35.0, 15.0)
-                        .unwrap()
-                        .with_vertex_z(4.0),
+                    conic: ConicSurface::sphere(-35.0, 15.0).unwrap().with_vertex_z(4.0),
                     asphere: None,
                     coordinate_break: None,
                     global_transform: None,
@@ -1295,9 +1268,7 @@ mod tests {
                 },
                 ResolvedSurface {
                     surface_index: 3,
-                    conic: ConicSurface::sphere(-80.0, 15.0)
-                        .unwrap()
-                        .with_vertex_z(6.0),
+                    conic: ConicSurface::sphere(-80.0, 15.0).unwrap().with_vertex_z(6.0),
                     asphere: None,
                     coordinate_break: None,
                     global_transform: None,
@@ -1488,13 +1459,7 @@ mod tests {
         let mut errors = Vec::new();
 
         for h in heights {
-            let ray = Ray::new(
-                Vec3::new(0.0, h, -10.0),
-                Vec3::new(0.0, 0.0, 1.0),
-                587.56,
-                1.0,
-            )
-            .unwrap();
+            let ray = Ray::new(Vec3::new(0.0, h, -10.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0).unwrap();
             let path = trace_sequential(&presc, &ray).unwrap();
             let final_ray = path.final_ray;
 
@@ -1567,13 +1532,7 @@ mod tests {
         let parax = calculate_paraxial_properties(&presc, 587.56).unwrap();
 
         let trace_focus = |h: f64| {
-            let ray = Ray::new(
-                Vec3::new(0.0, h, -10.0),
-                Vec3::new(0.0, 0.0, 1.0),
-                587.56,
-                1.0,
-            )
-            .unwrap();
+            let ray = Ray::new(Vec3::new(0.0, h, -10.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0).unwrap();
             let path = trace_sequential(&presc, &ray).unwrap();
             let r = path.final_ray;
             let t = -r.origin.y / r.direction.y;
@@ -1641,9 +1600,7 @@ mod tests {
                 },
                 ResolvedSurface {
                     surface_index: 2,
-                    conic: ConicSurface::from_radius(r2, k2, 20.0)
-                        .unwrap()
-                        .with_vertex_z(d),
+                    conic: ConicSurface::from_radius(r2, k2, 20.0).unwrap().with_vertex_z(d),
                     asphere: None,
                     coordinate_break: None,
                     global_transform: None,
@@ -1664,13 +1621,7 @@ mod tests {
         let mut foci = Vec::new();
 
         for h in heights {
-            let ray = Ray::new(
-                Vec3::new(0.0, h, -10.0),
-                Vec3::new(0.0, 0.0, 1.0),
-                587.56,
-                1.0,
-            )
-            .unwrap();
+            let ray = Ray::new(Vec3::new(0.0, h, -10.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0).unwrap();
             let path = trace_sequential(&presc, &ray).expect("Trace must succeed");
             let r = path.final_ray;
 
@@ -1739,13 +1690,7 @@ mod tests {
         };
 
         let trace_focal_length = |wl: f64| {
-            let ray = Ray::new(
-                Vec3::new(0.0, 1.0, -10.0),
-                Vec3::new(0.0, 0.0, 1.0),
-                wl,
-                1.0,
-            )
-            .unwrap();
+            let ray = Ray::new(Vec3::new(0.0, 1.0, -10.0), Vec3::new(0.0, 0.0, 1.0), wl, 1.0).unwrap();
             let path = trace_sequential(&presc, &ray).unwrap();
             let r = path.final_ray;
             let t = -r.origin.y / r.direction.y;
@@ -1761,12 +1706,8 @@ mod tests {
         );
 
         // Compare with paraxial prediction
-        let parax_blue = calculate_paraxial_properties(&presc, 486.13)
-            .unwrap()
-            .bfl_mm;
-        let parax_red = calculate_paraxial_properties(&presc, 656.27)
-            .unwrap()
-            .bfl_mm;
+        let parax_blue = calculate_paraxial_properties(&presc, 486.13).unwrap().bfl_mm;
+        let parax_red = calculate_paraxial_properties(&presc, 656.27).unwrap().bfl_mm;
         assert!((bfl_blue - parax_blue).abs() < 0.05);
         assert!((bfl_red - parax_red).abs() < 0.05);
     }
@@ -1798,9 +1739,7 @@ mod tests {
                 },
                 ResolvedSurface {
                     surface_index: 2,
-                    conic: ConicSurface::sphere(-50.0, 15.0)
-                        .unwrap()
-                        .with_vertex_z(5.0),
+                    conic: ConicSurface::sphere(-50.0, 15.0).unwrap().with_vertex_z(5.0),
                     asphere: None,
                     coordinate_break: None,
                     global_transform: None,
@@ -1816,13 +1755,7 @@ mod tests {
             ],
         };
 
-        let ray = Ray::new(
-            Vec3::new(0.0, 2.0, -10.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )
-        .unwrap();
+        let ray = Ray::new(Vec3::new(0.0, 2.0, -10.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0).unwrap();
         let path = trace_sequential(&presc, &ray).unwrap();
 
         let mut expected_t = 1.0_f64;
@@ -1890,13 +1823,7 @@ mod tests {
             ],
         };
 
-        let start_ray = Ray::new(
-            Vec3::new(0.0, 2.5, -10.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )
-        .unwrap();
+        let start_ray = Ray::new(Vec3::new(0.0, 2.5, -10.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0).unwrap();
 
         let fwd_path = trace_sequential(&forward, &start_ray).unwrap();
         let p_final = fwd_path.hits[1].point;
@@ -2032,7 +1959,7 @@ mod tests {
         };
 
         // Aspheric prescription with higher-order even polynomial coefficients [alpha2, alpha4, alpha6]
-        // In Zemax EVENASPH convention:
+        // In standard EVENASPH convention:
         // alpha2 = 0.0 (paraxial power unchanged)
         // alpha4 < 0 flattens the lens periphery to eliminate spherical aberration
         let aspheric_rx = OpticalPrescription {
@@ -2093,13 +2020,7 @@ mod tests {
         assert!((parax_sph.bfl_mm - parax_asph.bfl_mm).abs() < 1e-10);
 
         // Trace a marginal ray at h = 7.0 mm (near edge of aperture)
-        let ray = Ray::new(
-            Vec3::new(0.0, 7.0, -10.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )
-        .unwrap();
+        let ray = Ray::new(Vec3::new(0.0, 7.0, -10.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0).unwrap();
 
         let path_sph = trace_sequential(&resolved_sph, &ray).unwrap();
         let path_asph = trace_sequential(&resolved_asph, &ray).unwrap();
@@ -2117,7 +2038,10 @@ mod tests {
         let asph_err = (real_bfl_asph - parax_asph.bfl_mm).abs();
 
         // The spherical lens suffers severe spherical aberration (~0.55 mm focal shift)
-        assert!(sph_err > 0.4, "Spherical lens must have noticeable spherical aberration: got {sph_err}");
+        assert!(
+            sph_err > 0.4,
+            "Spherical lens must have noticeable spherical aberration: got {sph_err}"
+        );
 
         // The asphere reduces spherical aberration by over 97% (from 0.55 mm to 0.012 mm)!
         assert!(
@@ -2179,9 +2103,8 @@ mod tests {
             ],
         };
 
-        let resolver = |_mat: &str| -> Result<Arc<dyn RefractiveIndex + Send + Sync>, OpticsError> {
-            Ok(Arc::new(Air))
-        };
+        let resolver =
+            |_mat: &str| -> Result<Arc<dyn RefractiveIndex + Send + Sync>, OpticsError> { Ok(Arc::new(Air)) };
 
         let resolved = rx.resolve(&resolver).unwrap();
 
@@ -2192,13 +2115,7 @@ mod tests {
         assert!((s2_trans.origin.z - 10.0).abs() < 1e-12);
 
         // Trace on-axis ray from (0, 0, -5) along +z
-        let ray = Ray::new(
-            Vec3::new(0.0, 0.0, -5.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )
-        .unwrap();
+        let ray = Ray::new(Vec3::new(0.0, 0.0, -5.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0).unwrap();
 
         let path = trace_sequential(&resolved, &ray).unwrap();
 
@@ -2276,18 +2193,16 @@ mod tests {
         let resolved = rx.resolve(&resolver).unwrap();
 
         // Trace off-axis parallel ray at h = 1.0 mm
-        let ray = Ray::new(
-            Vec3::new(0.0, 1.0, -5.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )
-        .unwrap();
+        let ray = Ray::new(Vec3::new(0.0, 1.0, -5.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0).unwrap();
 
         let path = trace_sequential(&resolved, &ray).unwrap();
 
         // 1. Ray trajectory through GRIN must record intermediate curved points
-        assert!(path.points.len() > 10, "GRIN path must contain curved points: got {}", path.points.len());
+        assert!(
+            path.points.len() > 10,
+            "GRIN path must contain curved points: got {}",
+            path.points.len()
+        );
 
         // 2. The ray must bend toward the optical axis and arrive near the axis at quarter pitch z = z_f
         let final_hit = path.hits.last().unwrap();
@@ -2299,7 +2214,11 @@ mod tests {
         );
 
         // 3. Ray exits directed toward the axis (negative y-direction)
-        assert!(path.final_ray.direction.y < -0.05, "Exit ray must deflect toward axis: got dy = {}", path.final_ray.direction.y);
+        assert!(
+            path.final_ray.direction.y < -0.05,
+            "Exit ray must deflect toward axis: got dy = {}",
+            path.final_ray.direction.y
+        );
     }
 
     #[test]
@@ -2367,23 +2286,11 @@ mod tests {
         let resolved = rx.resolve(&resolver).unwrap();
 
         // 1. Trace marginal ray in X-Z meridian at x = 4.0 mm, y = 0.0 mm
-        let ray_x = Ray::new(
-            Vec3::new(4.0, 0.0, -10.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )
-        .unwrap();
+        let ray_x = Ray::new(Vec3::new(4.0, 0.0, -10.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0).unwrap();
         let path_x = trace_sequential(&resolved, &ray_x).unwrap();
 
         // 2. Trace marginal ray in Y-Z meridian at x = 0.0 mm, y = 4.0 mm
-        let ray_y = Ray::new(
-            Vec3::new(0.0, 4.0, -10.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )
-        .unwrap();
+        let ray_y = Ray::new(Vec3::new(0.0, 4.0, -10.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0).unwrap();
         let path_y = trace_sequential(&resolved, &ray_y).unwrap();
 
         // Both rays hit surface 1 and emerge from back surface
@@ -2391,11 +2298,19 @@ mod tests {
         let exit_ray_y = &path_y.final_ray;
 
         // X marginal ray must deflect toward optical axis in X: dx < 0
-        assert!(exit_ray_x.direction.x < -0.01, "X-marginal ray must converge: dx = {}", exit_ray_x.direction.x);
+        assert!(
+            exit_ray_x.direction.x < -0.01,
+            "X-marginal ray must converge: dx = {}",
+            exit_ray_x.direction.x
+        );
         assert!(exit_ray_x.direction.y.abs() < 1e-12);
 
         // Y marginal ray must deflect toward optical axis in Y: dy < 0
-        assert!(exit_ray_y.direction.y < -0.01, "Y-marginal ray must converge: dy = {}", exit_ray_y.direction.y);
+        assert!(
+            exit_ray_y.direction.y < -0.01,
+            "Y-marginal ray must converge: dy = {}",
+            exit_ray_y.direction.y
+        );
         assert!(exit_ray_y.direction.x.abs() < 1e-12);
 
         // Stronger curvature along X (Rx = 50 vs Ry = 100) causes greater angular deviation in X than in Y!
@@ -2459,50 +2374,32 @@ mod tests {
 
         // 1. Ray near the corner at (9.5, 5.5): r = sqrt(9.5^2 + 5.5^2) = 10.977 mm > 10.0 mm
         // Must PASS because it is strictly within |x| <= 10.0 and |y| <= 6.0!
-        let ray_corner = Ray::new(
-            Vec3::new(9.5, 5.5, -5.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )
-        .unwrap();
-        assert!(trace_sequential(&resolved, &ray_corner).is_ok(), "Corner ray within rectangle must transmit");
+        let ray_corner = Ray::new(Vec3::new(9.5, 5.5, -5.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0).unwrap();
+        assert!(
+            trace_sequential(&resolved, &ray_corner).is_ok(),
+            "Corner ray within rectangle must transmit"
+        );
 
         // 2. Ray at (10.5, 0.0): outside in X (|x| > 10.0) -> must vignette
-        let ray_x_out = Ray::new(
-            Vec3::new(10.5, 0.0, -5.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )
-        .unwrap();
+        let ray_x_out = Ray::new(Vec3::new(10.5, 0.0, -5.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0).unwrap();
         match trace_sequential(&resolved, &ray_x_out) {
             Err(OpticsError::RayVignetted { surface_index, .. }) => assert_eq!(surface_index, 1),
             other => panic!("Expected RayVignetted, got {:?}", other),
         }
 
         // 3. Ray at (0.0, 6.5): outside in Y (|y| > 6.0) -> must vignette
-        let ray_y_out = Ray::new(
-            Vec3::new(0.0, 6.5, -5.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )
-        .unwrap();
+        let ray_y_out = Ray::new(Vec3::new(0.0, 6.5, -5.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0).unwrap();
         match trace_sequential(&resolved, &ray_y_out) {
             Err(OpticsError::RayVignetted { surface_index, .. }) => assert_eq!(surface_index, 1),
             other => panic!("Expected RayVignetted, got {:?}", other),
         }
 
         // 4. Ray at (9.5, 6.5): inside X bound but outside Y bound -> must vignette
-        let ray_corner_out = Ray::new(
-            Vec3::new(9.5, 6.5, -5.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )
-        .unwrap();
-        assert!(matches!(trace_sequential(&resolved, &ray_corner_out), Err(OpticsError::RayVignetted { .. })));
+        let ray_corner_out = Ray::new(Vec3::new(9.5, 6.5, -5.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0).unwrap();
+        assert!(matches!(
+            trace_sequential(&resolved, &ray_corner_out),
+            Err(OpticsError::RayVignetted { .. })
+        ));
     }
 
     #[test]
@@ -2555,44 +2452,32 @@ mod tests {
         let resolved = rx.resolve(&resolver).unwrap();
 
         // 1. On-axis ray (r = 0.0): blocked by central obscuration
-        let ray_on_axis = Ray::new(
-            Vec3::new(0.0, 0.0, -5.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )
-        .unwrap();
-        assert!(matches!(trace_sequential(&resolved, &ray_on_axis), Err(OpticsError::RayVignetted { .. })));
+        let ray_on_axis = Ray::new(Vec3::new(0.0, 0.0, -5.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0).unwrap();
+        assert!(matches!(
+            trace_sequential(&resolved, &ray_on_axis),
+            Err(OpticsError::RayVignetted { .. })
+        ));
 
         // 2. Off-axis ray inside hole (r = 2.0 mm < 3.0 mm): blocked
-        let ray_hole = Ray::new(
-            Vec3::new(0.0, 2.0, -5.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )
-        .unwrap();
-        assert!(matches!(trace_sequential(&resolved, &ray_hole), Err(OpticsError::RayVignetted { .. })));
+        let ray_hole = Ray::new(Vec3::new(0.0, 2.0, -5.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0).unwrap();
+        assert!(matches!(
+            trace_sequential(&resolved, &ray_hole),
+            Err(OpticsError::RayVignetted { .. })
+        ));
 
         // 3. Ray within annular clear transmission zone (r = 6.0 mm: 3.0 <= r <= 10.0): transmits!
-        let ray_ring = Ray::new(
-            Vec3::new(0.0, 6.0, -5.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )
-        .unwrap();
-        assert!(trace_sequential(&resolved, &ray_ring).is_ok(), "Annular clear ring must transmit");
+        let ray_ring = Ray::new(Vec3::new(0.0, 6.0, -5.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0).unwrap();
+        assert!(
+            trace_sequential(&resolved, &ray_ring).is_ok(),
+            "Annular clear ring must transmit"
+        );
 
         // 4. Ray outside outer radius (r = 11.0 mm > 10.0 mm): blocked
-        let ray_outer = Ray::new(
-            Vec3::new(0.0, 11.0, -5.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )
-        .unwrap();
-        assert!(matches!(trace_sequential(&resolved, &ray_outer), Err(OpticsError::RayVignetted { .. })));
+        let ray_outer = Ray::new(Vec3::new(0.0, 11.0, -5.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0).unwrap();
+        assert!(matches!(
+            trace_sequential(&resolved, &ray_outer),
+            Err(OpticsError::RayVignetted { .. })
+        ));
     }
 
     #[test]
@@ -2648,44 +2533,23 @@ mod tests {
         let resolved = rx.resolve(&resolver).unwrap();
 
         // 1. Ray hitting the center of the aperture at (2.0, -1.0): transmits
-        let ray_center = Ray::new(
-            Vec3::new(2.0, -1.0, -5.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )
-        .unwrap();
+        let ray_center = Ray::new(Vec3::new(2.0, -1.0, -5.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0).unwrap();
         assert!(trace_sequential(&resolved, &ray_center).is_ok());
 
         // 2. Ray at nominal origin (0.0, 0.0): local = (-2, 1) => (-2/8)^2 + (1/4)^2 = 1/16 + 1/16 = 1/8 <= 1: transmits
-        let ray_origin = Ray::new(
-            Vec3::new(0.0, 0.0, -5.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )
-        .unwrap();
+        let ray_origin = Ray::new(Vec3::new(0.0, 0.0, -5.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0).unwrap();
         assert!(trace_sequential(&resolved, &ray_origin).is_ok());
 
         // 3. Ray at (2.0 + 7.5, -1.0) = (9.5, -1.0): local_x = 7.5 <= 8.0: transmits
-        let ray_edge_in = Ray::new(
-            Vec3::new(9.5, -1.0, -5.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )
-        .unwrap();
+        let ray_edge_in = Ray::new(Vec3::new(9.5, -1.0, -5.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0).unwrap();
         assert!(trace_sequential(&resolved, &ray_edge_in).is_ok());
 
         // 4. Ray at (2.0 + 8.5, -1.0) = (10.5, -1.0): local_x = 8.5 > 8.0: vignetted
-        let ray_edge_out = Ray::new(
-            Vec3::new(10.5, -1.0, -5.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )
-        .unwrap();
-        assert!(matches!(trace_sequential(&resolved, &ray_edge_out), Err(OpticsError::RayVignetted { .. })));
+        let ray_edge_out = Ray::new(Vec3::new(10.5, -1.0, -5.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0).unwrap();
+        assert!(matches!(
+            trace_sequential(&resolved, &ray_edge_out),
+            Err(OpticsError::RayVignetted { .. })
+        ));
     }
 
     #[test]
@@ -2743,7 +2607,11 @@ mod tests {
         let res_uncoated = make_rx(None).resolve(&cat).unwrap();
         let path_uncoated = trace_sequential(&res_uncoated, &ray).unwrap();
         let t_uncoated = path_uncoated.hits[0].bounce.t_total;
-        assert!((t_uncoated - 0.9574).abs() < 0.002, "Expected T ≈ 0.9574, got {}", t_uncoated);
+        assert!(
+            (t_uncoated - 0.9574).abs() < 0.002,
+            "Expected T ≈ 0.9574, got {}",
+            t_uncoated
+        );
 
         // 2. MgF2 (λ/4 at 550nm): R = ((1.52 - 1.38^2)/(1.52 + 1.38^2))^2 ≈ 0.0126, T ≈ 0.9874
         let res_mgf2 = make_rx(Some(SurfaceCoating::mgf2_default())).resolve(&cat).unwrap();
@@ -2763,7 +2631,11 @@ mod tests {
         let res_ideal = make_rx(Some(SurfaceCoating::IdealAr)).resolve(&cat).unwrap();
         let path_ideal = trace_sequential(&res_ideal, &ray).unwrap();
         let t_ideal = path_ideal.hits[0].bounce.t_total;
-        assert!((t_ideal - 1.0).abs() < 1e-9, "Ideal AR must have T = 1.0, got {}", t_ideal);
+        assert!(
+            (t_ideal - 1.0).abs() < 1e-9,
+            "Ideal AR must have T = 1.0, got {}",
+            t_ideal
+        );
     }
 
     #[test]
@@ -2786,7 +2658,11 @@ mod tests {
                     conic_constant: 0.0,
                     thickness_mm: if is_air_gap { 5.0 } else { 3.0 },
                     semi_diameter_mm: 15.0,
-                    material_name: if is_air_gap { "AIR".to_string() } else { "GLASS".to_string() },
+                    material_name: if is_air_gap {
+                        "AIR".to_string()
+                    } else {
+                        "GLASS".to_string()
+                    },
                     is_stop: i == 3,
                     asphere_coefficients: Vec::new(),
                     coordinate_break: None,
@@ -2824,18 +2700,40 @@ mod tests {
         };
 
         let t_uncoated = make_triplet(None).optical_throughput(550.0, &cat).unwrap();
-        let t_mgf2 = make_triplet(Some(SurfaceCoating::mgf2_default())).optical_throughput(550.0, &cat).unwrap();
-        let t_bbar = make_triplet(Some(SurfaceCoating::BroadbandAr)).optical_throughput(550.0, &cat).unwrap();
-        let t_ideal = make_triplet(Some(SurfaceCoating::IdealAr)).optical_throughput(550.0, &cat).unwrap();
+        let t_mgf2 = make_triplet(Some(SurfaceCoating::mgf2_default()))
+            .optical_throughput(550.0, &cat)
+            .unwrap();
+        let t_bbar = make_triplet(Some(SurfaceCoating::BroadbandAr))
+            .optical_throughput(550.0, &cat)
+            .unwrap();
+        let t_ideal = make_triplet(Some(SurfaceCoating::IdealAr))
+            .optical_throughput(550.0, &cat)
+            .unwrap();
 
         // 6 interfaces of ~0.957 each => 0.957^6 ≈ 0.77
-        assert!(t_uncoated < 0.80, "Uncoated triplet throughput should be < 80%, got {:.3}", t_uncoated);
+        assert!(
+            t_uncoated < 0.80,
+            "Uncoated triplet throughput should be < 80%, got {:.3}",
+            t_uncoated
+        );
         // 6 interfaces of ~0.987 each => 0.987^6 ≈ 0.925
-        assert!(t_mgf2 > 0.90, "MgF2 triplet throughput should exceed 90%, got {:.3}", t_mgf2);
+        assert!(
+            t_mgf2 > 0.90,
+            "MgF2 triplet throughput should exceed 90%, got {:.3}",
+            t_mgf2
+        );
         // 6 interfaces of BBAR => > 96%
-        assert!(t_bbar > 0.96, "BBAR triplet throughput should exceed 96%, got {:.3}", t_bbar);
+        assert!(
+            t_bbar > 0.96,
+            "BBAR triplet throughput should exceed 96%, got {:.3}",
+            t_bbar
+        );
         // Ideal AR => 1.0
-        assert!((t_ideal - 1.0).abs() < 1e-6, "Ideal AR throughput should be 1.0, got {:.6}", t_ideal);
+        assert!(
+            (t_ideal - 1.0).abs() < 1e-6,
+            "Ideal AR throughput should be 1.0, got {:.6}",
+            t_ideal
+        );
     }
 
     #[test]
@@ -2845,12 +2743,7 @@ mod tests {
             Ok(Arc::new(crate::geometry::ConstantIndex(1.5168)) as Arc<dyn RefractiveIndex + Send + Sync>)
         };
         // Singlet with Forbes Q-con on front surface
-        let qcon = ForbesQconSurface::new(
-            1.0 / 50.0,
-            -0.5,
-            12.0,
-            vec![1e-3, -2e-4, 5e-5],
-        ).unwrap();
+        let qcon = ForbesQconSurface::new(1.0 / 50.0, -0.5, 12.0, vec![1e-3, -2e-4, 5e-5]).unwrap();
 
         let prescription = OpticalPrescription {
             name: "Forbes Q-con Singlet".to_string(),
@@ -2910,12 +2803,7 @@ mod tests {
         let resolved = prescription.resolve(&cat).unwrap();
 
         // Trace marginal ray at y = 4.0 mm
-        let ray = Ray::new(
-            Vec3::new(0.0, 4.0, -10.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        ).unwrap();
+        let ray = Ray::new(Vec3::new(0.0, 4.0, -10.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0).unwrap();
 
         let path = trace_sequential(&resolved, &ray).unwrap();
         assert_eq!(path.hits.len(), 3);
@@ -2940,7 +2828,8 @@ mod tests {
             10.0,
             vec![(4, 0.005)], // Positive defocus power
             10.0,
-        ).unwrap();
+        )
+        .unwrap();
 
         let prescription = OpticalPrescription {
             name: "Zernike Defocus Plate".to_string(),
@@ -2983,17 +2872,16 @@ mod tests {
         };
 
         let resolved = prescription.resolve(&cat).unwrap();
-        let ray = Ray::new(
-            Vec3::new(0.0, 3.0, -5.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        ).unwrap();
+        let ray = Ray::new(Vec3::new(0.0, 3.0, -5.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0).unwrap();
 
         let path = trace_sequential(&resolved, &ray).unwrap();
         assert_eq!(path.hits.len(), 2);
         // Normal should deviate from (0, 0, -1) due to Z4 curvature
         let norm0 = path.hits[0].normal;
-        assert!(norm0.y.abs() > 1e-6, "Zernike surface normal should have radial component, got {:?}", norm0);
+        assert!(
+            norm0.y.abs() > 1e-6,
+            "Zernike surface normal should have radial component, got {:?}",
+            norm0
+        );
     }
 }

@@ -4,9 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender, channel};
 
-use egui::{
-    CentralPanel, Context, RichText, SidePanel, TopBottomPanel,
-};
+use egui::{CentralPanel, Context, RichText, SidePanel, TopBottomPanel};
 
 use optics_core::OpticalPrescription;
 use optics_glass::GlassCatalogDb;
@@ -16,15 +14,13 @@ use crate::glass_browser::render_materials_panel;
 use crate::icons::{LucideIcon, lucide_small_icon_button};
 use crate::layout::{Breakpoint, LayoutMetrics};
 use crate::lens_editor::{LeftPanelTab, LensEditorState, render_lens_editor};
-use crate::nonseq::{render_nonseq_bottom_drawer, NonSeqUiState};
+use crate::nonseq::{NonSeqUiState, render_nonseq_bottom_drawer};
 use crate::optimization::{OptimizationModalState, render_optimization_panel};
+use crate::raytrace_viewport::render_raytrace_viewport;
 use crate::theme::OpticsTokens;
 use crate::tolerancing::{TolerancingAction, TolerancingModalState};
 use crate::topbar::{TopBarAction, TopBarState, render_topbar};
-use crate::raytrace_viewport::render_raytrace_viewport;
-use crate::viewport::{
-    ViewportMode, ViewportState, render_optical_viewport, render_optical_viewport_3d,
-};
+use crate::viewport::{ViewportMode, ViewportState, render_optical_viewport, render_optical_viewport_3d};
 
 /// Complete snapshot of the application state for synchronized undo/redo.
 #[derive(Clone, Debug, PartialEq)]
@@ -81,11 +77,10 @@ pub struct OpticsWorkbenchApp {
 
 impl Default for OpticsWorkbenchApp {
     fn default() -> Self {
-        let prescription = optics_zemax::presets::cooke_triplet_f4_5()
-            .unwrap_or_else(|_| OpticalPrescription {
-                name: "Cooke Triplet F/4.5".to_string(),
-                ..Default::default()
-            });
+        let prescription = optics_formats::presets::cooke_triplet_f4_5().unwrap_or_else(|_| OpticalPrescription {
+            name: "Cooke Triplet F/4.5".to_string(),
+            ..Default::default()
+        });
 
         let catalog = Arc::new(GlassCatalogDb::default());
         let surf_count = prescription.surfaces.len();
@@ -144,12 +139,7 @@ impl eframe::App for OpticsWorkbenchApp {
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
         let tokens = self.tokens();
         let c = tokens.bg_panel;
-        [
-            c.r() as f32 / 255.0,
-            c.g() as f32 / 255.0,
-            c.b() as f32 / 255.0,
-            1.0,
-        ]
+        [c.r() as f32 / 255.0, c.g() as f32 / 255.0, c.b() as f32 / 255.0, 1.0]
     }
 
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
@@ -211,7 +201,7 @@ impl eframe::App for OpticsWorkbenchApp {
         visuals.selection.stroke = tokens.border_hovered;
         ctx.set_visuals(visuals);
 
-        // 2. Global Keyboard Shortcuts (VectorCraft standard)
+        // 2. Global Keyboard Shortcuts (Desktop standard)
         let cmd = ctx.input(|i| i.modifiers.command);
         let shift = ctx.input(|i| i.modifiers.shift);
         if cmd && !shift && ctx.input(|i| i.key_pressed(egui::Key::N)) {
@@ -229,9 +219,10 @@ impl eframe::App for OpticsWorkbenchApp {
         if cmd && !shift && ctx.input(|i| i.key_pressed(egui::Key::Z)) {
             self.handle_topbar_action(TopBarAction::Undo);
         }
-        if (cmd && shift && ctx.input(|i| i.key_pressed(egui::Key::Z)))
-            || (cmd && !shift && ctx.input(|i| i.key_pressed(egui::Key::Y)))
-        {
+        let is_redo = cmd
+            && ((shift && ctx.input(|i| i.key_pressed(egui::Key::Z)))
+                || (!shift && ctx.input(|i| i.key_pressed(egui::Key::Y))));
+        if is_redo {
             self.handle_topbar_action(TopBarAction::Redo);
         }
         if cmd && !shift && ctx.input(|i| i.key_pressed(egui::Key::T)) {
@@ -275,13 +266,9 @@ impl eframe::App for OpticsWorkbenchApp {
                     .inner_margin(egui::Margin::symmetric(10, 4)),
             )
             .show(ctx, |ui| {
-                if let Some(action) = render_topbar(
-                    ui,
-                    &mut self.topbar_state,
-                    &tokens,
-                    metrics.breakpoint,
-                    window_size,
-                ) {
+                if let Some(action) =
+                    render_topbar(ui, &mut self.topbar_state, &tokens, metrics.breakpoint, window_size)
+                {
                     self.handle_topbar_action(action);
                 }
             });
@@ -299,11 +286,7 @@ impl eframe::App for OpticsWorkbenchApp {
             )
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(
-                        RichText::new(&self.last_action_msg)
-                            .size(11.0)
-                            .color(tokens.accent),
-                    );
+                    ui.label(RichText::new(&self.last_action_msg).size(11.0).color(tokens.accent));
                     ui.separator();
 
                     let dirty_tag = if self.is_dirty { " [Modified *]" } else { " [Saved]" };
@@ -311,7 +294,11 @@ impl eframe::App for OpticsWorkbenchApp {
                         RichText::new(format!("{}{}", &self.status_text, dirty_tag))
                             .size(11.0)
                             .monospace()
-                            .color(if self.is_dirty { tokens.warning } else { tokens.text_muted }),
+                            .color(if self.is_dirty {
+                                tokens.warning
+                            } else {
+                                tokens.text_muted
+                            }),
                     );
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -362,7 +349,11 @@ impl eframe::App for OpticsWorkbenchApp {
                                 .strong()
                                 .color(if is_ld { tokens.accent } else { tokens.text_muted }),
                         )
-                        .fill(if is_ld { tokens.bg_control_active } else { tokens.bg_control })
+                        .fill(if is_ld {
+                            tokens.bg_control_active
+                        } else {
+                            tokens.bg_control
+                        })
                         .stroke(if is_ld { tokens.border_hovered } else { tokens.border })
                         .corner_radius(egui::CornerRadius::ZERO);
 
@@ -379,7 +370,11 @@ impl eframe::App for OpticsWorkbenchApp {
                                 .strong()
                                 .color(if is_mat { tokens.accent } else { tokens.text_muted }),
                         )
-                        .fill(if is_mat { tokens.bg_control_active } else { tokens.bg_control })
+                        .fill(if is_mat {
+                            tokens.bg_control_active
+                        } else {
+                            tokens.bg_control
+                        })
                         .stroke(if is_mat { tokens.border_hovered } else { tokens.border })
                         .corner_radius(egui::CornerRadius::ZERO);
 
@@ -403,13 +398,18 @@ impl eframe::App for OpticsWorkbenchApp {
                                 .strong()
                                 .color(if is_opt { tokens.accent } else { tokens.text_muted }),
                         )
-                        .fill(if is_opt { tokens.bg_control_active } else { tokens.bg_control })
+                        .fill(if is_opt {
+                            tokens.bg_control_active
+                        } else {
+                            tokens.bg_control
+                        })
                         .stroke(if is_opt { tokens.border_hovered } else { tokens.border })
                         .corner_radius(egui::CornerRadius::ZERO);
 
                         if ui.add(btn_opt).clicked() {
                             self.lens_editor_state.active_tab = LeftPanelTab::Optimizer;
-                            self.optimization_state.init_if_needed(&self.prescription, &self.catalog);
+                            self.optimization_state
+                                .init_if_needed(&self.prescription, &self.catalog);
                         }
 
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -427,34 +427,28 @@ impl eframe::App for OpticsWorkbenchApp {
                         opt_original_prescription: self.optimization_state.original_prescription.clone(),
                     };
                     let modified = match self.lens_editor_state.active_tab {
-                        LeftPanelTab::LensData => {
-                            render_lens_editor(
-                                ui,
-                                &mut self.prescription,
-                                &mut self.lens_editor_state,
-                                &self.catalog,
-                                &tokens,
-                            )
-                        }
-                        LeftPanelTab::Materials => {
-                            render_materials_panel(
-                                ui,
-                                &mut self.prescription,
-                                &mut self.lens_editor_state,
-                                &self.catalog,
-                                &tokens,
-                            )
-                        }
-                        LeftPanelTab::Optimizer => {
-                            render_optimization_panel(
-                                ui,
-                                &mut self.prescription,
-                                &self.lens_editor_state,
-                                &mut self.optimization_state,
-                                &self.catalog,
-                                &tokens,
-                            )
-                        }
+                        LeftPanelTab::LensData => render_lens_editor(
+                            ui,
+                            &mut self.prescription,
+                            &mut self.lens_editor_state,
+                            &self.catalog,
+                            &tokens,
+                        ),
+                        LeftPanelTab::Materials => render_materials_panel(
+                            ui,
+                            &mut self.prescription,
+                            &mut self.lens_editor_state,
+                            &self.catalog,
+                            &tokens,
+                        ),
+                        LeftPanelTab::Optimizer => render_optimization_panel(
+                            ui,
+                            &mut self.prescription,
+                            &self.lens_editor_state,
+                            &mut self.optimization_state,
+                            &self.catalog,
+                            &tokens,
+                        ),
                     };
 
                     if modified {
@@ -546,21 +540,11 @@ impl eframe::App for OpticsWorkbenchApp {
             .resizable(false)
             .exact_height(drawer_height)
             .show_separator_line(self.nonseq_state.drawer_open)
-            .frame(
-                egui::Frame::NONE
-                    .fill(tokens.bg_panel)
-                    .inner_margin(egui::Margin::ZERO),
-            )
+            .frame(egui::Frame::NONE.fill(tokens.bg_panel).inner_margin(egui::Margin::ZERO))
             .show(ctx, |ui| {
                 ui.set_max_width(ui.available_width());
                 ui.set_max_height(drawer_height);
-                render_nonseq_bottom_drawer(
-                    ui,
-                    &mut self.nonseq_state,
-                    &self.prescription,
-                    &self.catalog,
-                    &tokens,
-                );
+                render_nonseq_bottom_drawer(ui, &mut self.nonseq_state, &self.prescription, &self.catalog, &tokens);
             });
 
         // -------------------------------------------------------------------
@@ -578,32 +562,15 @@ impl eframe::App for OpticsWorkbenchApp {
 
         CentralPanel::default()
             .frame(egui::Frame::NONE.fill(tokens.bg_canvas))
-            .show(ctx, |ui| {
-                match self.viewport_state.mode {
-                    ViewportMode::Cad2D => {
-                        render_optical_viewport(
-                            ui,
-                            &self.prescription,
-                            &mut self.viewport_state,
-                            &tokens,
-                        );
-                    }
-                    ViewportMode::Cad3D => {
-                        render_optical_viewport_3d(
-                            ui,
-                            &self.prescription,
-                            &mut self.viewport_state,
-                            &tokens,
-                        );
-                    }
-                    ViewportMode::Raytrace3D => {
-                        render_raytrace_viewport(
-                            ui,
-                            &self.prescription,
-                            &mut self.viewport_state,
-                            &tokens,
-                        );
-                    }
+            .show(ctx, |ui| match self.viewport_state.mode {
+                ViewportMode::Cad2D => {
+                    render_optical_viewport(ui, &self.prescription, &mut self.viewport_state, &tokens);
+                }
+                ViewportMode::Cad3D => {
+                    render_optical_viewport_3d(ui, &self.prescription, &mut self.viewport_state, &tokens);
+                }
+                ViewportMode::Raytrace3D => {
+                    render_raytrace_viewport(ui, &self.prescription, &mut self.viewport_state, &tokens);
                 }
             });
 
@@ -654,27 +621,24 @@ impl OpticsWorkbenchApp {
                 let parse_result = match ext.as_str() {
                     "len" => {
                         let content = String::from_utf8_lossy(&bytes);
-                        optics_zemax::parse_len(&content)
+                        optics_formats::parse_len(&content)
                             .map(|sys| sys.to_optical_prescription())
                             .map_err(|e| e.to_string())
                     }
                     "seq" => {
                         let content = String::from_utf8_lossy(&bytes);
-                        optics_zemax::parse_seq(&content)
+                        optics_formats::parse_seq(&content)
                             .map(|sys| sys.to_optical_prescription())
                             .map_err(|e| e.to_string())
                     }
-                    _ => optics_zemax::parse_zmx_bytes(&bytes)
+                    _ => optics_formats::parse_zmx_bytes(&bytes)
                         .map(|sys| sys.to_optical_prescription())
                         .map_err(|e| e.to_string()),
                 };
 
                 match parse_result {
                     Ok(mut rx) => {
-                        let file_stem = path
-                            .file_stem()
-                            .and_then(|s| s.to_str())
-                            .unwrap_or("optical_system");
+                        let file_stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("optical_system");
                         let file_name = path
                             .file_name()
                             .and_then(|f| f.to_str())
@@ -717,7 +681,7 @@ impl OpticsWorkbenchApp {
         }
     }
 
-    /// Serializes and saves the optical prescription to disk in Zemax `.zmx` format.
+    /// Serializes and saves the optical prescription to disk in `.zmx` format.
     fn save_prescription_to_path(&mut self, path: &Path) {
         let file_stem = path
             .file_stem()
@@ -738,7 +702,7 @@ impl OpticsWorkbenchApp {
         self.topbar_state.is_dirty = false;
         self.add_recent_file(path.to_path_buf());
 
-        let zmx_str = optics_zemax::write_prescription_zmx(&self.prescription);
+        let zmx_str = optics_formats::write_prescription_zmx(&self.prescription);
         match std::fs::write(path, zmx_str) {
             Ok(()) => {
                 self.last_action_msg = format!("Saved prescription to '{}'", file_name);
@@ -778,7 +742,7 @@ impl OpticsWorkbenchApp {
                             grin_profile: None,
                             profile: None,
                             aperture: None,
-                    coating: None,
+                            coating: None,
                         },
                         optics_core::OpticalSurface {
                             surface_index: 2,
@@ -793,7 +757,7 @@ impl OpticsWorkbenchApp {
                             grin_profile: None,
                             profile: None,
                             aperture: None,
-                    coating: None,
+                            coating: None,
                         },
                         optics_core::OpticalSurface {
                             surface_index: 3,
@@ -808,7 +772,7 @@ impl OpticsWorkbenchApp {
                             grin_profile: None,
                             profile: None,
                             aperture: None,
-                    coating: None,
+                            coating: None,
                         },
                     ],
                 };
@@ -857,10 +821,7 @@ impl OpticsWorkbenchApp {
                 }
             }
             TopBarAction::SaveFileAs => {
-                let sanitized_name = self
-                    .prescription
-                    .name
-                    .replace(['/', '\\', ' ', ':'], "_");
+                let sanitized_name = self.prescription.name.replace(['/', '\\', ' ', ':'], "_");
                 let default_file = if sanitized_name.ends_with(".zmx") {
                     sanitized_name
                 } else {
@@ -879,26 +840,20 @@ impl OpticsWorkbenchApp {
                 self.open_prescription_from_path(&path);
             }
             TopBarAction::ExportDxf => {
-                let default_name = format!(
-                    "{}_2d.dxf",
-                    self.prescription.name.replace(['/', '\\', ' ', ':'], "_")
-                );
+                let default_name = format!("{}_2d.dxf", self.prescription.name.replace(['/', '\\', ' ', ':'], "_"));
                 if let Some(path) = rfd::FileDialog::new()
                     .set_title("Export AutoCAD DXF 2D Technical Layout")
                     .set_file_name(&default_name)
                     .add_filter("AutoCAD DXF (*.dxf)", &["dxf"])
                     .save_file()
                 {
-                    match optics_zemax::export_dxf_layout(
+                    match optics_formats::export_dxf_layout(
                         &self.prescription,
                         None,
-                        &optics_zemax::DxfConfig::default(),
+                        &optics_formats::DxfConfig::default(),
                     ) {
                         Ok(content) => match std::fs::write(&path, content) {
-                            Ok(()) => {
-                                self.last_action_msg =
-                                    format!("Exported DXF CAD to '{}'", path.display())
-                            }
+                            Ok(()) => self.last_action_msg = format!("Exported DXF CAD to '{}'", path.display()),
                             Err(e) => self.last_action_msg = format!("Error saving DXF: {}", e),
                         },
                         Err(e) => self.last_action_msg = format!("Error formatting DXF: {:?}", e),
@@ -916,15 +871,14 @@ impl OpticsWorkbenchApp {
                     .add_filter("Scalable Vector Graphics (*.svg)", &["svg"])
                     .save_file()
                 {
-                    match optics_zemax::export_svg_layout(
+                    match optics_formats::export_svg_layout(
                         &self.prescription,
                         None,
-                        &optics_zemax::SvgConfig::default(),
+                        &optics_formats::SvgConfig::default(),
                     ) {
                         Ok(content) => match std::fs::write(&path, content) {
                             Ok(()) => {
-                                self.last_action_msg =
-                                    format!("Exported SVG Vector Layout to '{}'", path.display())
+                                self.last_action_msg = format!("Exported SVG Vector Layout to '{}'", path.display())
                             }
                             Err(e) => self.last_action_msg = format!("Error saving SVG: {}", e),
                         },
@@ -943,13 +897,9 @@ impl OpticsWorkbenchApp {
                     .add_filter("Stereolithography Mesh (*.stl)", &["stl"])
                     .save_file()
                 {
-                    let stl_bytes =
-                        optics_zemax::export_stl_lens(&self.prescription, true, 48, 16);
+                    let stl_bytes = optics_formats::export_stl_lens(&self.prescription, true, 48, 16);
                     match std::fs::write(&path, stl_bytes) {
-                        Ok(()) => {
-                            self.last_action_msg =
-                                format!("Exported 3D STL to '{}'", path.display())
-                        }
+                        Ok(()) => self.last_action_msg = format!("Exported 3D STL to '{}'", path.display()),
                         Err(e) => self.last_action_msg = format!("Error saving STL: {}", e),
                     }
                 }
@@ -965,8 +915,7 @@ impl OpticsWorkbenchApp {
                     .add_filter("Wavefront 3D OBJ (*.obj)", &["obj"])
                     .save_file()
                 {
-                    let (obj_str, mtl_str) =
-                        optics_zemax::export_obj_system(&self.prescription, 32, 12);
+                    let (obj_str, mtl_str) = optics_formats::export_obj_system(&self.prescription, 32, 12);
                     let mtl_path = path.with_extension("mtl");
                     let mut ok = true;
                     if let Err(e) = std::fs::write(&path, obj_str) {
@@ -975,8 +924,7 @@ impl OpticsWorkbenchApp {
                     }
                     if ok {
                         let _ = std::fs::write(&mtl_path, mtl_str);
-                        self.last_action_msg =
-                            format!("Exported OBJ & MTL to '{}'", path.display());
+                        self.last_action_msg = format!("Exported OBJ & MTL to '{}'", path.display());
                     }
                 }
             }
@@ -991,24 +939,19 @@ impl OpticsWorkbenchApp {
                     .add_filter("ISO 10110 Markdown Sheet (*.md)", &["md", "txt"])
                     .save_file()
                 {
-                    let sheet = optics_zemax::Iso10110DrawingSheet::from_prescription(
+                    let sheet = optics_formats::Iso10110DrawingSheet::from_prescription(
                         &self.prescription,
                         Some(&self.catalog),
                     );
                     let report_md = sheet.to_markdown_table();
                     match std::fs::write(&path, report_md) {
-                        Ok(()) => {
-                            self.last_action_msg =
-                                format!("Exported ISO 10110 Sheet to '{}'", path.display())
-                        }
-                        Err(e) => {
-                            self.last_action_msg = format!("Error saving ISO 10110 sheet: {}", e)
-                        }
+                        Ok(()) => self.last_action_msg = format!("Exported ISO 10110 Sheet to '{}'", path.display()),
+                        Err(e) => self.last_action_msg = format!("Error saving ISO 10110 sheet: {}", e),
                     }
                 }
             }
             TopBarAction::LoadCookeTriplet => {
-                if let Ok(rx) = optics_zemax::presets::cooke_triplet_f4_5() {
+                if let Ok(rx) = optics_formats::presets::cooke_triplet_f4_5() {
                     self.prescription = rx;
                     self.current_file_path = None;
                     self.is_dirty = false;
@@ -1021,8 +964,7 @@ impl OpticsWorkbenchApp {
                     self.lens_editor_state.selected_surface = Some(1);
                     self.analysis_state.selected_field_deg = 0.0;
                     self.viewport_state.initialized = false;
-                    self.last_action_msg =
-                        "Loaded preset: Cooke Triplet F/4.5 (3 elements).".to_string();
+                    self.last_action_msg = "Loaded preset: Cooke Triplet F/4.5 (3 elements).".to_string();
                     self.status_text = format!(
                         "Surfaces: {} | EPD: {:.1} mm | EFL ~50mm F/4.5",
                         self.prescription.surfaces.len(),
@@ -1031,7 +973,7 @@ impl OpticsWorkbenchApp {
                 }
             }
             TopBarAction::LoadDoubleGauss => {
-                if let Ok(rx) = optics_zemax::presets::double_gauss_50mm() {
+                if let Ok(rx) = optics_formats::presets::double_gauss_50mm() {
                     self.prescription = rx;
                     self.current_file_path = None;
                     self.is_dirty = false;
@@ -1044,8 +986,7 @@ impl OpticsWorkbenchApp {
                     self.lens_editor_state.selected_surface = Some(1);
                     self.analysis_state.selected_field_deg = 0.0;
                     self.viewport_state.initialized = false;
-                    self.last_action_msg =
-                        "Loaded preset: Double Gauss F/2.0 (6 elements).".to_string();
+                    self.last_action_msg = "Loaded preset: Double Gauss F/2.0 (6 elements).".to_string();
                     self.status_text = format!(
                         "Surfaces: {} | EPD: {:.1} mm | EFL ~50mm F/2.0",
                         self.prescription.surfaces.len(),
@@ -1054,7 +995,7 @@ impl OpticsWorkbenchApp {
                 }
             }
             TopBarAction::LoadPlanoConvex => {
-                if let Ok(rx) = optics_zemax::presets::plano_convex_100mm() {
+                if let Ok(rx) = optics_formats::presets::plano_convex_100mm() {
                     self.prescription = rx;
                     self.current_file_path = None;
                     self.is_dirty = false;
@@ -1152,8 +1093,7 @@ impl OpticsWorkbenchApp {
             }
             TopBarAction::ZoomOut => {
                 self.viewport_state.zoom = (self.viewport_state.zoom * 0.8).clamp(0.2, 500.0);
-                self.last_action_msg =
-                    format!("Zoom: Out ({:.1} px/mm)", self.viewport_state.zoom);
+                self.last_action_msg = format!("Zoom: Out ({:.1} px/mm)", self.viewport_state.zoom);
             }
             TopBarAction::ZoomFit => {
                 self.viewport_state
@@ -1192,25 +1132,23 @@ impl OpticsWorkbenchApp {
             }
             TopBarAction::ToggleTheme => {
                 self.topbar_state.theme_mode = self.topbar_state.theme_mode.next();
-                self.last_action_msg = format!(
-                    "Theme switched to: {}",
-                    self.topbar_state.theme_mode.display_name()
-                );
+                self.last_action_msg = format!("Theme switched to: {}", self.topbar_state.theme_mode.display_name());
             }
             TopBarAction::OpenAbout => {
-                self.last_action_msg =
-                    "OpticsLab v0.0.1 — Academic Optical Engineering Workbench".to_string();
+                self.last_action_msg = "OpticsLab v0.0.1 — Academic Optical Engineering Workbench".to_string();
             }
             TopBarAction::OpenOptimization => {
                 self.topbar_state.left_panel_open = true;
                 self.lens_editor_state.active_tab = LeftPanelTab::Optimizer;
-                self.optimization_state.init_if_needed(&self.prescription, &self.catalog);
+                self.optimization_state
+                    .init_if_needed(&self.prescription, &self.catalog);
                 self.last_action_msg = "Switched to Optimizer tab.".to_string();
             }
             TopBarAction::OpenOptimizationAlgorithm(algo) => {
                 self.topbar_state.left_panel_open = true;
                 self.lens_editor_state.active_tab = LeftPanelTab::Optimizer;
-                self.optimization_state.init_if_needed(&self.prescription, &self.catalog);
+                self.optimization_state
+                    .init_if_needed(&self.prescription, &self.catalog);
                 self.optimization_state.algorithm = algo;
                 self.last_action_msg = format!("Switched to Optimizer tab ({:?}).", algo);
             }

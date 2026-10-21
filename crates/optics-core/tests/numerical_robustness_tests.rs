@@ -11,9 +11,7 @@ use optics_core::conic::{ConicSurface, conic_normal, conic_sag, intersect_conic}
 use optics_core::error::OpticsError;
 use optics_core::fresnel::fresnel_dielectric;
 use optics_core::geometry::{Air, ConstantIndex, RefractiveIndex};
-use optics_core::prescription::{
-    OpticalPrescription, OpticalSurface, calculate_paraxial_properties,
-};
+use optics_core::prescription::{OpticalPrescription, OpticalSurface, calculate_paraxial_properties};
 use optics_core::snell::{reflect, snell_refract};
 use optics_core::surface::asphere::EvenAsphere;
 use optics_core::types::{Ray, Vec3};
@@ -36,11 +34,7 @@ fn test_sweep_extreme_curvatures() -> TestResult {
 
     for &r in &test_radii {
         let c = if r.is_infinite() { 0.0 } else { 1.0 / r };
-        let semi_diam = if r.is_infinite() {
-            50.0
-        } else {
-            (r * 0.5).min(50.0)
-        };
+        let semi_diam = if r.is_infinite() { 50.0 } else { (r * 0.5).min(50.0) };
 
         let surface = ConicSurface::from_radius(r, 0.0, semi_diam)?;
         let test_r = semi_diam * 0.5;
@@ -56,12 +50,7 @@ fn test_sweep_extreme_curvatures() -> TestResult {
         );
 
         // Ray intersection
-        let ray = Ray::new(
-            Vec3::new(test_r, 0.0, -10.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )?;
+        let ray = Ray::new(Vec3::new(test_r, 0.0, -10.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0)?;
         let hit = intersect_conic(&ray, &surface, 0)?;
         assert!((hit.point.x - test_r).abs() < 1e-10);
         assert!((hit.point.z - sag).abs() < 1e-6);
@@ -242,18 +231,10 @@ fn test_sweep_non_finite_input_rejections() -> TestResult {
         assert!(reflect(Vec3::new(0.0, 0.0, 1.0), Vec3::new(val, 0.0, 1.0)).is_err());
 
         // snell_refract
-        assert!(
-            snell_refract(Vec3::new(val, 0.0, 1.0), Vec3::new(0.0, 0.0, 1.0), 1.0, 1.5).is_err()
-        );
-        assert!(
-            snell_refract(Vec3::new(0.0, 0.0, 1.0), Vec3::new(val, 0.0, 1.0), 1.0, 1.5).is_err()
-        );
-        assert!(
-            snell_refract(Vec3::new(0.0, 0.0, 1.0), Vec3::new(0.0, 0.0, 1.0), val, 1.5).is_err()
-        );
-        assert!(
-            snell_refract(Vec3::new(0.0, 0.0, 1.0), Vec3::new(0.0, 0.0, 1.0), 1.0, val).is_err()
-        );
+        assert!(snell_refract(Vec3::new(val, 0.0, 1.0), Vec3::new(0.0, 0.0, 1.0), 1.0, 1.5).is_err());
+        assert!(snell_refract(Vec3::new(0.0, 0.0, 1.0), Vec3::new(val, 0.0, 1.0), 1.0, 1.5).is_err());
+        assert!(snell_refract(Vec3::new(0.0, 0.0, 1.0), Vec3::new(0.0, 0.0, 1.0), val, 1.5).is_err());
+        assert!(snell_refract(Vec3::new(0.0, 0.0, 1.0), Vec3::new(0.0, 0.0, 1.0), 1.0, val).is_err());
 
         // EvenAsphere::new
         assert!(EvenAsphere::new(val, 0.0, vec![0.0], 10.0).is_err());

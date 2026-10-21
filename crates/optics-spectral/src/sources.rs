@@ -1,7 +1,7 @@
 //! Standard discrete spectral line sources and continuous Planck blackbody radiator.
 //!
 //! Provides rigorously tabulated discharge lamp emission lines according to
-//! ISO 7944 / NIST / Zemax OpticStudio / Optiland standards:
+//! ISO 7944 / NIST / Optiland standards:
 //! - Helium (He)
 //! - Neon (Ne)
 //! - Mercury (Hg)
@@ -56,7 +56,7 @@ pub struct SpectralLine {
 impl SpectralLamp {
     /// Returns the standard tabulated spectral lines for this lamp species.
     ///
-    /// Wavelengths adhere to ISO 7944, NIST Atomic Spectra Database, and Zemax OpticStudio standards.
+    /// Wavelengths adhere to ISO 7944 and NIST Atomic Spectra Database standards.
     #[must_use]
     pub fn spectral_lines(self) -> &'static [SpectralLine] {
         match self {
@@ -72,56 +72,196 @@ impl SpectralLamp {
 
 /// Helium (He) discharge lamp emission lines.
 pub static HELIUM_LINES: [SpectralLine; 6] = [
-    SpectralLine { name: "He 447.1", wavelength_nm: 447.148, relative_intensity: 0.35, element: SpectralLamp::Helium },
-    SpectralLine { name: "He 501.6", wavelength_nm: 501.567, relative_intensity: 0.40, element: SpectralLamp::Helium },
-    SpectralLine { name: "d",        wavelength_nm: 587.5618, relative_intensity: 1.00, element: SpectralLamp::Helium }, // Standard helium yellow d-line
-    SpectralLine { name: "He 667.8", wavelength_nm: 667.815, relative_intensity: 0.55, element: SpectralLamp::Helium },
-    SpectralLine { name: "r",        wavelength_nm: 706.519, relative_intensity: 0.45, element: SpectralLamp::Helium }, // Fraunhofer r-line
-    SpectralLine { name: "He 1083",  wavelength_nm: 1083.03, relative_intensity: 0.85, element: SpectralLamp::Helium },
+    SpectralLine {
+        name: "He 447.1",
+        wavelength_nm: 447.148,
+        relative_intensity: 0.35,
+        element: SpectralLamp::Helium,
+    },
+    SpectralLine {
+        name: "He 501.6",
+        wavelength_nm: 501.567,
+        relative_intensity: 0.40,
+        element: SpectralLamp::Helium,
+    },
+    SpectralLine {
+        name: "d",
+        wavelength_nm: 587.5618,
+        relative_intensity: 1.00,
+        element: SpectralLamp::Helium,
+    }, // Standard helium yellow d-line
+    SpectralLine {
+        name: "He 667.8",
+        wavelength_nm: 667.815,
+        relative_intensity: 0.55,
+        element: SpectralLamp::Helium,
+    },
+    SpectralLine {
+        name: "r",
+        wavelength_nm: 706.519,
+        relative_intensity: 0.45,
+        element: SpectralLamp::Helium,
+    }, // Fraunhofer r-line
+    SpectralLine {
+        name: "He 1083",
+        wavelength_nm: 1083.03,
+        relative_intensity: 0.85,
+        element: SpectralLamp::Helium,
+    },
 ];
 
 /// Neon (Ne) glow discharge lamp emission lines.
 pub static NEON_LINES: [SpectralLine; 6] = [
-    SpectralLine { name: "Ne 540.1", wavelength_nm: 540.056, relative_intensity: 0.25, element: SpectralLamp::Neon },
-    SpectralLine { name: "Ne 585.3", wavelength_nm: 585.249, relative_intensity: 0.60, element: SpectralLamp::Neon },
-    SpectralLine { name: "Ne 640.2", wavelength_nm: 640.225, relative_intensity: 1.00, element: SpectralLamp::Neon },
-    SpectralLine { name: "Ne 650.6", wavelength_nm: 650.653, relative_intensity: 0.75, element: SpectralLamp::Neon },
-    SpectralLine { name: "s",        wavelength_nm: 852.11,  relative_intensity: 0.70, element: SpectralLamp::Neon },
-    SpectralLine { name: "Ne 703.2", wavelength_nm: 703.241, relative_intensity: 0.65, element: SpectralLamp::Neon },
+    SpectralLine {
+        name: "Ne 540.1",
+        wavelength_nm: 540.056,
+        relative_intensity: 0.25,
+        element: SpectralLamp::Neon,
+    },
+    SpectralLine {
+        name: "Ne 585.3",
+        wavelength_nm: 585.249,
+        relative_intensity: 0.60,
+        element: SpectralLamp::Neon,
+    },
+    SpectralLine {
+        name: "Ne 640.2",
+        wavelength_nm: 640.225,
+        relative_intensity: 1.00,
+        element: SpectralLamp::Neon,
+    },
+    SpectralLine {
+        name: "Ne 650.6",
+        wavelength_nm: 650.653,
+        relative_intensity: 0.75,
+        element: SpectralLamp::Neon,
+    },
+    SpectralLine {
+        name: "s",
+        wavelength_nm: 852.11,
+        relative_intensity: 0.70,
+        element: SpectralLamp::Neon,
+    },
+    SpectralLine {
+        name: "Ne 703.2",
+        wavelength_nm: 703.241,
+        relative_intensity: 0.65,
+        element: SpectralLamp::Neon,
+    },
 ];
 
 /// Mercury (Hg) low-pressure vapor calibration lamp emission lines.
 ///
 /// Primary metrology standard in optical engineering (includes i, h, g, e lines).
 pub static MERCURY_LINES: [SpectralLine; 7] = [
-    SpectralLine { name: "i",        wavelength_nm: 365.015, relative_intensity: 0.55, element: SpectralLamp::Mercury }, // UV i-line
-    SpectralLine { name: "h",        wavelength_nm: 404.656, relative_intensity: 0.40, element: SpectralLamp::Mercury }, // Violet h-line
-    SpectralLine { name: "g",        wavelength_nm: 435.833, relative_intensity: 0.80, element: SpectralLamp::Mercury }, // Blue g-line
-    SpectralLine { name: "e",        wavelength_nm: 546.074, relative_intensity: 1.00, element: SpectralLamp::Mercury }, // Green e-line (ISO principal reference)
-    SpectralLine { name: "Hg 577.0", wavelength_nm: 576.960, relative_intensity: 0.35, element: SpectralLamp::Mercury }, // Yellow doublet 1
-    SpectralLine { name: "Hg 579.1", wavelength_nm: 579.066, relative_intensity: 0.35, element: SpectralLamp::Mercury }, // Yellow doublet 2
-    SpectralLine { name: "t",        wavelength_nm: 1013.98, relative_intensity: 0.30, element: SpectralLamp::Mercury }, // IR t-line
+    SpectralLine {
+        name: "i",
+        wavelength_nm: 365.015,
+        relative_intensity: 0.55,
+        element: SpectralLamp::Mercury,
+    }, // UV i-line
+    SpectralLine {
+        name: "h",
+        wavelength_nm: 404.656,
+        relative_intensity: 0.40,
+        element: SpectralLamp::Mercury,
+    }, // Violet h-line
+    SpectralLine {
+        name: "g",
+        wavelength_nm: 435.833,
+        relative_intensity: 0.80,
+        element: SpectralLamp::Mercury,
+    }, // Blue g-line
+    SpectralLine {
+        name: "e",
+        wavelength_nm: 546.074,
+        relative_intensity: 1.00,
+        element: SpectralLamp::Mercury,
+    }, // Green e-line (ISO principal reference)
+    SpectralLine {
+        name: "Hg 577.0",
+        wavelength_nm: 576.960,
+        relative_intensity: 0.35,
+        element: SpectralLamp::Mercury,
+    }, // Yellow doublet 1
+    SpectralLine {
+        name: "Hg 579.1",
+        wavelength_nm: 579.066,
+        relative_intensity: 0.35,
+        element: SpectralLamp::Mercury,
+    }, // Yellow doublet 2
+    SpectralLine {
+        name: "t",
+        wavelength_nm: 1013.98,
+        relative_intensity: 0.30,
+        element: SpectralLamp::Mercury,
+    }, // IR t-line
 ];
 
 /// Cadmium (Cd) metal vapor calibration lamp emission lines.
 pub static CADMIUM_LINES: [SpectralLine; 4] = [
-    SpectralLine { name: "Cd 467.8", wavelength_nm: 467.815, relative_intensity: 0.30, element: SpectralLamp::Cadmium },
-    SpectralLine { name: "F'",       wavelength_nm: 479.991, relative_intensity: 0.70, element: SpectralLamp::Cadmium }, // Fraunhofer F'-line
-    SpectralLine { name: "Cd 508.6", wavelength_nm: 508.582, relative_intensity: 0.85, element: SpectralLamp::Cadmium },
-    SpectralLine { name: "C'",       wavelength_nm: 643.847, relative_intensity: 1.00, element: SpectralLamp::Cadmium }, // Fraunhofer C'-line
+    SpectralLine {
+        name: "Cd 467.8",
+        wavelength_nm: 467.815,
+        relative_intensity: 0.30,
+        element: SpectralLamp::Cadmium,
+    },
+    SpectralLine {
+        name: "F'",
+        wavelength_nm: 479.991,
+        relative_intensity: 0.70,
+        element: SpectralLamp::Cadmium,
+    }, // Fraunhofer F'-line
+    SpectralLine {
+        name: "Cd 508.6",
+        wavelength_nm: 508.582,
+        relative_intensity: 0.85,
+        element: SpectralLamp::Cadmium,
+    },
+    SpectralLine {
+        name: "C'",
+        wavelength_nm: 643.847,
+        relative_intensity: 1.00,
+        element: SpectralLamp::Cadmium,
+    }, // Fraunhofer C'-line
 ];
 
 /// Hydrogen / Deuterium (H / D) calibration lamp emission lines.
 pub static HYDROGEN_LINES: [SpectralLine; 3] = [
-    SpectralLine { name: "F",        wavelength_nm: 486.1327, relative_intensity: 0.80, element: SpectralLamp::Hydrogen }, // Fraunhofer F-line (H-beta)
-    SpectralLine { name: "C",        wavelength_nm: 656.2725, relative_intensity: 1.00, element: SpectralLamp::Hydrogen }, // Fraunhofer C-line (H-alpha)
-    SpectralLine { name: "H-gamma",  wavelength_nm: 434.047,  relative_intensity: 0.40, element: SpectralLamp::Hydrogen },
+    SpectralLine {
+        name: "F",
+        wavelength_nm: 486.1327,
+        relative_intensity: 0.80,
+        element: SpectralLamp::Hydrogen,
+    }, // Fraunhofer F-line (H-beta)
+    SpectralLine {
+        name: "C",
+        wavelength_nm: 656.2725,
+        relative_intensity: 1.00,
+        element: SpectralLamp::Hydrogen,
+    }, // Fraunhofer C-line (H-alpha)
+    SpectralLine {
+        name: "H-gamma",
+        wavelength_nm: 434.047,
+        relative_intensity: 0.40,
+        element: SpectralLamp::Hydrogen,
+    },
 ];
 
 /// Sodium (Na) vapor calibration lamp emission lines.
 pub static SODIUM_LINES: [SpectralLine; 2] = [
-    SpectralLine { name: "D2",       wavelength_nm: 588.995, relative_intensity: 1.00, element: SpectralLamp::Sodium },
-    SpectralLine { name: "D1",       wavelength_nm: 589.592, relative_intensity: 0.50, element: SpectralLamp::Sodium },
+    SpectralLine {
+        name: "D2",
+        wavelength_nm: 588.995,
+        relative_intensity: 1.00,
+        element: SpectralLamp::Sodium,
+    },
+    SpectralLine {
+        name: "D1",
+        wavelength_nm: 589.592,
+        relative_intensity: 0.50,
+        element: SpectralLamp::Sodium,
+    },
 ];
 
 /// Evaluates Planck's blackbody spectral radiance $B_\lambda(\lambda, T)$ in $\text{W} / (\text{m}^2 \cdot \text{sr} \cdot \text{m})$.

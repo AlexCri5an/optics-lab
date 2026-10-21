@@ -169,12 +169,7 @@ mod tests {
         };
 
         // 1. Ray through center
-        let hit_ray = Ray::new(
-            Vec3::new(0.0, 0.0, -5.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )?;
+        let hit_ray = Ray::new(Vec3::new(0.0, 0.0, -5.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0)?;
         let res = ray_aabb_slab_test(&hit_ray, &aabb);
         assert!(res.is_some());
         let (t0, t1) = res.ok_or("expected hit")?;
@@ -182,30 +177,15 @@ mod tests {
         assert!((t1 - 6.0).abs() < 1e-9);
 
         // 2. Ray missing AABB
-        let miss_ray = Ray::new(
-            Vec3::new(5.0, 5.0, -5.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )?;
+        let miss_ray = Ray::new(Vec3::new(5.0, 5.0, -5.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0)?;
         assert!(ray_aabb_slab_test(&miss_ray, &aabb).is_none());
 
         // 3. Ray pointing away from AABB (miss before)
-        let away_ray = Ray::new(
-            Vec3::new(0.0, 0.0, -5.0),
-            Vec3::new(0.0, 0.0, -1.0),
-            587.56,
-            1.0,
-        )?;
+        let away_ray = Ray::new(Vec3::new(0.0, 0.0, -5.0), Vec3::new(0.0, 0.0, -1.0), 587.56, 1.0)?;
         assert!(ray_aabb_slab_test(&away_ray, &aabb).is_none());
 
         // 4. Ray past AABB pointing away (+z beyond max.z)
-        let past_ray = Ray::new(
-            Vec3::new(0.0, 0.0, 5.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )?;
+        let past_ray = Ray::new(Vec3::new(0.0, 0.0, 5.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0)?;
         assert!(ray_aabb_slab_test(&past_ray, &aabb).is_none());
 
         Ok(())

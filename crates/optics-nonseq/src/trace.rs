@@ -81,8 +81,7 @@ impl NonSeqTraceReport {
         if self.launched_flux_watts <= 0.0 {
             1.0
         } else {
-            (self.detected_flux_watts + self.absorbed_flux_watts + self.escaped_flux_watts)
-                / self.launched_flux_watts
+            (self.detected_flux_watts + self.absorbed_flux_watts + self.escaped_flux_watts) / self.launched_flux_watts
         }
     }
 }
@@ -177,9 +176,8 @@ impl NonSeqTracer {
             };
 
             if hit_detector {
-                let (det_idx, t, lx, ly) = closest_det_hit.ok_or_else(|| {
-                    NonSeqError::InvalidGeometry("Detector hit resolution failed".to_string())
-                })?;
+                let (det_idx, t, lx, ly) = closest_det_hit
+                    .ok_or_else(|| NonSeqError::InvalidGeometry("Detector hit resolution failed".to_string()))?;
                 let hit_pt = active.ray.at(t);
 
                 // Apply bulk absorption along path if inside medium
@@ -286,9 +284,8 @@ impl NonSeqTracer {
                         }
 
                         if r_power > self.config.min_power_threshold {
-                            let new_ray =
-                                Ray::new(refl_origin, refl_dir, active.ray.wavelength_nm, r_power)
-                                    .map_err(NonSeqError::Core)?;
+                            let new_ray = Ray::new(refl_origin, refl_dir, active.ray.wavelength_nm, r_power)
+                                .map_err(NonSeqError::Core)?;
 
                             queue.push(ActiveRay {
                                 ray: new_ray,
@@ -324,8 +321,7 @@ impl NonSeqTracer {
                                     .wrapping_mul(0x9E3779B97F4A7C15)
                                     .wrapping_add(active.bounce_count as u64),
                             );
-                            let (u_axis, v_axis) =
-                                crate::source::make_orthonormal_basis(&hit.normal);
+                            let (u_axis, v_axis) = crate::source::make_orthonormal_basis(&hit.normal);
                             let r_dir = local_rng.next_f64().sqrt();
                             let phi_dir = local_rng.next_f64() * 2.0 * std::f64::consts::PI;
                             let z_dir = (1.0 - r_dir * r_dir).max(0.0).sqrt();
@@ -374,9 +370,7 @@ impl NonSeqTracer {
                         } else {
                             // Exiting object: return to parent medium in stack
                             let mut temp_stack = active.medium_stack.clone();
-                            if let Some(pos) =
-                                temp_stack.iter().rposition(|&id| id == hit.object_id)
-                            {
+                            if let Some(pos) = temp_stack.iter().rposition(|&id| id == hit.object_id) {
                                 temp_stack.remove(pos);
                             }
                             if let Some(&parent_id) = temp_stack.last() {
@@ -392,13 +386,7 @@ impl NonSeqTracer {
                         };
 
                         let (r_power, t_power, refl_ray, refr_ray) =
-                            compute_snell_fresnel_interaction(
-                                &active.ray,
-                                &hit,
-                                n1,
-                                n2,
-                                current_power,
-                            )?;
+                            compute_snell_fresnel_interaction(&active.ray, &hit, n1, n2, current_power)?;
 
                         if self.config.record_paths {
                             recorded_paths.push(RayPathSegment {
@@ -431,11 +419,7 @@ impl NonSeqTracer {
                                     } else {
                                         active.reflection_count + 1
                                     },
-                                    tir_count: if is_tir {
-                                        active.tir_count + 1
-                                    } else {
-                                        active.tir_count
-                                    },
+                                    tir_count: if is_tir { active.tir_count + 1 } else { active.tir_count },
                                     medium_stack: active.medium_stack.clone(),
                                 });
                             }
@@ -449,9 +433,7 @@ impl NonSeqTracer {
                                 let mut next_stack = active.medium_stack.clone();
                                 if hit.entering {
                                     next_stack.push(hit.object_id);
-                                } else if let Some(pos) =
-                                    next_stack.iter().rposition(|&id| id == hit.object_id)
-                                {
+                                } else if let Some(pos) = next_stack.iter().rposition(|&id| id == hit.object_id) {
                                     next_stack.remove(pos);
                                 }
 
@@ -522,8 +504,7 @@ fn compute_snell_fresnel_interaction(
 
     if radicand <= 0.0 {
         // Total Internal Reflection (TIR)
-        let r_ray = Ray::new(refl_origin, refl_dir, ray.wavelength_nm, incident_power)
-            .map_err(NonSeqError::Core)?;
+        let r_ray = Ray::new(refl_origin, refl_dir, ray.wavelength_nm, incident_power).map_err(NonSeqError::Core)?;
         return Ok((incident_power, 0.0, Some(r_ray), None));
     }
 
@@ -540,11 +521,9 @@ fn compute_snell_fresnel_interaction(
     let r_power = incident_power * reflectance;
     let t_power = incident_power * transmittance;
 
-    let r_ray =
-        Ray::new(refl_origin, refl_dir, ray.wavelength_nm, r_power).map_err(NonSeqError::Core)?;
+    let r_ray = Ray::new(refl_origin, refl_dir, ray.wavelength_nm, r_power).map_err(NonSeqError::Core)?;
 
-    let t_ray =
-        Ray::new(refr_origin, refr_dir, ray.wavelength_nm, t_power).map_err(NonSeqError::Core)?;
+    let t_ray = Ray::new(refr_origin, refr_dir, ray.wavelength_nm, t_power).map_err(NonSeqError::Core)?;
 
     Ok((r_power, t_power, Some(r_ray), Some(t_ray)))
 }

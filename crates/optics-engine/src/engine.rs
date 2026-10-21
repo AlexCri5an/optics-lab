@@ -6,31 +6,27 @@ use std::time::Instant;
 
 use optics_core::OpticalPrescription;
 use optics_core::analysis::{
-    PupilPattern, compute_diffraction_mtf, compute_fft_psf, compute_field_curves,
-    compute_ray_table, compute_seidel_coefficients, compute_through_focus_spot,
-    compute_two_bounce_ghosts, compute_wavefront_map, fit_zernike_noll,
-    generate_prescription_summary, trace_ray_fan, trace_spot_diagram,
+    PupilPattern, compute_diffraction_mtf, compute_fft_psf, compute_field_curves, compute_ray_table,
+    compute_seidel_coefficients, compute_through_focus_spot, compute_two_bounce_ghosts, compute_wavefront_map,
+    fit_zernike_noll, generate_prescription_summary, trace_ray_fan, trace_spot_diagram,
 };
-use optics_core::prescription::{
-    calculate_paraxial_properties, trace_paraxial_chief, trace_paraxial_marginal,
-};
-use optics_glass::GlassCatalogDb;
-use optics_zemax::cad::{
+use optics_core::prescription::{calculate_paraxial_properties, trace_paraxial_chief, trace_paraxial_marginal};
+use optics_formats::cad::{
     DxfConfig, SvgConfig, export_dxf_layout, export_obj_system, export_stl_lens, export_svg_layout,
 };
-use optics_zemax::codev::{CodeVSystem, parse_seq, write_seq};
-use optics_zemax::iso10110::Iso10110DrawingSheet;
-use optics_zemax::oslo::{OsloSystem, parse_len, write_len};
-use optics_zemax::parser::parse_zmx;
-use optics_zemax::project::OpticsProjectWorkspace;
-use optics_zemax::serializer::write_prescription_zmx;
+use optics_formats::codev::{CodeVSystem, parse_seq, write_seq};
+use optics_formats::iso10110::Iso10110DrawingSheet;
+use optics_formats::oslo::{OsloSystem, parse_len, write_len};
+use optics_formats::parser::parse_zmx;
+use optics_formats::project::OpticsProjectWorkspace;
+use optics_formats::serializer::write_prescription_zmx;
+use optics_glass::GlassCatalogDb;
 
 use crate::commands::{EngineCommand, UndoStack};
 use crate::error::EngineError;
 use crate::events::{EngineEvent, EventListener};
 use crate::types::{
-    AnalysisRequest, AnalysisResult, EngineStatus, GlassSummary, ParaxialAnalysisResult,
-    ParaxialRayData,
+    AnalysisRequest, AnalysisResult, EngineStatus, GlassSummary, ParaxialAnalysisResult, ParaxialRayData,
 };
 use crate::validation::{DiagnosticMessage, validate_prescription};
 
@@ -51,11 +47,9 @@ impl OpticalEngine {
     /// # Errors
     /// Returns [`EngineError`] if bundled glass catalog loading fails.
     pub fn new() -> Result<Self, EngineError> {
-        let catalog = Arc::new(
-            GlassCatalogDb::load_bundled()
-                .map_err(|e| EngineError::InvalidParameter(e.to_string()))?,
-        );
-        let prescription = optics_zemax::presets::cooke_triplet_f4_5()?;
+        let catalog =
+            Arc::new(GlassCatalogDb::load_bundled().map_err(|e| EngineError::InvalidParameter(e.to_string()))?);
+        let prescription = optics_formats::presets::cooke_triplet_f4_5()?;
         Ok(Self {
             prescription,
             catalog,
@@ -72,10 +66,8 @@ impl OpticalEngine {
     /// # Errors
     /// Returns [`EngineError`] if bundled glass catalog loading fails.
     pub fn with_prescription(prescription: OpticalPrescription) -> Result<Self, EngineError> {
-        let catalog = Arc::new(
-            GlassCatalogDb::load_bundled()
-                .map_err(|e| EngineError::InvalidParameter(e.to_string()))?,
-        );
+        let catalog =
+            Arc::new(GlassCatalogDb::load_bundled().map_err(|e| EngineError::InvalidParameter(e.to_string()))?);
         Ok(Self {
             prescription,
             catalog,
@@ -122,19 +114,9 @@ impl OpticalEngine {
             None
         };
 
-        let stop_surface_index = self
-            .prescription
-            .surfaces
-            .iter()
-            .position(|s| s.is_stop)
-            .unwrap_or(0);
+        let stop_surface_index = self.prescription.surfaces.iter().position(|s| s.is_stop).unwrap_or(0);
 
-        let total_track_mm = self
-            .prescription
-            .surfaces
-            .iter()
-            .map(|s| s.thickness_mm)
-            .sum();
+        let total_track_mm = self.prescription.surfaces.iter().map(|s| s.thickness_mm).sum();
 
         EngineStatus {
             revision: self.revision,
@@ -192,7 +174,7 @@ impl OpticalEngine {
         self.emit_diagnostics();
     }
 
-    /// Loads an optical prescription from a Zemax `.zmx` formatted string.
+    /// Loads an optical prescription from a `.zmx` formatted string.
     pub fn load_zmx_str(&mut self, zmx: &str) -> Result<(), EngineError> {
         let sys = parse_zmx(zmx)?;
         self.load_prescription(sys.to_optical_prescription());
@@ -215,8 +197,8 @@ impl OpticalEngine {
 
     /// Loads an optical system from a JSON serialized [`OpticsProjectWorkspace`].
     pub fn load_project_json(&mut self, json_str: &str) -> Result<(), EngineError> {
-        let ws: OpticsProjectWorkspace = serde_json::from_str(json_str)
-            .map_err(|e| EngineError::InvalidParameter(e.to_string()))?;
+        let ws: OpticsProjectWorkspace =
+            serde_json::from_str(json_str).map_err(|e| EngineError::InvalidParameter(e.to_string()))?;
         let p = ws
             .configurations
             .first()
@@ -293,8 +275,7 @@ impl OpticalEngine {
 
     /// Runs an optical analysis calculation, utilizing dirty-aware result caching.
     pub fn run_analysis(&mut self, req: &AnalysisRequest) -> Result<AnalysisResult, EngineError> {
-        let req_key =
-            serde_json::to_string(req).map_err(|e| EngineError::InvalidParameter(e.to_string()))?;
+        let req_key = serde_json::to_string(req).map_err(|e| EngineError::InvalidParameter(e.to_string()))?;
         let key = (req_key, self.revision);
         if let Some(cached) = self.cache.get(&key) {
             return Ok(cached.clone());
@@ -310,11 +291,7 @@ impl OpticalEngine {
                 let marginal = trace_paraxial_marginal(&resolved, primary_wl)?;
                 let chief = trace_paraxial_chief(
                     &resolved,
-                    self.prescription
-                        .field_angles_deg
-                        .first()
-                        .copied()
-                        .unwrap_or(0.0),
+                    self.prescription.field_angles_deg.first().copied().unwrap_or(0.0),
                     primary_wl,
                 )?;
 
@@ -327,17 +304,11 @@ impl OpticalEngine {
                     exit_pupil_position_mm: props.exit_pupil_pos_mm,
                     marginal_ray: marginal
                         .into_iter()
-                        .map(|r| ParaxialRayData {
-                            y_mm: r.y,
-                            u_rad: r.u,
-                        })
+                        .map(|r| ParaxialRayData { y_mm: r.y, u_rad: r.u })
                         .collect(),
                     chief_ray: chief
                         .into_iter()
-                        .map(|r| ParaxialRayData {
-                            y_mm: r.y,
-                            u_rad: r.u,
-                        })
+                        .map(|r| ParaxialRayData { y_mm: r.y, u_rad: r.u })
                         .collect(),
                 })
             }
@@ -354,12 +325,7 @@ impl OpticalEngine {
                     .unwrap_or(0.0);
                 let wl = wavelength_nm.unwrap_or(primary_wl);
                 let num_rings = ((*ray_count as f64).sqrt() / 2.0).round().max(2.0) as usize;
-                let spot = trace_spot_diagram(
-                    &resolved,
-                    (0.0, f_deg),
-                    wl,
-                    PupilPattern::Hexapolar { num_rings },
-                )?;
+                let spot = trace_spot_diagram(&resolved, (0.0, f_deg), wl, PupilPattern::Hexapolar { num_rings })?;
                 AnalysisResult::SpotDiagram(spot)
             }
             AnalysisRequest::RayFan {
@@ -396,19 +362,13 @@ impl OpticalEngine {
                 } else {
                     None
                 };
-                AnalysisResult::Wavefront {
-                    wavefront: wf,
-                    zernike,
-                }
+                AnalysisResult::Wavefront { wavefront: wf, zernike }
             }
             AnalysisRequest::Seidel => {
                 let seidel = compute_seidel_coefficients(&resolved, 0.0, primary_wl)?;
                 AnalysisResult::Seidel(seidel)
             }
-            AnalysisRequest::Psf {
-                field_index,
-                grid_size,
-            } => {
+            AnalysisRequest::Psf { field_index, grid_size } => {
                 let f_deg = self
                     .prescription
                     .field_angles_deg
@@ -529,8 +489,7 @@ impl OpticalEngine {
 
     /// Generates ISO 10110 manufacturing drawing sheet data in Markdown format.
     pub fn export_iso10110_markdown(&self) -> String {
-        Iso10110DrawingSheet::from_prescription(&self.prescription, Some(&*self.catalog))
-            .to_markdown_table()
+        Iso10110DrawingSheet::from_prescription(&self.prescription, Some(&*self.catalog)).to_markdown_table()
     }
 
     /// Generates ISO 10110 manufacturing drawing sheet data in JSON format.
@@ -540,7 +499,7 @@ impl OpticalEngine {
             .map_err(|e| EngineError::InvalidParameter(e.to_string()))
     }
 
-    /// Exports the prescription to a Zemax `.zmx` formatted string.
+    /// Exports the prescription to a `.zmx` formatted string.
     pub fn export_zmx(&self) -> Result<String, EngineError> {
         Ok(write_prescription_zmx(&self.prescription))
     }
@@ -559,10 +518,8 @@ impl OpticalEngine {
 
     /// Exports the system into a versioned [`OpticsProjectWorkspace`] JSON string.
     pub fn export_project_json(&self) -> Result<String, EngineError> {
-        let ws =
-            OpticsProjectWorkspace::new(self.prescription.name.clone(), self.prescription.clone());
-        ws.to_json()
-            .map_err(|e| EngineError::InvalidParameter(e.to_string()))
+        let ws = OpticsProjectWorkspace::new(self.prescription.name.clone(), self.prescription.clone());
+        ws.to_json().map_err(|e| EngineError::InvalidParameter(e.to_string()))
     }
 
     /// Searches the glass database by name substring.
@@ -570,9 +527,7 @@ impl OpticalEngine {
         let q = query.trim().to_uppercase();
         self.catalog
             .all_glasses()
-            .filter(|g| {
-                g.name.to_uppercase().contains(&q) || g.catalog.name().to_uppercase().contains(&q)
-            })
+            .filter(|g| g.name.to_uppercase().contains(&q) || g.catalog.name().to_uppercase().contains(&q))
             .map(|g| GlassSummary {
                 catalog: g.catalog.name().to_string(),
                 name: g.name.clone(),
@@ -584,13 +539,7 @@ impl OpticalEngine {
     }
 
     /// Searches the glass database filtered by refractive index ($n_d$) and Abbe dispersion ($V_d$).
-    pub fn search_glasses_by_nd_vd(
-        &self,
-        nd_min: f64,
-        nd_max: f64,
-        vd_min: f64,
-        vd_max: f64,
-    ) -> Vec<GlassSummary> {
+    pub fn search_glasses_by_nd_vd(&self, nd_min: f64, nd_max: f64, vd_min: f64, vd_max: f64) -> Vec<GlassSummary> {
         self.catalog
             .search_by_nd_vd((nd_min, nd_max), (vd_min, vd_max))
             .into_iter()

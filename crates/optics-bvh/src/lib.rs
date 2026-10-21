@@ -28,8 +28,8 @@ pub mod triangle;
 
 pub use aabb::{Aabb, ray_aabb_slab_test};
 pub use builder::{
-    BvhNode, MAX_LEAF_PRIMITIVES, SAH_BINS, SAH_INTERSECTION_COST, SAH_TRAVERSAL_COST,
-    SplitDecision, build_bvh, find_best_split,
+    BvhNode, MAX_LEAF_PRIMITIVES, SAH_BINS, SAH_INTERSECTION_COST, SAH_TRAVERSAL_COST, SplitDecision, build_bvh,
+    find_best_split,
 };
 pub use cost::trace_bvh_cost;
 pub use gpu::{GpuBvhNode, GpuTriangle, pack_bvh_to_gpu_buffer, pack_triangles_to_gpu_buffer};

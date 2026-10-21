@@ -172,11 +172,7 @@ impl MonteCarloSimulator {
         let mean = sum / n;
 
         let var: f64 = if trial_values.len() > 1 {
-            trial_values
-                .iter()
-                .map(|&x| (x - mean).powi(2))
-                .sum::<f64>()
-                / (n - 1.0)
+            trial_values.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / (n - 1.0)
         } else {
             0.0
         };
@@ -186,14 +182,10 @@ impl MonteCarloSimulator {
         let mut sorted = trial_values.clone();
         sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
-        let p10 =
-            sorted[((0.10 * (sorted.len() - 1) as f64).round() as usize).min(sorted.len() - 1)];
-        let p50 =
-            sorted[((0.50 * (sorted.len() - 1) as f64).round() as usize).min(sorted.len() - 1)];
-        let p90 =
-            sorted[((0.90 * (sorted.len() - 1) as f64).round() as usize).min(sorted.len() - 1)];
-        let p99 =
-            sorted[((0.99 * (sorted.len() - 1) as f64).round() as usize).min(sorted.len() - 1)];
+        let p10 = sorted[((0.10 * (sorted.len() - 1) as f64).round() as usize).min(sorted.len() - 1)];
+        let p50 = sorted[((0.50 * (sorted.len() - 1) as f64).round() as usize).min(sorted.len() - 1)];
+        let p90 = sorted[((0.90 * (sorted.len() - 1) as f64).round() as usize).min(sorted.len() - 1)];
+        let p99 = sorted[((0.99 * (sorted.len() - 1) as f64).round() as usize).min(sorted.len() - 1)];
 
         let min_val = sorted.first().copied().unwrap_or(nominal_val);
         let max_val = sorted.last().copied().unwrap_or(nominal_val);

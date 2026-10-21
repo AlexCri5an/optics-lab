@@ -18,10 +18,7 @@ pub use engine::OpticalEngine;
 pub use error::EngineError;
 pub use events::{EngineEvent, EventListener};
 pub use jobs::{JobHandle, JobMessage};
-pub use types::{
-    AnalysisRequest, AnalysisResult, EngineStatus, GlassSummary, ParaxialAnalysisResult,
-    ParaxialRayData,
-};
+pub use types::{AnalysisRequest, AnalysisResult, EngineStatus, GlassSummary, ParaxialAnalysisResult, ParaxialRayData};
 pub use validation::{DiagnosticLevel, DiagnosticMessage, validate_prescription};
 
 #[cfg(test)]

@@ -3,8 +3,8 @@
 use serde::{Deserialize, Serialize};
 
 use optics_core::analysis::{
-    FieldCurves, GhostAnalysis, MtfCurve, PointSpreadFunction, PrescriptionSummary, RayFanData,
-    RayTable, SeidelCoefficients, SpotDiagram, ThroughFocusAnalysis, WavefrontMap, ZernikeFit,
+    FieldCurves, GhostAnalysis, MtfCurve, PointSpreadFunction, PrescriptionSummary, RayFanData, RayTable,
+    SeidelCoefficients, SpotDiagram, ThroughFocusAnalysis, WavefrontMap, ZernikeFit,
 };
 
 /// Unified analysis request variants supported by the optical engine facade.

@@ -43,11 +43,7 @@ impl ConicSurface {
     /// # Errors
     /// Returns [`OpticsError::NumericalSingularity`] if `radius_mm == 0.0` or if any input is NaN.
     /// Returns [`OpticsError::InvalidSurface`] if `semi_diam_mm < 0.0`.
-    pub fn from_radius(
-        radius_mm: f64,
-        conic_constant: f64,
-        semi_diam_mm: f64,
-    ) -> Result<Self, OpticsError> {
+    pub fn from_radius(radius_mm: f64, conic_constant: f64, semi_diam_mm: f64) -> Result<Self, OpticsError> {
         if radius_mm.is_nan() || conic_constant.is_nan() || semi_diam_mm.is_nan() {
             return Err(OpticsError::NumericalSingularity(
                 "ConicSurface parameter is NaN".to_string(),
@@ -64,11 +60,7 @@ impl ConicSurface {
             ));
         }
 
-        let curvature = if radius_mm.is_infinite() {
-            0.0
-        } else {
-            1.0 / radius_mm
-        };
+        let curvature = if radius_mm.is_infinite() { 0.0 } else { 1.0 / radius_mm };
 
         Ok(Self {
             vertex_z: 0.0,
@@ -83,11 +75,7 @@ impl ConicSurface {
     /// # Errors
     /// Returns [`OpticsError::NumericalSingularity`] if any input is NaN.
     /// Returns [`OpticsError::InvalidSurface`] if `semi_diam_mm < 0.0`.
-    pub fn from_curvature(
-        curvature: f64,
-        conic_constant: f64,
-        semi_diam_mm: f64,
-    ) -> Result<Self, OpticsError> {
+    pub fn from_curvature(curvature: f64, conic_constant: f64, semi_diam_mm: f64) -> Result<Self, OpticsError> {
         if curvature.is_nan() || conic_constant.is_nan() || semi_diam_mm.is_nan() {
             return Err(OpticsError::NumericalSingularity(
                 "ConicSurface parameter is NaN".to_string(),
@@ -259,11 +247,7 @@ pub fn conic_normal(hit_point: Vec3, surface: &ConicSurface) -> Result<Vec3, Opt
 /// # Errors
 /// Returns [`OpticsError::RayMissedSurface`] if the ray misses the quadric surface or vertex sheet.
 /// Returns [`OpticsError::RayVignetted`] if the ray strikes outside the surface clear semi-diameter.
-pub fn intersect_conic(
-    ray: &Ray,
-    surface: &ConicSurface,
-    surface_index: usize,
-) -> Result<HitRecord, OpticsError> {
+pub fn intersect_conic(ray: &Ray, surface: &ConicSurface, surface_index: usize) -> Result<HitRecord, OpticsError> {
     let c = surface.curvature;
     let k = surface.conic_constant;
 
@@ -419,12 +403,7 @@ mod tests {
         let sphere = ConicSurface::sphere(radius, 25.0)?;
 
         let y_ray = 15.0;
-        let ray = Ray::new(
-            Vec3::new(0.0, y_ray, -10.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )?;
+        let ray = Ray::new(Vec3::new(0.0, y_ray, -10.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0)?;
 
         let hit = intersect_conic(&ray, &sphere, 1)?;
         let expected_z = radius - (radius * radius - y_ray * y_ray).sqrt();
@@ -446,12 +425,7 @@ mod tests {
         let sag_tiny = conic_sag(r, 1e-12, 0.0)?;
         assert!((sag_tiny - sag_zero).abs() < 1e-10);
 
-        let ray = Ray::new(
-            Vec3::new(0.0, 5.0, -10.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )?;
+        let ray = Ray::new(Vec3::new(0.0, 5.0, -10.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0)?;
 
         let plane = ConicSurface::plane(20.0)?;
         let tiny_sphere = ConicSurface::from_curvature(1e-12, 0.0, 20.0)?;
@@ -539,27 +513,11 @@ mod tests {
     fn test_vignetted_and_missing_rays() -> TestResult {
         let surf = ConicSurface::sphere(60.0, 10.0)?;
 
-        let vignetted_ray = Ray::new(
-            Vec3::new(0.0, 12.0, -10.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )?;
+        let vignetted_ray = Ray::new(Vec3::new(0.0, 12.0, -10.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0)?;
         let res = intersect_conic(&vignetted_ray, &surf, 3);
-        assert!(matches!(
-            res,
-            Err(OpticsError::RayVignetted {
-                surface_index: 3,
-                ..
-            })
-        ));
+        assert!(matches!(res, Err(OpticsError::RayVignetted { surface_index: 3, .. })));
 
-        let backward_ray = Ray::new(
-            Vec3::new(0.0, 0.0, -10.0),
-            Vec3::new(0.0, 0.0, -1.0),
-            587.56,
-            1.0,
-        )?;
+        let backward_ray = Ray::new(Vec3::new(0.0, 0.0, -10.0), Vec3::new(0.0, 0.0, -1.0), 587.56, 1.0)?;
         assert!(matches!(
             intersect_conic(&backward_ray, &surf, 0),
             Err(OpticsError::RayMissedSurface(_))
@@ -719,8 +677,7 @@ mod tests {
 
         let (x, y) = (28.0_f64, 35.0_f64);
         let r: f64 = (x * x + y * y).sqrt();
-        let z_local = sphere_pos.radius_mm()
-            - (sphere_pos.radius_mm() * sphere_pos.radius_mm() - r * r).sqrt();
+        let z_local = sphere_pos.radius_mm() - (sphere_pos.radius_mm() * sphere_pos.radius_mm() - r * r).sqrt();
         let hit_pt = Vec3::new(x, y, zv + z_local);
 
         let normal = conic_normal(hit_pt, &sphere_pos)?;
@@ -777,12 +734,7 @@ mod tests {
         let plane = ConicSurface::plane(50.0)?.with_vertex_z(10.0);
 
         // Everywhere on a plane with light travelling +z, the unit normal must be (0, 0, -1)
-        for (x, y) in [
-            (0.0_f64, 0.0_f64),
-            (10.0, 20.0),
-            (-35.0, 15.0),
-            (45.0, -45.0),
-        ] {
+        for (x, y) in [(0.0_f64, 0.0_f64), (10.0, 20.0), (-35.0, 15.0), (45.0, -45.0)] {
             let hit_pt = Vec3::new(x, y, 10.0);
             let normal = conic_normal(hit_pt, &plane)?;
 
@@ -828,10 +780,7 @@ mod tests {
         let r_max = 50.0 / 2.0_f64.sqrt(); // ~35.3553 mm
         let oblate_outside = Vec3::new(r_max + 1.0, 0.0, 10.0);
         let res_oblate = conic_normal(oblate_outside, &oblate);
-        assert!(matches!(
-            res_oblate,
-            Err(OpticsError::GeometryOutsideAperture)
-        ));
+        assert!(matches!(res_oblate, Err(OpticsError::GeometryOutsideAperture)));
         Ok(())
     }
 

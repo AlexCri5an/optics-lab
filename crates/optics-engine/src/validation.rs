@@ -34,10 +34,7 @@ pub struct DiagnosticMessage {
 }
 
 /// Runs comprehensive diagnostic validation on an optical prescription.
-pub fn validate_prescription(
-    prescription: &OpticalPrescription,
-    catalog: &GlassCatalogDb,
-) -> Vec<DiagnosticMessage> {
+pub fn validate_prescription(prescription: &OpticalPrescription, catalog: &GlassCatalogDb) -> Vec<DiagnosticMessage> {
     let mut diagnostics = Vec::new();
 
     // 1. Surface Count Check
@@ -45,21 +42,16 @@ pub fn validate_prescription(
         diagnostics.push(DiagnosticMessage {
             level: DiagnosticLevel::Error,
             code: "ERR_INSUFFICIENT_SURFACES".to_string(),
-            message: "Prescription must contain at least 2 surfaces (Object and Image planes)."
-                .to_string(),
+            message: "Prescription must contain at least 2 surfaces (Object and Image planes).".to_string(),
             surface_index: None,
             field_index: None,
-            recommendation: Some(
-                "Add at least an object surface and an image surface.".to_string(),
-            ),
+            recommendation: Some("Add at least an object surface and an image surface.".to_string()),
         });
         return diagnostics;
     }
 
     // 2. Entrance Pupil Diameter Check
-    if prescription.entrance_pupil_diameter_mm <= 0.0
-        || !prescription.entrance_pupil_diameter_mm.is_finite()
-    {
+    if prescription.entrance_pupil_diameter_mm <= 0.0 || !prescription.entrance_pupil_diameter_mm.is_finite() {
         diagnostics.push(DiagnosticMessage {
             level: DiagnosticLevel::Error,
             code: "ERR_INVALID_EPD".to_string(),
@@ -81,9 +73,7 @@ pub fn validate_prescription(
             message: "No design wavelengths defined in optical prescription.".to_string(),
             surface_index: None,
             field_index: None,
-            recommendation: Some(
-                "Specify at least one primary wavelength (e.g. 587.56 nm d-line).".to_string(),
-            ),
+            recommendation: Some("Specify at least one primary wavelength (e.g. 587.56 nm d-line).".to_string()),
         });
     } else {
         if prescription.primary_wavelength_index >= prescription.wavelengths_nm.len() {
@@ -97,9 +87,7 @@ pub fn validate_prescription(
                 ),
                 surface_index: None,
                 field_index: None,
-                recommendation: Some(
-                    "Set primary wavelength index to a valid wavelength position.".to_string(),
-                ),
+                recommendation: Some("Set primary wavelength index to a valid wavelength position.".to_string()),
             });
         }
         for (w_idx, &w) in prescription.wavelengths_nm.iter().enumerate() {
@@ -125,13 +113,10 @@ pub fn validate_prescription(
         diagnostics.push(DiagnosticMessage {
             level: DiagnosticLevel::Warning,
             code: "WARN_NO_STOP".to_string(),
-            message: "Prescription does not have an explicit aperture stop surface marked."
-                .to_string(),
+            message: "Prescription does not have an explicit aperture stop surface marked.".to_string(),
             surface_index: None,
             field_index: None,
-            recommendation: Some(
-                "Designate one optical surface as the aperture stop (is_stop = true).".to_string(),
-            ),
+            recommendation: Some("Designate one optical surface as the aperture stop (is_stop = true).".to_string()),
         });
     } else if stop_count > 1 {
         diagnostics.push(DiagnosticMessage {
@@ -158,9 +143,7 @@ pub fn validate_prescription(
                 ),
                 surface_index: Some(idx),
                 field_index: None,
-                recommendation: Some(
-                    "Set clear aperture semi-diameter to positive value.".to_string(),
-                ),
+                recommendation: Some("Set clear aperture semi-diameter to positive value.".to_string()),
             });
         }
 
@@ -199,11 +182,7 @@ pub fn validate_prescription(
 
         // Glass Material resolution check
         let mat = surf.material_name.trim().to_uppercase();
-        if !mat.is_empty()
-            && mat != "AIR"
-            && mat != "VACUUM"
-            && catalog.lookup(&surf.material_name).is_none()
-        {
+        if !mat.is_empty() && mat != "AIR" && mat != "VACUUM" && catalog.lookup(&surf.material_name).is_none() {
             diagnostics.push(DiagnosticMessage {
                 level: DiagnosticLevel::Warning,
                 code: "WARN_UNKNOWN_GLASS".to_string(),
@@ -213,7 +192,9 @@ pub fn validate_prescription(
                 ),
                 surface_index: Some(idx),
                 field_index: None,
-                recommendation: Some("Use a standard catalog glass name (e.g. N-BK7, F2, SF11) or import custom AGF.".to_string()),
+                recommendation: Some(
+                    "Use a standard catalog glass name (e.g. N-BK7, F2, SF11) or import custom AGF.".to_string(),
+                ),
             });
         }
     }
@@ -224,15 +205,10 @@ pub fn validate_prescription(
             diagnostics.push(DiagnosticMessage {
                 level: DiagnosticLevel::Warning,
                 code: "WARN_EXTREME_FIELD_ANGLE".to_string(),
-                message: format!(
-                    "Field #{f_idx} angle ({:.2}°) is near grazing incidence (> 85°).",
-                    deg
-                ),
+                message: format!("Field #{f_idx} angle ({:.2}°) is near grazing incidence (> 85°).", deg),
                 surface_index: None,
                 field_index: Some(f_idx),
-                recommendation: Some(
-                    "Verify extreme wide-angle field angle is intended.".to_string(),
-                ),
+                recommendation: Some("Verify extreme wide-angle field angle is intended.".to_string()),
             });
         }
     }

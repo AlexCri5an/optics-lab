@@ -67,7 +67,7 @@ pub enum ToleranceOperandType {
     },
 }
 
-/// Standard manufacturing tolerance quality grade (ISO 10110 / Optimax / Zemax standard).
+/// Standard manufacturing tolerance quality grade (ISO 10110 / Optimax standard).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum ToleranceGrade {
     /// Commercial quality grade (typical consumer optics, lower cost).
@@ -215,20 +215,12 @@ impl ToleranceOperand {
     /// Get half-width tolerance limit for this operand.
     pub fn half_width(&self) -> f64 {
         match self.operand_type {
-            ToleranceOperandType::Radius {
-                delta_radius_mm, ..
-            } => delta_radius_mm,
-            ToleranceOperandType::Thickness {
-                delta_thickness_mm, ..
-            } => delta_thickness_mm,
+            ToleranceOperandType::Radius { delta_radius_mm, .. } => delta_radius_mm,
+            ToleranceOperandType::Thickness { delta_thickness_mm, .. } => delta_thickness_mm,
             ToleranceOperandType::Conic { delta_conic, .. } => delta_conic,
-            ToleranceOperandType::SurfaceDecenter {
-                max_decenter_mm, ..
-            } => max_decenter_mm,
+            ToleranceOperandType::SurfaceDecenter { max_decenter_mm, .. } => max_decenter_mm,
             ToleranceOperandType::SurfaceTilt { max_tilt_deg, .. } => max_tilt_deg,
-            ToleranceOperandType::ElementWedge {
-                max_wedge_arcmin, ..
-            } => max_wedge_arcmin,
+            ToleranceOperandType::ElementWedge { max_wedge_arcmin, .. } => max_wedge_arcmin,
             ToleranceOperandType::GlassIndexAbbe { delta_nd, .. } => delta_nd,
         }
     }
@@ -246,58 +238,34 @@ impl ToleranceOperand {
     ) -> Result<(), ToleranceError> {
         match self.operand_type {
             ToleranceOperandType::Radius { surface_index, .. } => {
-                let surf = prescription
-                    .surfaces
-                    .get_mut(surface_index)
-                    .ok_or_else(|| {
-                        ToleranceError::InvalidSurface(format!(
-                            "Surface index {} out of bounds",
-                            surface_index
-                        ))
-                    })?;
+                let surf = prescription.surfaces.get_mut(surface_index).ok_or_else(|| {
+                    ToleranceError::InvalidSurface(format!("Surface index {} out of bounds", surface_index))
+                })?;
                 if !surf.radius_mm.is_infinite() {
                     surf.radius_mm += perturbation;
                 }
             }
             ToleranceOperandType::Thickness { surface_index, .. } => {
-                let surf = prescription
-                    .surfaces
-                    .get_mut(surface_index)
-                    .ok_or_else(|| {
-                        ToleranceError::InvalidSurface(format!(
-                            "Surface index {} out of bounds",
-                            surface_index
-                        ))
-                    })?;
+                let surf = prescription.surfaces.get_mut(surface_index).ok_or_else(|| {
+                    ToleranceError::InvalidSurface(format!("Surface index {} out of bounds", surface_index))
+                })?;
                 surf.thickness_mm = (surf.thickness_mm + perturbation).max(0.001);
             }
             ToleranceOperandType::Conic { surface_index, .. } => {
-                let surf = prescription
-                    .surfaces
-                    .get_mut(surface_index)
-                    .ok_or_else(|| {
-                        ToleranceError::InvalidSurface(format!(
-                            "Surface index {} out of bounds",
-                            surface_index
-                        ))
-                    })?;
+                let surf = prescription.surfaces.get_mut(surface_index).ok_or_else(|| {
+                    ToleranceError::InvalidSurface(format!("Surface index {} out of bounds", surface_index))
+                })?;
                 surf.conic_constant += perturbation;
             }
             ToleranceOperandType::SurfaceDecenter { surface_index, .. } => {
                 let _surf = prescription.surfaces.get(surface_index).ok_or_else(|| {
-                    ToleranceError::InvalidSurface(format!(
-                        "Surface index {} out of bounds",
-                        surface_index
-                    ))
+                    ToleranceError::InvalidSurface(format!("Surface index {} out of bounds", surface_index))
                 })?;
                 // Decenters can shift semi-diameter clearance or pupil bounds
             }
             ToleranceOperandType::SurfaceTilt { surface_index, .. } => {
                 let _surf = prescription.surfaces.get(surface_index).ok_or_else(|| {
-                    ToleranceError::InvalidSurface(format!(
-                        "Surface index {} out of bounds",
-                        surface_index
-                    ))
+                    ToleranceError::InvalidSurface(format!("Surface index {} out of bounds", surface_index))
                 })?;
             }
             ToleranceOperandType::ElementWedge {
@@ -306,24 +274,15 @@ impl ToleranceOperand {
                 ..
             } => {
                 let _surf1 = prescription.surfaces.get(front_surface).ok_or_else(|| {
-                    ToleranceError::InvalidSurface(format!(
-                        "Front surface {} out of bounds",
-                        front_surface
-                    ))
+                    ToleranceError::InvalidSurface(format!("Front surface {} out of bounds", front_surface))
                 })?;
                 let _surf2 = prescription.surfaces.get(back_surface).ok_or_else(|| {
-                    ToleranceError::InvalidSurface(format!(
-                        "Back surface {} out of bounds",
-                        back_surface
-                    ))
+                    ToleranceError::InvalidSurface(format!("Back surface {} out of bounds", back_surface))
                 })?;
             }
             ToleranceOperandType::GlassIndexAbbe { surface_index, .. } => {
                 let _surf = prescription.surfaces.get(surface_index).ok_or_else(|| {
-                    ToleranceError::InvalidSurface(format!(
-                        "Surface index {} out of bounds",
-                        surface_index
-                    ))
+                    ToleranceError::InvalidSurface(format!("Surface index {} out of bounds", surface_index))
                 })?;
             }
         }

@@ -1,5 +1,6 @@
 [package]
 name = "optics-desktop"
+default-run = "OpticsLab"
 description = "OpticsLab — native academic optical engineering desktop workbench"
 version.workspace = true
 edition.workspace = true
@@ -7,6 +8,10 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
+
+[[bin]]
+name = "OpticsLab"
+path = "src/main.rs"
 
 [dependencies]
 eframe = { workspace = true }

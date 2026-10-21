@@ -4,8 +4,8 @@
 //! to render progressive physical path tracing in real-time within the OpticsLab GUI.
 
 use eframe::egui::{
-    self, Align, Align2, Color32, CornerRadius, FontId, Frame, Layout, Margin, Pos2, Rect,
-    Response, RichText, Sense, Ui, Vec2,
+    self, Align, Align2, Color32, CornerRadius, FontId, Frame, Layout, Margin, Pos2, Rect, Response, RichText, Sense,
+    Ui, Vec2,
 };
 use optics_core::{OpticalPrescription, Vec3};
 use optics_render::{GpuContext, GpuMaterial, PathTracingRenderer, RenderMode, ThinLensCamera};
@@ -47,44 +47,24 @@ impl RaytraceEngine {
         let width = width.clamp(64, 4096);
         let height = height.clamp(64, 4096);
 
-        let ctx = GpuContext::create_sync()
-            .map_err(|e| format!("Failed to acquire GPU compute device: {e}"))?;
+        let ctx = GpuContext::create_sync().map_err(|e| format!("Failed to acquire GPU compute device: {e}"))?;
 
-        let (triangles, materials) =
-            optics_bvh::prescription_to_trimesh_with_materials(prescription, 32, 16);
+        let (triangles, materials) = optics_bvh::prescription_to_trimesh_with_materials(prescription, 32, 16);
 
         let aabb = if triangles.is_empty() {
-            optics_bvh::Aabb::from_points(&[
-                Vec3::new(-10.0, -10.0, -10.0),
-                Vec3::new(10.0, 10.0, 10.0),
-            ])
+            optics_bvh::Aabb::from_points(&[Vec3::new(-10.0, -10.0, -10.0), Vec3::new(10.0, 10.0, 10.0)])
         } else {
-            optics_bvh::Aabb::from_points(
-                &triangles
-                    .iter()
-                    .flat_map(|t| [t.v0, t.v1, t.v2])
-                    .collect::<Vec<_>>(),
-            )
+            optics_bvh::Aabb::from_points(&triangles.iter().flat_map(|t| [t.v0, t.v1, t.v2]).collect::<Vec<_>>())
         };
         let inst = optics_bvh::BlasInstance::new(0, &aabb, nalgebra::Matrix4::identity());
         let scene = optics_bvh::BvhScene::build(vec![triangles], vec![inst]);
 
         let display_format = wgpu::TextureFormat::Rgba8Unorm;
 
-        let mut renderer = PathTracingRenderer::new(
-            ctx,
-            &scene,
-            camera,
-            width,
-            height,
-            display_format,
-        )
-        .map_err(|e| format!("Failed to initialize path tracing pipeline: {e}"))?;
+        let mut renderer = PathTracingRenderer::new(ctx, &scene, camera, width, height, display_format)
+            .map_err(|e| format!("Failed to initialize path tracing pipeline: {e}"))?;
 
-        let gpu_materials: Vec<GpuMaterial> = materials
-            .iter()
-            .map(|name| GpuMaterial::from_name(name))
-            .collect();
+        let gpu_materials: Vec<GpuMaterial> = materials.iter().map(|name| GpuMaterial::from_name(name)).collect();
         renderer.update_materials(&gpu_materials);
 
         Ok(Self {
@@ -165,14 +145,7 @@ pub(crate) fn build_thin_lens_camera(cam: &Viewport3DCamera) -> ThinLensCamera {
 
     let focus_dist = (target - eye).norm().max(1.0);
 
-    ThinLensCamera::new(
-        eye,
-        target,
-        up,
-        cam.fov_deg as f64,
-        0.0,
-        focus_dist,
-    )
+    ThinLensCamera::new(eye, target, up, cam.fov_deg as f64, 0.0, focus_dist)
 }
 
 fn make_camera_key(cam: &Viewport3DCamera) -> [i32; 5] {
@@ -228,8 +201,7 @@ pub fn render_raytrace_viewport(
             camera_moved = true;
         } else {
             state.camera_3d.azimuth_rad -= delta.x * 0.007;
-            state.camera_3d.elevation_rad =
-                (state.camera_3d.elevation_rad - delta.y * 0.007).clamp(-1.45, 1.45);
+            state.camera_3d.elevation_rad = (state.camera_3d.elevation_rad - delta.y * 0.007).clamp(-1.45, 1.45);
             camera_moved = true;
         }
     }
@@ -245,8 +217,7 @@ pub fn render_raytrace_viewport(
         }
 
         if (zoom_factor - 1.0).abs() > 0.001 {
-            state.camera_3d.distance_mm =
-                (state.camera_3d.distance_mm * zoom_factor).clamp(5.0, 20000.0);
+            state.camera_3d.distance_mm = (state.camera_3d.distance_mm * zoom_factor).clamp(5.0, 20000.0);
             camera_moved = true;
         }
     }
@@ -300,29 +271,17 @@ pub fn render_raytrace_viewport(
 
         // B. Handle prescription edits
         if engine.prescription_fingerprint != current_presc_fp {
-            let (triangles, materials) =
-                optics_bvh::prescription_to_trimesh_with_materials(prescription, 32, 16);
+            let (triangles, materials) = optics_bvh::prescription_to_trimesh_with_materials(prescription, 32, 16);
             let aabb = if triangles.is_empty() {
-                optics_bvh::Aabb::from_points(&[
-                    Vec3::new(-10.0, -10.0, -10.0),
-                    Vec3::new(10.0, 10.0, 10.0),
-                ])
+                optics_bvh::Aabb::from_points(&[Vec3::new(-10.0, -10.0, -10.0), Vec3::new(10.0, 10.0, 10.0)])
             } else {
-                optics_bvh::Aabb::from_points(
-                    &triangles
-                        .iter()
-                        .flat_map(|t| [t.v0, t.v1, t.v2])
-                        .collect::<Vec<_>>(),
-                )
+                optics_bvh::Aabb::from_points(&triangles.iter().flat_map(|t| [t.v0, t.v1, t.v2]).collect::<Vec<_>>())
             };
             let inst = optics_bvh::BlasInstance::new(0, &aabb, nalgebra::Matrix4::identity());
             let scene = optics_bvh::BvhScene::build(vec![triangles], vec![inst]);
             engine.renderer.update_scene(&scene);
 
-            let gpu_materials: Vec<GpuMaterial> = materials
-                .iter()
-                .map(|name| GpuMaterial::from_name(name))
-                .collect();
+            let gpu_materials: Vec<GpuMaterial> = materials.iter().map(|name| GpuMaterial::from_name(name)).collect();
             engine.renderer.update_materials(&gpu_materials);
 
             engine.prescription_fingerprint = current_presc_fp;
@@ -341,10 +300,7 @@ pub fn render_raytrace_viewport(
 
             if let Ok(rgba) = engine.renderer.read_display_rgba() {
                 if rgba.len() == (target_w * target_h * 4) as usize {
-                    let image = egui::ColorImage::from_rgba_unmultiplied(
-                        [target_w as usize, target_h as usize],
-                        &rgba,
-                    );
+                    let image = egui::ColorImage::from_rgba_unmultiplied([target_w as usize, target_h as usize], &rgba);
                     if let Some(tex) = &mut engine.texture_handle {
                         tex.set(image, egui::TextureOptions::LINEAR);
                     } else {
@@ -393,11 +349,7 @@ pub fn render_raytrace_viewport(
 
                 // Telemetry Badge
                 let is_converged = current_spp >= max_spp;
-                let spp_badge_color = if is_converged {
-                    tokens.success
-                } else {
-                    tokens.accent
-                };
+                let spp_badge_color = if is_converged { tokens.success } else { tokens.accent };
                 ui.label(
                     RichText::new(format!("SPP: {}/{}", current_spp, max_spp))
                         .monospace()
@@ -451,12 +403,7 @@ pub fn render_raytrace_viewport(
 
                 // Switch to 2D
                 if ui
-                    .button(
-                        RichText::new("2D")
-                            .size(9.5)
-                            .monospace()
-                            .color(tokens.text_muted),
-                    )
+                    .button(RichText::new("2D").size(9.5).monospace().color(tokens.text_muted))
                     .on_hover_text("Switch to 2D Cross-Section (Ctrl+2)")
                     .clicked()
                 {
@@ -465,12 +412,7 @@ pub fn render_raytrace_viewport(
 
                 // Switch to 3D CAD
                 if ui
-                    .button(
-                        RichText::new("3D CAD")
-                            .size(9.5)
-                            .monospace()
-                            .color(tokens.text_muted),
-                    )
+                    .button(RichText::new("3D CAD").size(9.5).monospace().color(tokens.text_muted))
                     .on_hover_text("Switch to 3D Interactive CAD Wireframe/Solid (Ctrl+3)")
                     .clicked()
                 {

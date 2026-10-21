@@ -44,7 +44,7 @@ impl Default for Conjugate {
     }
 }
 
-/// Vignetting factors (Zemax VDX, VDY, VCX, VCY, VAN) for field-dependent pupil compression.
+/// Vignetting factors (VDX, VDY, VCX, VCY, VAN) for field-dependent pupil compression.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct VignettingFactors {
     /// De-center along $x$ (VDX).
@@ -87,10 +87,7 @@ impl VignettingFactors {
         let px_rot = cos_t * px_scaled - sin_t * py_scaled;
         let py_rot = sin_t * px_scaled + cos_t * py_scaled;
 
-        Pupil {
-            px: px_rot,
-            py: py_rot,
-        }
+        Pupil { px: px_rot, py: py_rot }
     }
 }
 
@@ -133,10 +130,7 @@ impl WavelengthSet {
         if total_weight <= 1e-15 {
             vec![1.0 / self.entries.len() as f64; self.entries.len()]
         } else {
-            self.entries
-                .iter()
-                .map(|(_, w)| *w / total_weight)
-                .collect()
+            self.entries.iter().map(|(_, w)| *w / total_weight).collect()
         }
     }
 
@@ -196,10 +190,7 @@ pub fn trace_aimed_ray(
     let r_enp = prescription.entrance_pupil_diameter_mm * 0.5;
     let z_enp = paraxial.entrance_pupil_pos_mm;
 
-    let z_first = prescription
-        .surfaces
-        .first()
-        .map_or(0.0, |s| s.conic.vertex_z);
+    let z_first = prescription.surfaces.first().map_or(0.0, |s| s.conic.vertex_z);
     let margin = (prescription.entrance_pupil_diameter_mm * 1.5).clamp(0.5, 10.0);
     let z_launch = z_first - margin;
 
@@ -221,11 +212,7 @@ pub fn trace_aimed_ray(
         }
         RayAimingMode::RealIterative => {
             // Find stop surface index
-            let stop_idx = prescription
-                .surfaces
-                .iter()
-                .position(|s| s.is_stop)
-                .unwrap_or(0);
+            let stop_idx = prescription.surfaces.iter().position(|s| s.is_stop).unwrap_or(0);
             let stop_semi = prescription.surfaces[stop_idx].conic.semi_diam_mm;
             let target_stop_x = pupil.px * stop_semi;
             let target_stop_y = pupil.py * stop_semi;
@@ -286,21 +273,11 @@ pub fn trace_aimed_ray(
                 }
 
                 // Numerical Jacobian J = [d(cur_x)/d(lx), d(cur_x)/d(ly); d(cur_y)/d(lx), d(cur_y)/d(ly)]
-                let r_dx = match Ray::new(
-                    Vec3::new(launch_x + delta, launch_y, z_launch),
-                    dir,
-                    wl_nm,
-                    1.0,
-                ) {
+                let r_dx = match Ray::new(Vec3::new(launch_x + delta, launch_y, z_launch), dir, wl_nm, 1.0) {
                     Ok(r) => r,
                     Err(_) => break,
                 };
-                let r_dy = match Ray::new(
-                    Vec3::new(launch_x, launch_y + delta, z_launch),
-                    dir,
-                    wl_nm,
-                    1.0,
-                ) {
+                let r_dy = match Ray::new(Vec3::new(launch_x, launch_y + delta, z_launch), dir, wl_nm, 1.0) {
                     Ok(r) => r,
                     Err(_) => break,
                 };
@@ -447,8 +424,12 @@ pub fn trace_polarized_ray(
         let phase_s = ts_amp.im.atan2(ts_amp.re);
         let phase_p = tp_amp.im.atan2(tp_amp.re);
         let mut delta_phase = (phase_p - phase_s).to_degrees();
-        while delta_phase > 180.0 { delta_phase -= 360.0; }
-        while delta_phase < -180.0 { delta_phase += 360.0; }
+        while delta_phase > 180.0 {
+            delta_phase -= 360.0;
+        }
+        while delta_phase < -180.0 {
+            delta_phase += 360.0;
+        }
 
         let diattenuation = if ts_pwr + tp_pwr > 1e-15 {
             (tp_pwr - ts_pwr).abs() / (tp_pwr + ts_pwr)
@@ -567,10 +548,9 @@ mod tests {
         };
 
         let resolver =
-            |_: &str| -> Result<
-                std::sync::Arc<dyn crate::geometry::RefractiveIndex + Send + Sync>,
-                OpticsError,
-            > { Ok(std::sync::Arc::new(crate::geometry::ConstantIndex(1.5168))) };
+            |_: &str| -> Result<std::sync::Arc<dyn crate::geometry::RefractiveIndex + Send + Sync>, OpticsError> {
+                Ok(std::sync::Arc::new(crate::geometry::ConstantIndex(1.5168)))
+            };
         let resolved = presc.resolve(&resolver)?;
 
         let ray = trace_aimed_ray(
@@ -588,8 +568,8 @@ mod tests {
 
     #[test]
     fn test_trace_polarized_ray_brewster_and_dop() -> TestResult {
-        use crate::prescription::OpticalSurface;
         use crate::polarization::JonesVector;
+        use crate::prescription::OpticalSurface;
 
         let presc = OpticalPrescription {
             name: "Polarized Doublet".to_string(),
@@ -632,18 +612,12 @@ mod tests {
         };
 
         let resolver =
-            |_: &str| -> Result<
-                std::sync::Arc<dyn crate::geometry::RefractiveIndex + Send + Sync>,
-                OpticsError,
-            > { Ok(std::sync::Arc::new(crate::geometry::ConstantIndex(1.5168))) };
+            |_: &str| -> Result<std::sync::Arc<dyn crate::geometry::RefractiveIndex + Send + Sync>, OpticsError> {
+                Ok(std::sync::Arc::new(crate::geometry::ConstantIndex(1.5168)))
+            };
         let resolved = presc.resolve(&resolver)?;
 
-        let ray = Ray::new(
-            Vec3::new(0.0, 2.0, -10.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )?;
+        let ray = Ray::new(Vec3::new(0.0, 2.0, -10.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0)?;
 
         // Trace linear 45-degree polarized input
         let pol_in = JonesVector::linear_45();

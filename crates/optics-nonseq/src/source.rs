@@ -53,9 +53,7 @@ pub enum SourceSpectrum {
 
 impl Default for SourceSpectrum {
     fn default() -> Self {
-        Self::Monochromatic {
-            wavelength_nm: 587.56,
-        }
+        Self::Monochromatic { wavelength_nm: 587.56 }
     }
 }
 
@@ -218,13 +216,11 @@ impl RaySource {
                     let phi = rng.next_f64() * 2.0 * std::f64::consts::PI;
                     let sin_theta = (1.0 - z * z).max(0.0).sqrt();
 
-                    let ray_dir = (u_axis * (sin_theta * phi.cos())
-                        + v_axis * (sin_theta * phi.sin())
-                        + central_dir * z)
-                        .normalize();
+                    let ray_dir =
+                        (u_axis * (sin_theta * phi.cos()) + v_axis * (sin_theta * phi.sin()) + central_dir * z)
+                            .normalize();
 
-                    let ray =
-                        Ray::new(position, ray_dir, wl, ray_flux).map_err(NonSeqError::Core)?;
+                    let ray = Ray::new(position, ray_dir, wl, ray_flux).map_err(NonSeqError::Core)?;
                     rays.push(NonSeqRay::new(ray, i));
                 }
             }
@@ -252,8 +248,7 @@ impl RaySource {
                     let theta = rng.next_f64() * 2.0 * std::f64::consts::PI;
 
                     let pos = center + u_axis * (r * theta.cos()) + v_axis * (r * theta.sin());
-                    let ray =
-                        Ray::new(pos, central_dir, wl, ray_flux).map_err(NonSeqError::Core)?;
+                    let ray = Ray::new(pos, central_dir, wl, ray_flux).map_err(NonSeqError::Core)?;
                     rays.push(NonSeqRay::new(ray, i));
                 }
             }
@@ -285,10 +280,8 @@ impl RaySource {
                     let phi_dir = rng.next_f64() * 2.0 * std::f64::consts::PI;
                     let z_dir = (1.0 - r_dir * r_dir).max(0.0).sqrt();
 
-                    let dir = (u_axis * (r_dir * phi_dir.cos())
-                        + v_axis * (r_dir * phi_dir.sin())
-                        + n * z_dir)
-                        .normalize();
+                    let dir =
+                        (u_axis * (r_dir * phi_dir.cos()) + v_axis * (r_dir * phi_dir.sin()) + n * z_dir).normalize();
 
                     let ray = Ray::new(pos, dir, wl, ray_flux).map_err(NonSeqError::Core)?;
                     rays.push(NonSeqRay::new(ray, i));
@@ -319,9 +312,7 @@ impl RaySource {
                     let u_pos = rng.next_f64().max(1e-15);
                     let r_pos = waist_radius_w0 * (-u_pos.ln() * 0.5).sqrt();
                     let phi_pos = rng.next_f64() * 2.0 * std::f64::consts::PI;
-                    let pos = waist_position
-                        + u_axis * (r_pos * phi_pos.cos())
-                        + v_axis * (r_pos * phi_pos.sin());
+                    let pos = waist_position + u_axis * (r_pos * phi_pos.cos()) + v_axis * (r_pos * phi_pos.sin());
 
                     // Divergence angle
                     let u_angle = rng.next_f64().max(1e-15);

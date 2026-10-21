@@ -1,6 +1,6 @@
 [package]
 name = "optics-ui"
-description = "VectorCraft-standard academic desktop UI, design tokens, Lucide icons, and responsive layout"
+description = "Professional academic desktop UI, design tokens, Lucide icons, and responsive layout"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -21,7 +21,7 @@ optics-optimize = { workspace = true }
 optics-nonseq = { workspace = true }
 optics-render = { workspace = true }
 optics-tolerance = { workspace = true }
-optics-zemax = { workspace = true }
+optics-formats = { workspace = true }
 rfd = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

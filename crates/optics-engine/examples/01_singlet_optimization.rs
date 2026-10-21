@@ -3,13 +3,9 @@
 //! Demonstrates using `optics-optimize` to bend a singlet lens (optimizing front and back curvatures)
 //! to minimize third-order spherical aberration while preserving an exact target focal length of 100.0 mm.
 
-use optics_core::prescription::{
-    OpticalPrescription, OpticalSurface, calculate_paraxial_properties,
-};
+use optics_core::prescription::{OpticalPrescription, OpticalSurface, calculate_paraxial_properties};
 use optics_glass::catalog::GlassCatalogDb;
-use optics_optimize::{
-    DlsConfig, DlsOptimizer, MeritFunction, MeritOperand, OperandType, VariableSet, VariableType,
-};
+use optics_optimize::{DlsConfig, DlsOptimizer, MeritFunction, MeritOperand, OperandType, VariableSet, VariableType};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== OpticsLab Example 01: Singlet Lens Optimization (DLS) ===\n");
@@ -36,7 +32,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 grin_profile: None,
                 profile: None,
                 aperture: None,
-                    coating: None,
+                coating: None,
             },
             OpticalSurface {
                 surface_index: 1,
@@ -51,7 +47,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 grin_profile: None,
                 profile: None,
                 aperture: None,
-                    coating: None,
+                coating: None,
             },
         ],
     };
@@ -81,9 +77,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut mf = MeritFunction::new();
     mf.add_operand(MeritOperand::new(
         "TARGET_EFL",
-        OperandType::EffectiveFocalLength {
-            wavelength_nm: 587.56,
-        },
+        OperandType::EffectiveFocalLength { wavelength_nm: 587.56 },
         100.0,
         500.0,
     ));
@@ -110,10 +104,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Executing Damped Least Squares optimization...");
     let result = optimizer.optimize(&initial_prescription, &vars, &mf, &catalog, None)?;
 
-    println!(
-        "Optimization converged in {} iterations.",
-        result.iterations
-    );
+    println!("Optimization converged in {} iterations.", result.iterations);
     println!("  Initial Merit: {:.6}", result.initial_merit);
     println!("  Final Merit:   {:.6}", result.final_merit);
     println!(
@@ -136,10 +127,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         result.optimized_prescription.surfaces[1].radius_mm,
         1.0 / result.optimized_prescription.surfaces[1].radius_mm
     );
-    println!(
-        "  Optimized EFL: {:.3} mm (Target: 100.000 mm)",
-        parax_opt.efl_mm
-    );
+    println!("  Optimized EFL: {:.3} mm (Target: 100.000 mm)", parax_opt.efl_mm);
     println!("  Optimized BFL: {:.3} mm\n", parax_opt.bfl_mm);
 
     println!("Optimization successfully completed without panics.");

@@ -1,0 +1,22 @@
+{
+  "system_name": "Double Gauss 50mm F/2.0",
+  "source_references": [
+    "Warren J. Smith, Modern Optical Engineering, 4th ed., McGraw-Hill, 2007",
+    "Arthur Cox, A System of Optical Design, Focal Press, 1964"
+  ],
+  "nominal_parameters": {
+    "wavelength_nm": 587.56,
+    "entrance_pupil_diameter_mm": 25.0,
+    "f_number": 2.0
+  },
+  "paraxial_cardinal_points": {
+    "efl_mm": 50.00,
+    "bfl_mm": 35.75,
+    "entrance_pupil_position_mm": 15.2,
+    "exit_pupil_position_mm": -24.8
+  },
+  "tolerances": {
+    "efl_relative_tolerance": 0.005,
+    "bfl_relative_tolerance": 0.02
+  }
+}

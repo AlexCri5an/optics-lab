@@ -34,55 +34,47 @@ pub mod types;
 
 // Re-export primary types and functions at the crate root
 pub use aiming::{
-    Conjugate, PolarizedRayTraceResult, RayAimingMode, SurfacePolarizationRecord,
-    VignettingFactors, WavelengthSet, trace_aimed_ray, trace_polarized_ray,
+    Conjugate, PolarizedRayTraceResult, RayAimingMode, SurfacePolarizationRecord, VignettingFactors, WavelengthSet,
+    trace_aimed_ray, trace_polarized_ray,
 };
 pub use analysis::{
-    FieldCurves, FieldPointAnalysis, FootprintDiagram, FootprintPoint, GhostAnalysis,
-    GhostReflection, LongitudinalAberrationPoint, MtfCurve, MtfPoint, OpdFanData, OpdFanPoint,
-    PointSpreadFunction, PrescriptionSummary, PupilCoord, PupilPattern, RayFanData, RayFanPoint,
-    RayTable, SeidelCoefficients, SpotDiagram, SpotMetrics, SpotPoint, SurfaceRayRow,
-    SurfaceSeidel, ThroughFocusAnalysis, ThroughFocusMtfPoint, ThroughFocusSpotPoint, WavefrontMap,
-    ZernikeFit, compute_diffraction_mtf, compute_fft_psf, compute_field_curves,
-    compute_footprint_diagram, compute_geometric_mtf, compute_longitudinal_spherical_aberration,
-    compute_opd_fan, compute_ray_table, compute_seidel_coefficients,
-    compute_through_focus_geometric_mtf, compute_through_focus_spot, compute_two_bounce_ghosts,
-    diffraction_limit_mtf, fit_zernike_noll, generate_prescription_summary,
-    generate_pupil_distribution, launch_pupil_ray, noll_index_to_nm, spot_diagram_metrics,
-    trace_ray_fan, trace_spot_diagram, zernike_noll_eval,
+    FieldCurves, FieldPointAnalysis, FootprintDiagram, FootprintPoint, GhostAnalysis, GhostReflection,
+    LongitudinalAberrationPoint, MtfCurve, MtfPoint, OpdFanData, OpdFanPoint, PointSpreadFunction, PrescriptionSummary,
+    PupilCoord, PupilPattern, RayFanData, RayFanPoint, RayTable, SeidelCoefficients, SpotDiagram, SpotMetrics,
+    SpotPoint, SurfaceRayRow, SurfaceSeidel, ThroughFocusAnalysis, ThroughFocusMtfPoint, ThroughFocusSpotPoint,
+    WavefrontMap, ZernikeFit, compute_diffraction_mtf, compute_fft_psf, compute_field_curves,
+    compute_footprint_diagram, compute_geometric_mtf, compute_longitudinal_spherical_aberration, compute_opd_fan,
+    compute_ray_table, compute_seidel_coefficients, compute_through_focus_geometric_mtf, compute_through_focus_spot,
+    compute_two_bounce_ghosts, diffraction_limit_mtf, fit_zernike_noll, generate_prescription_summary,
+    generate_pupil_distribution, launch_pupil_ray, noll_index_to_nm, spot_diagram_metrics, trace_ray_fan,
+    trace_spot_diagram, zernike_noll_eval,
 };
 pub use conic::{ConicSurface, conic_normal, conic_sag, intersect_conic};
 pub use error::OpticsError;
 pub use fresnel::{fresnel_dielectric, fresnel_unpolarized, schlick_approx};
 pub use geometry::{Air, ConstantIndex, RefractiveIndex, Triangle};
-pub use multiconfig::{
-    ConfigOverride, Configuration, MultiConfigSystem, Pickup, solve_focal_length,
-};
+pub use multiconfig::{ConfigOverride, Configuration, MultiConfigSystem, Pickup, solve_focal_length};
 pub use path::{PathRecord, RayBranchPolicy, Scene, spectral_fan, trace_path};
 pub use polarization::{
-    JonesMatrix, JonesVector, MuellerMatrix, StokesVector, surface_coating_jones,
-    surface_fresnel_jones,
+    JonesMatrix, JonesVector, MuellerMatrix, StokesVector, surface_coating_jones, surface_fresnel_jones,
 };
 pub use prescription::{
-    MaterialResolver, OpticalPrescription, OpticalSurface, ParaxialProperties, ParaxialRay,
-    ResolvedPrescription, ResolvedSurface, SequentialPathRecord, SequentialRayHit,
-    calculate_paraxial_properties, trace_paraxial_chief, trace_paraxial_marginal, trace_sequential,
+    MaterialResolver, OpticalPrescription, OpticalSurface, ParaxialProperties, ParaxialRay, ResolvedPrescription,
+    ResolvedSurface, SequentialPathRecord, SequentialRayHit, calculate_paraxial_properties, trace_paraxial_chief,
+    trace_paraxial_marginal, trace_sequential,
 };
 pub use project::{CameraConfig, OpticsProject, PROJECT_SCHEMA_VERSION, RenderConfig, SceneConfig};
 pub use snell::{reflect, snell_refract};
 pub use surface::{
-    Aperture, ApertureShape, BiconicSurface, CoordinateBreak, DiffractivePhaseSurface, EvenAsphere,
-    ForbesQbfsSurface, ForbesQconSurface, GrinProfile, OddAsphere, SurfaceProfile, SurfaceTransform,
-    ToroidalSurface, XyPolynomialSurface, XyTerm, ZernikeSagSurface, trace_grin_rk4,
+    Aperture, ApertureShape, BiconicSurface, CoordinateBreak, DiffractivePhaseSurface, EvenAsphere, ForbesQbfsSurface,
+    ForbesQconSurface, GrinProfile, OddAsphere, SurfaceProfile, SurfaceTransform, ToroidalSurface, XyPolynomialSurface,
+    XyTerm, ZernikeSagSurface, trace_grin_rk4,
 };
 pub use tessellate::{
-    prescription_to_trimesh, prescription_to_trimesh_with_materials, tessellate_conic_surface,
-    tessellate_lens_rim,
+    prescription_to_trimesh, prescription_to_trimesh_with_materials, tessellate_conic_surface, tessellate_lens_rim,
 };
 pub use thin_film::{Coating, CoatingResponse, Complex, SurfaceCoating, ThinFilmLayer};
-pub use types::{
-    BounceEvent, Field, HitRecord, Pupil, Ray, RayBounce, SurfaceId, Vec3, Wavelength,
-};
+pub use types::{BounceEvent, Field, HitRecord, Pupil, Ray, RayBounce, SurfaceId, Vec3, Wavelength};
 
 #[cfg(test)]
 mod tests {
@@ -155,10 +147,7 @@ mod tests {
         let reverse_refracted = snell_refract(reverse_incident, reverse_normal, n2, n1)?;
 
         let diff = (reverse_refracted - incident).norm();
-        assert!(
-            diff < 1e-9,
-            "Reversibility violated: difference norm = {diff}"
-        );
+        assert!(diff < 1e-9, "Reversibility violated: difference norm = {diff}");
 
         Ok(())
     }
@@ -217,19 +206,13 @@ mod tests {
         let sub_critical_angle = theta_c - delta;
         let sub_critical_ray = dir_from_angle(sub_critical_angle);
         let sub_res = snell_refract(sub_critical_ray, normal, n1, n2);
-        assert!(
-            sub_res.is_ok(),
-            "Ray just below critical angle should refract"
-        );
+        assert!(sub_res.is_ok(), "Ray just below critical angle should refract");
 
         // Just above critical angle: must return TotalInternalReflection
         let super_critical_angle = theta_c + delta;
         let super_critical_ray = dir_from_angle(super_critical_angle);
         let super_res = snell_refract(super_critical_ray, normal, n1, n2);
-        assert!(matches!(
-            super_res,
-            Err(OpticsError::TotalInternalReflection)
-        ));
+        assert!(matches!(super_res, Err(OpticsError::TotalInternalReflection)));
 
         Ok(())
     }
@@ -297,14 +280,8 @@ mod tests {
         // R = ((1.0 - 1.5168) / (1.0 + 1.5168))^2 = (-0.5168 / 2.5168)^2 ≈ 0.0421685...
         let (rs_norm, rp_norm) = fresnel_dielectric(1.0, n1, n2);
         let expected_r0 = ((n1 - n2) / (n1 + n2)).powi(2);
-        assert!(
-            (rs_norm - expected_r0).abs() < 1e-12,
-            "Rs at normal incidence mismatch"
-        );
-        assert!(
-            (rp_norm - expected_r0).abs() < 1e-12,
-            "Rp at normal incidence mismatch"
-        );
+        assert!((rs_norm - expected_r0).abs() < 1e-12, "Rs at normal incidence mismatch");
+        assert!((rp_norm - expected_r0).abs() < 1e-12, "Rp at normal incidence mismatch");
 
         // 2. Brewster's Angle: theta_B = atan(n2 / n1)
         // At theta_B, Rp must be identically 0.
@@ -312,10 +289,7 @@ mod tests {
         let cos_b = theta_b.cos();
         let (rs_b, rp_b) = fresnel_dielectric(cos_b, n1, n2);
         assert!(rp_b < 1e-12, "Rp at Brewster's angle must be 0, got {rp_b}");
-        assert!(
-            rs_b > 0.05,
-            "Rs at Brewster's angle should be non-zero, got {rs_b}"
-        );
+        assert!(rs_b > 0.05, "Rs at Brewster's angle should be non-zero, got {rs_b}");
 
         // 3. Grazing incidence (theta_i -> 90 deg, cos_i -> 0):
         // Both Rs and Rp approach 1.0.
@@ -419,10 +393,7 @@ mod tests {
             let l2 = lam_um * lam_um;
             let b = [1.03961212, 0.231792344, 1.01046945];
             let c = [0.00600069867, 0.0200179144, 103.560653];
-            let n2 = 1.0
-                + (b[0] * l2) / (l2 - c[0])
-                + (b[1] * l2) / (l2 - c[1])
-                + (b[2] * l2) / (l2 - c[2]);
+            let n2 = 1.0 + (b[0] * l2) / (l2 - c[0]) + (b[1] * l2) / (l2 - c[1]) + (b[2] * l2) / (l2 - c[2]);
             n2.sqrt()
         }
     }
@@ -484,9 +455,7 @@ mod tests {
             assert_eq!(path.bounces[0].event, BounceEvent::Refract);
             assert_eq!(path.bounces[1].event, BounceEvent::Refract);
 
-            let exit_dir = path.bounces[1]
-                .refracted_dir
-                .ok_or("Expected exit refraction")?;
+            let exit_dir = path.bounces[1].refracted_dir.ok_or("Expected exit refraction")?;
             exit_directions.push(exit_dir);
         }
 
@@ -595,9 +564,7 @@ mod tests {
         let mut prev_deviation: Option<f64> = None;
         for (w, path) in &fan {
             assert_eq!(path.bounces.len(), 2, "Expected 2 bounces at {w} nm");
-            let exit_dir = path.bounces[1]
-                .refracted_dir
-                .ok_or("Expected exit refraction")?;
+            let exit_dir = path.bounces[1].refracted_dir.ok_or("Expected exit refraction")?;
             let deviation = exit_dir.dot(&incident_dir).clamp(-1.0, 1.0).acos();
 
             if let Some(prev_dev) = prev_deviation {
@@ -630,9 +597,7 @@ mod tests {
             let t2 = snell_refract(t1, -n2_face, n_glass, 1.0)?;
             let analytic_dev = t2.dot(&incident_dir).clamp(-1.0, 1.0).acos();
 
-            let exit_dir = path.bounces[1]
-                .refracted_dir
-                .ok_or("Expected exit refraction")?;
+            let exit_dir = path.bounces[1].refracted_dir.ok_or("Expected exit refraction")?;
             let traced_dev = exit_dir.dot(&incident_dir).clamp(-1.0, 1.0).acos();
 
             assert!(

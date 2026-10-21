@@ -3,9 +3,8 @@
 use clap::{Parser, Subcommand};
 use optics_bvh::{Aabb, BlasInstance, BvhScene, Triangle as BvhTriangle};
 use optics_core::analysis::{
-    PupilPattern, compute_diffraction_mtf, compute_fft_psf, compute_field_curves,
-    compute_footprint_diagram, compute_ray_table, compute_seidel_coefficients,
-    compute_two_bounce_ghosts, compute_wavefront_map, fit_zernike_noll,
+    PupilPattern, compute_diffraction_mtf, compute_fft_psf, compute_field_curves, compute_footprint_diagram,
+    compute_ray_table, compute_seidel_coefficients, compute_two_bounce_ghosts, compute_wavefront_map, fit_zernike_noll,
     generate_prescription_summary, trace_ray_fan, trace_spot_diagram,
 };
 use optics_core::conic::{ConicSurface, conic_normal, conic_sag};
@@ -13,22 +12,20 @@ use optics_core::fresnel::fresnel_dielectric;
 use optics_core::prescription::calculate_paraxial_properties;
 use optics_core::snell::snell_refract;
 use optics_core::{
-    Air, OpticalPrescription, PathRecord, Ray, RayBranchPolicy, RefractiveIndex, Scene, Triangle,
-    Vec3, spectral_fan,
+    Air, OpticalPrescription, PathRecord, Ray, RayBranchPolicy, RefractiveIndex, Scene, Triangle, Vec3, spectral_fan,
 };
 use optics_engine::{AnalysisRequest, AnalysisResult, EngineCommand, OpticalEngine, SurfaceUpdate};
 use optics_ffi::{
-    optics_engine_create, optics_engine_export_svg, optics_engine_free,
-    optics_engine_get_status_json, optics_string_free,
+    optics_engine_create, optics_engine_export_svg, optics_engine_free, optics_engine_get_status_json,
+    optics_string_free,
+};
+use optics_formats::presets::{cooke_triplet_f4_5, double_gauss_50mm, plano_convex_100mm};
+use optics_formats::{
+    CodeVSystem, DxfConfig, Iso10110DrawingSheet, OpticsProjectWorkspace, OsloSystem, SvgConfig, export_dxf_layout,
+    export_obj_system, export_stl_lens, export_svg_layout, parse_len, parse_seq, parse_zmx_bytes, write_len, write_seq,
 };
 use optics_glass::{DispersionModel, GlassCatalogDb, GlassMaterial};
 use optics_spectral::{LAMBDA_C_NM, LAMBDA_D_NM, LAMBDA_F_NM, display_color_for_wavelength};
-use optics_zemax::presets::{cooke_triplet_f4_5, double_gauss_50mm, plano_convex_100mm};
-use optics_zemax::{
-    CodeVSystem, DxfConfig, Iso10110DrawingSheet, OpticsProjectWorkspace, OsloSystem, SvgConfig,
-    export_dxf_layout, export_obj_system, export_stl_lens, export_svg_layout, parse_len, parse_seq,
-    parse_zmx_bytes, write_len, write_seq,
-};
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
@@ -78,7 +75,7 @@ enum Commands {
         #[arg(long, default_value = "cooke")]
         preset: String,
 
-        /// Path to a Zemax .zmx prescription file (overrides --preset)
+        /// Path to a .zmx prescription file (overrides --preset)
         #[arg(long)]
         zmx: Option<PathBuf>,
 
@@ -268,7 +265,7 @@ enum Commands {
         /// Preset lens name: "cooke", "double-gauss", or "plano-convex"
         #[arg(long, default_value = "cooke")]
         preset: String,
-        /// Path to a Zemax .zmx prescription file (overrides --preset)
+        /// Path to a .zmx prescription file (overrides --preset)
         #[arg(long)]
         zmx: Option<PathBuf>,
         /// Number of Monte Carlo trials
@@ -391,7 +388,7 @@ enum Commands {
 
     /// Interacts directly with the unified OpticalEngine facade.
     Engine {
-        /// Optional path to a Zemax .zmx file to load
+        /// Optional path to a .zmx file to load
         #[arg(long)]
         zmx: Option<PathBuf>,
 
@@ -417,9 +414,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let Some(command) = cli.command else {
-        println!(
-            "No command specified. Use --help for usage or --self-test to run diagnostic self-tests."
-        );
+        println!("No command specified. Use --help for usage or --self-test to run diagnostic self-tests.");
         return Ok(());
     };
 
@@ -580,11 +575,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut vars = optics_optimize::VariableSet::new();
             for i in 0..presc.surfaces.len().saturating_sub(1) {
                 if !presc.surfaces[i].is_stop {
-                    vars.add_with_bounds(
-                        optics_optimize::VariableType::Curvature { surface_index: i },
-                        -0.1,
-                        0.1,
-                    );
+                    vars.add_with_bounds(optics_optimize::VariableType::Curvature { surface_index: i }, -0.1, 0.1);
                 }
             }
             let mf = optics_optimize::MeritFunction::default_rms_spot(&presc, Some(target_efl));
@@ -616,9 +607,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let catalog = GlassCatalogDb::load_bundled()?;
             let mut operands = Vec::new();
             for i in 0..presc.surfaces.len().saturating_sub(1) {
-                if presc.surfaces[i].radius_mm.is_finite()
-                    && presc.surfaces[i].radius_mm.abs() > 1e-6
-                {
+                if presc.surfaces[i].radius_mm.is_finite() && presc.surfaces[i].radius_mm.abs() > 1e-6 {
                     operands.push(optics_tolerance::ToleranceOperand::new(
                         format!("TRAD_S{}", i),
                         optics_tolerance::ToleranceOperandType::Radius {
@@ -645,19 +634,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let compensator = optics_tolerance::Compensator::ParaxialRefocus {
                 wavelength_nm: wavelength,
             };
-            let sensitivity = optics_tolerance::SensitivityAnalyzer::analyze(
-                &presc,
-                &operands,
-                &criterion,
-                &compensator,
-                &catalog,
-            )?;
-            let mc_sim =
-                optics_tolerance::MonteCarloSimulator::new(optics_tolerance::MonteCarloConfig {
-                    num_trials: trials,
-                    seed,
-                    yield_threshold: Some(sensitivity.nominal_value * 2.0),
-                });
+            let sensitivity =
+                optics_tolerance::SensitivityAnalyzer::analyze(&presc, &operands, &criterion, &compensator, &catalog)?;
+            let mc_sim = optics_tolerance::MonteCarloSimulator::new(optics_tolerance::MonteCarloConfig {
+                num_trials: trials,
+                seed,
+                yield_threshold: Some(sensitivity.nominal_value * 2.0),
+            });
             let mc_report = mc_sim.run(&presc, &operands, &criterion, &compensator, &catalog)?;
             let output = serde_json::json!({
                 "system": name,
@@ -674,18 +657,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             min_power,
             json,
         } => run_nonseq_command(&preset, rays, max_bounces, min_power, json),
-        Commands::ExportSvg {
-            preset,
-            zmx,
-            output,
-        } => {
+        Commands::ExportSvg { preset, zmx, output } => {
             let (name, presc) = resolve_cli_raw_prescription(&preset, zmx.as_ref())?;
             let svg = export_svg_layout(&presc, None, &SvgConfig::default())?;
             std::fs::write(&output, svg)?;
-            println!(
-                "Exported 2D SVG layout for '{name}' to {}",
-                output.display()
-            );
+            println!("Exported 2D SVG layout for '{name}' to {}", output.display());
             Ok(())
         }
         Commands::ExportDxf {
@@ -702,10 +678,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let dxf = export_dxf_layout(&presc, None, &config)?;
             std::fs::write(&output, dxf)?;
             let mode = if three_d { "3D" } else { "2D" };
-            println!(
-                "Exported {mode} AutoCAD DXF for '{name}' to {}",
-                output.display()
-            );
+            println!("Exported {mode} AutoCAD DXF for '{name}' to {}", output.display());
             Ok(())
         }
         Commands::ExportStl {
@@ -720,10 +693,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let stl_bytes = export_stl_lens(&presc, binary, slices, rings);
             std::fs::write(&output, stl_bytes)?;
             let fmt = if binary { "binary" } else { "ASCII" };
-            println!(
-                "Exported 3D STL ({fmt}) for '{name}' to {}",
-                output.display()
-            );
+            println!("Exported 3D STL ({fmt}) for '{name}' to {}", output.display());
             Ok(())
         }
         Commands::ExportObj {
@@ -779,10 +749,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let rx = sys.to_optical_prescription();
                     let serialized = write_seq(&CodeVSystem::from_optical_prescription(&rx));
                     std::fs::write(&out_path, serialized)?;
-                    println!(
-                        "Wrote CODE V sequential prescription to {}",
-                        out_path.display()
-                    );
+                    println!("Wrote CODE V sequential prescription to {}", out_path.display());
                 }
             } else {
                 let (name, presc) = resolve_cli_raw_prescription(&preset, zmx.as_ref())?;
@@ -790,10 +757,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let text = write_seq(&sys);
                 if let Some(out_path) = output {
                     std::fs::write(&out_path, text)?;
-                    println!(
-                        "Exported CODE V sequential file for '{name}' to {}",
-                        out_path.display()
-                    );
+                    println!("Exported CODE V sequential file for '{name}' to {}", out_path.display());
                 } else {
                     println!("{text}");
                 }
@@ -809,11 +773,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(path) = len {
                 let content = std::fs::read_to_string(&path)?;
                 let sys = parse_len(&content)?;
-                println!(
-                    "Parsed OSLO file: '{}' with {} surfaces",
-                    sys.title,
-                    sys.surfaces.len()
-                );
+                println!("Parsed OSLO file: '{}' with {} surfaces", sys.title, sys.surfaces.len());
                 if let Some(out_path) = output {
                     let rx = sys.to_optical_prescription();
                     let serialized = write_len(&OsloSystem::from_optical_prescription(&rx));
@@ -826,10 +786,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let text = write_len(&sys);
                 if let Some(out_path) = output {
                     std::fs::write(&out_path, text)?;
-                    println!(
-                        "Exported OSLO prescription for '{name}' to {}",
-                        out_path.display()
-                    );
+                    println!("Exported OSLO prescription for '{name}' to {}", out_path.display());
                 } else {
                     println!("{text}");
                 }
@@ -935,9 +892,7 @@ fn run_nonseq_command(
                 direction: optics_core::Vec3::new(0.0, 0.0, 1.0),
                 radius: 10.0,
                 total_flux_watts: 1.0,
-                spectrum: SourceSpectrum::Monochromatic {
-                    wavelength_nm: 587.56,
-                },
+                spectrum: SourceSpectrum::Monochromatic { wavelength_nm: 587.56 },
             };
             source.generate_rays(rays, 42)?
         }
@@ -973,9 +928,7 @@ fn run_nonseq_command(
                 direction: optics_core::Vec3::new(0.1, 0.0, 0.99).normalize(),
                 radius: 3.0,
                 total_flux_watts: 1.0,
-                spectrum: SourceSpectrum::Monochromatic {
-                    wavelength_nm: 587.56,
-                },
+                spectrum: SourceSpectrum::Monochromatic { wavelength_nm: 587.56 },
             };
             let mut launched = source.generate_rays(rays, 42)?;
             for r in &mut launched {
@@ -1015,9 +968,7 @@ fn run_nonseq_command(
                 direction: optics_core::Vec3::new(0.0, 0.0, 1.0),
                 radius: 4.0,
                 total_flux_watts: 1.0,
-                spectrum: SourceSpectrum::Monochromatic {
-                    wavelength_nm: 587.56,
-                },
+                spectrum: SourceSpectrum::Monochromatic { wavelength_nm: 587.56 },
             };
             source.generate_rays(rays, 42)?
         }
@@ -1070,14 +1021,8 @@ fn run_nonseq_command(
         println!("Detected Flux:        {:.6} W", report.detected_flux_watts);
         println!("Absorbed Flux:        {:.6} W", report.absorbed_flux_watts);
         println!("Escaped Flux:         {:.6} W", report.escaped_flux_watts);
-        println!(
-            "Conservation Ratio:   {:.8}",
-            report.energy_conservation_ratio()
-        );
-        println!(
-            "Trace Time:           {:.2} ms",
-            elapsed.as_secs_f64() * 1000.0
-        );
+        println!("Conservation Ratio:   {:.8}", report.energy_conservation_ratio());
+        println!("Trace Time:           {:.2} ms", elapsed.as_secs_f64() * 1000.0);
         println!("------------------------------------------------------------");
         for d in &scene.detectors {
             let (cx, cy) = d.centroid_mm();
@@ -1106,24 +1051,15 @@ fn resolve_cli_raw_prescription(
         let fname = path
             .file_name()
             .and_then(|f| f.to_str())
-            .unwrap_or("Zemax System")
+            .unwrap_or("ZMX System")
             .to_string();
         Ok((fname, p))
     } else {
         match preset.to_lowercase().replace('_', "-").as_str() {
-            "cooke" | "cooke-triplet" => {
-                Ok(("Cooke Triplet F/4.5".to_string(), cooke_triplet_f4_5()?))
-            }
-            "double-gauss" | "doublegauss" => {
-                Ok(("Double Gauss F/2.0".to_string(), double_gauss_50mm()?))
-            }
-            "plano-convex" | "singlet" => {
-                Ok(("Plano-Convex Singlet".to_string(), plano_convex_100mm()?))
-            }
-            other => Err(format!(
-                "Unknown preset '{other}'. Valid options: cooke, double-gauss, plano-convex"
-            )
-            .into()),
+            "cooke" | "cooke-triplet" => Ok(("Cooke Triplet F/4.5".to_string(), cooke_triplet_f4_5()?)),
+            "double-gauss" | "doublegauss" => Ok(("Double Gauss F/2.0".to_string(), double_gauss_50mm()?)),
+            "plano-convex" | "singlet" => Ok(("Plano-Convex Singlet".to_string(), plano_convex_100mm()?)),
+            other => Err(format!("Unknown preset '{other}'. Valid options: cooke, double-gauss, plano-convex").into()),
         }
     }
 }
@@ -1155,10 +1091,7 @@ fn run_prism_command(
             "f2" => GlassMaterial::f2(),
             "fused silica" | "fused_silica" => GlassMaterial::fused_silica(),
             _ => {
-                return Err(format!(
-                    "Glass material '{glass_name}' not found in embedded catalog or presets"
-                )
-                .into());
+                return Err(format!("Glass material '{glass_name}' not found in embedded catalog or presets").into());
             }
         },
     };
@@ -1200,8 +1133,7 @@ fn run_prism_command(
     let tri3b = Triangle::new(v_right_front, v_left_back, v_right_back, 3, 1, 0)?;
 
     let triangles = vec![tri1a, tri1b, tri2a, tri2b, tri3a, tri3b];
-    let media: Vec<Box<dyn optics_core::RefractiveIndex>> =
-        vec![Box::new(Air), Box::new(glass_mat.clone())];
+    let media: Vec<Box<dyn optics_core::RefractiveIndex>> = vec![Box::new(Air), Box::new(glass_mat.clone())];
     let scene = Scene::new(triangles, media);
 
     // Incidence vector: angle incidence_deg relative to left face normal (-cos beta, sin beta).
@@ -1233,10 +1165,7 @@ fn run_prism_command(
     );
 
     // Print stdout table
-    println!(
-        "{:<17} | {:<10} | {:<15}",
-        "Wavelength (nm)", "n", "Deviation (deg)"
-    );
+    println!("{:<17} | {:<10} | {:<15}", "Wavelength (nm)", "n", "Deviation (deg)");
     println!("{:-<17}-+-{:-<10}-+-{:-<15}", "", "", "");
 
     let mut table_rows: Vec<(f64, f64, f64, &PathRecord)> = Vec::new();
@@ -1257,15 +1186,7 @@ fn run_prism_command(
     }
 
     // Generate 2D SVG
-    generate_prism_svg(
-        svg_path,
-        v_left,
-        v_apex,
-        v_right,
-        origin,
-        incident_dir,
-        &table_rows,
-    )?;
+    generate_prism_svg(svg_path, v_left, v_apex, v_right, origin, incident_dir, &table_rows)?;
 
     println!("\nSaved 2D SVG diagram to: {}", svg_path.display());
 
@@ -1412,23 +1333,18 @@ fn run_analyze_command(opts: AnalyzeOptions<'_>) -> Result<(), Box<dyn std::erro
         let fname = path
             .file_name()
             .and_then(|f| f.to_str())
-            .unwrap_or("Zemax System")
+            .unwrap_or("ZMX System")
             .to_string();
         (fname, p)
     } else {
         match opts.preset.to_lowercase().replace('_', "-").as_str() {
             "cooke" | "cooke-triplet" => ("Cooke Triplet F/4.5".to_string(), cooke_triplet_f4_5()?),
-            "double-gauss" | "doublegauss" => {
-                ("Double Gauss F/2.0".to_string(), double_gauss_50mm()?)
-            }
-            "plano-convex" | "singlet" => {
-                ("Plano-Convex Singlet".to_string(), plano_convex_100mm()?)
-            }
+            "double-gauss" | "doublegauss" => ("Double Gauss F/2.0".to_string(), double_gauss_50mm()?),
+            "plano-convex" | "singlet" => ("Plano-Convex Singlet".to_string(), plano_convex_100mm()?),
             other => {
-                return Err(format!(
-                    "Unknown preset '{other}'. Valid options: cooke, double-gauss, plano-convex"
-                )
-                .into());
+                return Err(
+                    format!("Unknown preset '{other}'. Valid options: cooke, double-gauss, plano-convex").into(),
+                );
             }
         }
     };
@@ -1441,23 +1357,13 @@ fn run_analyze_command(opts: AnalyzeOptions<'_>) -> Result<(), Box<dyn std::erro
         &resolved,
         (0.0, opts.field),
         opts.wavelength,
-        PupilPattern::Hexapolar {
-            num_rings: opts.rings,
-        },
+        PupilPattern::Hexapolar { num_rings: opts.rings },
     )?;
-    let fan = trace_ray_fan(
-        &resolved,
-        (0.0, opts.field),
-        opts.wavelength,
-        opts.fan_points,
-    )?;
+    let fan = trace_ray_fan(&resolved, (0.0, opts.field), opts.wavelength, opts.fan_points)?;
 
     if let Some(csv_path) = opts.csv {
         let mut csv_file = File::create(csv_path)?;
-        writeln!(
-            csv_file,
-            "ray_index,px,py,x_mm,y_mm,intensity,wavelength_nm"
-        )?;
+        writeln!(csv_file, "ray_index,px,py,x_mm,y_mm,intensity,wavelength_nm")?;
         for (i, pt) in spot.points.iter().enumerate() {
             writeln!(
                 csv_file,
@@ -1510,18 +1416,9 @@ fn run_analyze_command(opts: AnalyzeOptions<'_>) -> Result<(), Box<dyn std::erro
         );
         println!();
         println!("1. Paraxial First-Order Properties:");
-        println!(
-            "   Effective Focal Length (EFL): {:>8.3} mm",
-            paraxial.efl_mm
-        );
-        println!(
-            "   Back Focal Length (BFL):      {:>8.3} mm",
-            paraxial.bfl_mm
-        );
-        println!(
-            "   Working F-number:             F/{:>6.2}",
-            paraxial.f_number
-        );
+        println!("   Effective Focal Length (EFL): {:>8.3} mm", paraxial.efl_mm);
+        println!("   Back Focal Length (BFL):      {:>8.3} mm", paraxial.bfl_mm);
+        println!("   Working F-number:             F/{:>6.2}", paraxial.f_number);
         println!(
             "   Entrance Pupil Position:      {:>8.3} mm",
             paraxial.entrance_pupil_pos_mm
@@ -1532,10 +1429,7 @@ fn run_analyze_command(opts: AnalyzeOptions<'_>) -> Result<(), Box<dyn std::erro
         );
         println!();
         println!("2. Geometric Spot Diagram:");
-        println!(
-            "   Total Rays Traced:            {:>8}",
-            spot.metrics.total_rays_traced
-        );
+        println!("   Total Rays Traced:            {:>8}", spot.metrics.total_rays_traced);
         println!(
             "   Passed Rays:                  {:>8} ({:.1}% transmitted)",
             spot.metrics.passed_rays_count,
@@ -1569,15 +1463,8 @@ fn run_analyze_command(opts: AnalyzeOptions<'_>) -> Result<(), Box<dyn std::erro
         println!();
         println!("3. Transverse Ray Aberrations (Tangential Fan Samples):");
         for p in [-1.0, -0.5, 0.0, 0.5, 1.0] {
-            if let Some(pt) = fan
-                .tangential
-                .iter()
-                .find(|pt| (pt.pupil_coord - p).abs() < 1e-3)
-            {
-                println!(
-                    "   Py = {:>5.2}: {:>8.2} µm",
-                    pt.pupil_coord, pt.aberration_um
-                );
+            if let Some(pt) = fan.tangential.iter().find(|pt| (pt.pupil_coord - p).abs() < 1e-3) {
+                println!("   Py = {:>5.2}: {:>8.2} µm", pt.pupil_coord, pt.aberration_um);
             }
         }
         println!("============================================================");
@@ -1596,9 +1483,7 @@ fn run_glass_command(name: &str, json: bool) -> Result<(), Box<dyn std::error::E
             "f2" => GlassMaterial::f2(),
             "fused silica" | "fused_silica" | "lithosil-q" => GlassMaterial::fused_silica(),
             _ => {
-                return Err(
-                    format!("Glass material '{name}' not found in catalog or presets").into(),
-                );
+                return Err(format!("Glass material '{name}' not found in catalog or presets").into());
             }
         },
     };
@@ -1609,11 +1494,7 @@ fn run_glass_command(name: &str, json: bool) -> Result<(), Box<dyn std::error::E
     let n_e = glass_mat.refractive_index(546.07);
     let n_g = glass_mat.refractive_index(435.84);
     let calc_vd = (n_d - 1.0) / (n_f - n_c);
-    let is_crown = if n_d > 1.60 {
-        calc_vd > 50.0
-    } else {
-        calc_vd > 55.0
-    };
+    let is_crown = if n_d > 1.60 { calc_vd > 50.0 } else { calc_vd > 55.0 };
     let classification = if is_crown {
         "Crown (low dispersion)"
     } else {
@@ -1736,11 +1617,7 @@ fn run_glass_command(name: &str, json: bool) -> Result<(), Box<dyn std::error::E
     Ok(())
 }
 
-fn run_benchmark_command(
-    scene_name: &str,
-    rays_count: usize,
-    json: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
+fn run_benchmark_command(scene_name: &str, rays_count: usize, json: bool) -> Result<(), Box<dyn std::error::Error>> {
     let rays_count = rays_count.max(100);
 
     // Build benchmark scene geometry (prism geometry matching run_prism_command)
@@ -1782,9 +1659,7 @@ fn run_benchmark_command(
     // Deterministic pseudo-random ray generator (LCG)
     let mut rng: u64 = 0x853c49e6748fea9b;
     let mut next_f64 = || -> f64 {
-        rng = rng
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
+        rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
         (rng >> 11) as f64 / (1_u64 << 53) as f64
     };
 
@@ -1835,14 +1710,8 @@ fn run_benchmark_command(
     println!("============================================================");
     println!("Scene:                {scene_name} (2-level BVH, TLAS + BLAS)");
     println!("Total Rays:           {rays_count}");
-    println!(
-        "BVH Build Duration:   {:.3} ms",
-        bvh_build_time.as_secs_f64() * 1000.0
-    );
-    println!(
-        "Traversal Duration:   {:.3} ms",
-        trace_elapsed.as_secs_f64() * 1000.0
-    );
+    println!("BVH Build Duration:   {:.3} ms", bvh_build_time.as_secs_f64() * 1000.0);
+    println!("Traversal Duration:   {:.3} ms", trace_elapsed.as_secs_f64() * 1000.0);
     println!("Intersections Found:  {hits} ({:.1}%)", hit_rate * 100.0);
     println!("------------------------------------------------------------");
     println!("Throughput:           {:.2} MRAYS/s", mrays_sec);
@@ -1865,9 +1734,7 @@ fn run_self_test() -> Result<(), Box<dyn std::error::Error>> {
     let n_green = nbk7.refractive_index(546.07);
     let n_blue = nbk7.refractive_index(435.83);
     if !(n_blue > n_green && n_green > n_red) {
-        return Err(
-            "Prism dispersion monotonicity failed: expected n(blue) > n(green) > n(red)".into(),
-        );
+        return Err("Prism dispersion monotonicity failed: expected n(blue) > n(green) > n(red)".into());
     }
 
     // Verify Fresnel at normal incidence
@@ -1908,21 +1775,21 @@ fn run_self_test() -> Result<(), Box<dyn std::error::Error>> {
         elapsed_lens.as_secs_f64() * 1000.0
     );
 
-    // 3. Zemax ZMX Specification & Round-Trip
+    // 3. ZMX Specification & Round-Trip
     let start_zmx = std::time::Instant::now();
-    let zmx_bytes = optics_zemax::presets::COOKE_TRIPLET_F4_5_ZMX.as_bytes();
+    let zmx_bytes = optics_formats::presets::COOKE_TRIPLET_F4_5_ZMX.as_bytes();
     let parsed_zmx = parse_zmx_bytes(zmx_bytes)?;
     if parsed_zmx.surfaces.len() != 8 {
         return Err("Parsed Cooke Triplet surface count mismatch".into());
     }
-    let zmx_str = optics_zemax::write_zmx(&parsed_zmx);
+    let zmx_str = optics_formats::write_zmx(&parsed_zmx);
     let round_trip = parse_zmx_bytes(zmx_str.as_bytes())?;
     if round_trip.surfaces.len() != parsed_zmx.surfaces.len() {
-        return Err("Zemax round-trip serialization changed surface count".into());
+        return Err("ZMX round-trip serialization changed surface count".into());
     }
     let elapsed_zmx = start_zmx.elapsed();
     println!(
-        "[PASS] Zemax .zmx Specification & Round-Trip ({:.2} ms)",
+        "[PASS] ZMX Specification & Round-Trip ({:.2} ms)",
         elapsed_zmx.as_secs_f64() * 1000.0
     );
 
@@ -1930,13 +1797,9 @@ fn run_self_test() -> Result<(), Box<dyn std::error::Error>> {
     let start_glass = std::time::Instant::now();
     let glass_count = catalog.len();
     if glass_count < 600 {
-        return Err(
-            format!("Glass catalog incomplete: found {glass_count} glasses (< 600)").into(),
-        );
+        return Err(format!("Glass catalog incomplete: found {glass_count} glasses (< 600)").into());
     }
-    let sf11 = catalog
-        .lookup("SF11")
-        .ok_or("Failed to lookup SF11 in glass catalog")?;
+    let sf11 = catalog.lookup("SF11").ok_or("Failed to lookup SF11 in glass catalog")?;
     if (sf11.nd - 1.7847).abs() > 0.005 {
         return Err("SF11 refractive index nd does not match reference".into());
     }
@@ -1956,12 +1819,7 @@ fn run_self_test() -> Result<(), Box<dyn std::error::Error>> {
     let local_aabb = tri.aabb();
     let instance = BlasInstance::new(0, &local_aabb, nalgebra::Matrix4::identity());
     let scene = BvhScene::build(vec![vec![tri]], vec![instance]);
-    let test_ray = Ray::new(
-        Vec3::new(0.0, 5.0, -10.0),
-        Vec3::new(0.0, 0.0, 1.0),
-        550.0,
-        1.0,
-    )?;
+    let test_ray = Ray::new(Vec3::new(0.0, 5.0, -10.0), Vec3::new(0.0, 0.0, 1.0), 550.0, 1.0)?;
     let hit = scene.intersect(&test_ray);
     if hit.is_none() {
         return Err("BVH test ray failed to intersect triangle".into());
@@ -1999,13 +1857,8 @@ fn run_self_test() -> Result<(), Box<dyn std::error::Error>> {
     let compensator = optics_tolerance::Compensator::ParaxialRefocus {
         wavelength_nm: LAMBDA_D_NM,
     };
-    let sens_report = optics_tolerance::SensitivityAnalyzer::analyze(
-        &cooke_raw,
-        &tol_operands,
-        &criterion,
-        &compensator,
-        &catalog,
-    )?;
+    let sens_report =
+        optics_tolerance::SensitivityAnalyzer::analyze(&cooke_raw, &tol_operands, &criterion, &compensator, &catalog)?;
     if sens_report.records.len() != 2 || sens_report.estimated_rss_degradation <= 0.0 {
         return Err("Tolerancing sensitivity analysis validation failed".into());
     }
@@ -2014,13 +1867,7 @@ fn run_self_test() -> Result<(), Box<dyn std::error::Error>> {
         seed: 42,
         yield_threshold: Some(sens_report.nominal_value * 2.5),
     });
-    let mc_report = mc_sim.run(
-        &cooke_raw,
-        &tol_operands,
-        &criterion,
-        &compensator,
-        &catalog,
-    )?;
+    let mc_report = mc_sim.run(&cooke_raw, &tol_operands, &criterion, &compensator, &catalog)?;
     if mc_report.total_trials != 20 || mc_report.percentiles.p50 <= 0.0 {
         return Err("Monte Carlo simulation percentile calculation failed".into());
     }
@@ -2042,9 +1889,7 @@ fn run_self_test() -> Result<(), Box<dyn std::error::Error>> {
             half_z: 2.5,
         },
         transform: optics_nonseq::Transform3D::from_translation(0.0, 0.0, 2.5),
-        material: optics_nonseq::NonSeqMaterial::dielectric(
-            optics_nonseq::OpticalMedium::Constant { n: 1.5 },
-        ),
+        material: optics_nonseq::NonSeqMaterial::dielectric(optics_nonseq::OpticalMedium::Constant { n: 1.5 }),
         is_active: true,
     };
     ns_scene.add_object(ns_slab);
@@ -2194,9 +2039,7 @@ fn run_self_test() -> Result<(), Box<dyn std::error::Error>> {
             ..Default::default()
         },
     })?;
-    if !engine.is_dirty()
-        || engine.revision() != 2
-        || (engine.prescription().surfaces[1].radius_mm - 30.0).abs() > 1e-6
+    if !engine.is_dirty() || engine.revision() != 2 || (engine.prescription().surfaces[1].radius_mm - 30.0).abs() > 1e-6
     {
         return Err("OpticalEngine command execution failed".into());
     }
@@ -2258,9 +2101,7 @@ fn run_self_test() -> Result<(), Box<dyn std::error::Error>> {
     let cooke_val = cooke_triplet_f4_5()?.resolve(&catalog)?;
     let cooke_px = calculate_paraxial_properties(&cooke_val, LAMBDA_D_NM)?;
     if (cooke_px.efl_mm - 50.02).abs() / 50.02 > 0.001 {
-        return Err(
-            "Golden benchmark validation failed: Cooke Triplet EFL deviates from 50.02 mm".into(),
-        );
+        return Err("Golden benchmark validation failed: Cooke Triplet EFL deviates from 50.02 mm".into());
     }
     let spot_val = trace_spot_diagram(
         &cooke_val,
@@ -2269,9 +2110,7 @@ fn run_self_test() -> Result<(), Box<dyn std::error::Error>> {
         PupilPattern::Hexapolar { num_rings: 6 },
     )?;
     if spot_val.metrics.rms_radius_um >= 5.0 {
-        return Err(
-            "Golden benchmark validation failed: Cooke Triplet spot RMS blur exceeds 5.0 um".into(),
-        );
+        return Err("Golden benchmark validation failed: Cooke Triplet spot RMS blur exceeds 5.0 um".into());
     }
 
     // 10b. Plano-convex Petzval sum golden check
@@ -2311,7 +2150,7 @@ fn run_self_test() -> Result<(), Box<dyn std::error::Error>> {
 
     // 10e. Fuzzing parser resilience on extreme/malformed tokens
     let malformed_zmx = "VERS 0\nSURF 1\n CURV NaN\n DISZ 1e99999\n DIAM Infinity\n";
-    let _ = optics_zemax::parse_zmx(malformed_zmx);
+    let _ = optics_formats::parse_zmx(malformed_zmx);
     let malformed_seq = "TIT 'Malformed'\nSO 0\nS 1\nRDY NaN\nTHI 1e-99999\n";
     let _ = parse_seq(malformed_seq);
     let malformed_len = "LEN NEW\nSURF 1\nRD null\nTH undefined\n";

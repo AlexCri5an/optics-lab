@@ -6,7 +6,7 @@ members = [
     "crates/optics-spectral",
     "crates/optics-glass",
     "crates/optics-bvh",
-    "crates/optics-zemax",
+    "crates/optics-formats",
     "crates/optics-render",
     "crates/optics-optimize",
     "crates/optics-tolerance",
@@ -20,7 +20,7 @@ members = [
 ]
 
 [workspace.package]
-version     = "0.0.1"
+version     = "0.1.0"
 edition     = "2024"
 authors     = ["OpticsLab Contributors"]
 license     = "MIT OR Apache-2.0"
@@ -60,7 +60,7 @@ thiserror  = "2"
 # CLI
 clap       = { version = "4", features = ["derive"] }
 
-# GUI / Desktop (VectorCraft & academic standard)
+# GUI / Desktop (academic standard)
 egui        = "0.32"
 eframe      = "0.32.3"
 egui_extras = { version = "0.32.3", features = ["svg"] }
@@ -76,13 +76,29 @@ optics-core     = { path = "crates/optics-core" }
 optics-spectral = { path = "crates/optics-spectral" }
 optics-glass    = { path = "crates/optics-glass" }
 optics-bvh      = { path = "crates/optics-bvh" }
-optics-zemax    = { path = "crates/optics-zemax" }
+optics-formats  = { path = "crates/optics-formats" }
 optics-render   = { path = "crates/optics-render" }
 optics-optimize = { path = "crates/optics-optimize" }
 optics-tolerance = { path = "crates/optics-tolerance" }
 optics-nonseq    = { path = "crates/optics-nonseq" }
 optics-engine    = { path = "crates/optics-engine" }
 optics-ffi       = { path = "crates/optics-ffi" }
-optics-ui       = { path = "crates/optics-ui" }
+optics-ui        = { path = "crates/optics-ui" }
+
+# ---------------------------------------------------------------------------
+# Compilation Profiles (High-performance production standard)
+# ---------------------------------------------------------------------------
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
+
 
 

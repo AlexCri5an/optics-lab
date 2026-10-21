@@ -128,11 +128,7 @@ impl Triangle {
 
         // Normal points toward the incident medium (against the incident ray)
         let is_front_face = ray.direction.dot(&self.normal) <= 0.0;
-        let normal = if is_front_face {
-            self.normal
-        } else {
-            -self.normal
-        };
+        let normal = if is_front_face { self.normal } else { -self.normal };
 
         Some(HitRecord {
             t,

@@ -8,10 +8,7 @@
 
 use std::sync::{Arc, LazyLock};
 
-use egui::{
-    Color32, CornerRadius, Frame, Margin, Painter, Pos2, Rect, Response, RichText, Sense, Stroke,
-    Ui, Vec2,
-};
+use egui::{Color32, CornerRadius, Frame, Margin, Painter, Pos2, Rect, Response, RichText, Sense, Stroke, Ui, Vec2};
 use optics_core::prescription::trace_sequential;
 use optics_core::{OpticalPrescription, OpticalSurface, Ray, Vec3};
 use optics_glass::GlassCatalogDb;
@@ -74,8 +71,8 @@ impl Viewport3DCamera {
         let mut cum_z = 0.0f64;
 
         for surf in &prescription.surfaces {
-            let is_glass = !surf.material_name.trim().is_empty()
-                && !surf.material_name.trim().eq_ignore_ascii_case("air");
+            let is_glass =
+                !surf.material_name.trim().is_empty() && !surf.material_name.trim().eq_ignore_ascii_case("air");
             if is_glass {
                 has_glass = true;
                 let th = if surf.thickness_mm.is_finite() && surf.thickness_mm >= 0.0 {
@@ -276,7 +273,10 @@ pub fn render_optical_viewport(
     let overlay_width = if rect.width() < 720.0 { 355.0 } else { 425.0 };
     let overlay_height = 28.0;
     let overlay_rect = Rect::from_min_size(
-        Pos2::new(rect.max.x - overlay_width - overlay_padding, rect.min.y + overlay_padding),
+        Pos2::new(
+            rect.max.x - overlay_width - overlay_padding,
+            rect.min.y + overlay_padding,
+        ),
         Vec2::new(overlay_width, overlay_height),
     );
 
@@ -338,9 +338,21 @@ pub fn render_optical_viewport(
     let to_screen = |z_mm: f64, y_mm: f64| -> Pos2 {
         let safe_z = if z_mm.is_finite() { z_mm } else { 0.0 };
         let safe_y = if y_mm.is_finite() { y_mm } else { 0.0 };
-        let safe_pan_x = if state.pan_mm.x.is_finite() { state.pan_mm.x } else { 0.0 };
-        let safe_pan_y = if state.pan_mm.y.is_finite() { state.pan_mm.y } else { 0.0 };
-        let safe_zoom = if state.zoom.is_finite() && state.zoom > 0.01 { state.zoom } else { 1.0 };
+        let safe_pan_x = if state.pan_mm.x.is_finite() {
+            state.pan_mm.x
+        } else {
+            0.0
+        };
+        let safe_pan_y = if state.pan_mm.y.is_finite() {
+            state.pan_mm.y
+        } else {
+            0.0
+        };
+        let safe_zoom = if state.zoom.is_finite() && state.zoom > 0.01 {
+            state.zoom
+        } else {
+            1.0
+        };
         Pos2::new(
             center.x + (safe_z as f32 + safe_pan_x) * safe_zoom,
             center.y - (safe_y as f32 + safe_pan_y) * safe_zoom,
@@ -385,7 +397,14 @@ pub fn render_optical_viewport(
 
     // Layer E: Multi-Wavelength Ray Tracing (Real-Time Refraction)
     if state.show_rays {
-        draw_sequential_rays(&painter, prescription, state.ray_count, state.ray_aiming_mode, to_screen, tokens);
+        draw_sequential_rays(
+            &painter,
+            prescription,
+            state.ray_count,
+            state.ray_aiming_mode,
+            to_screen,
+            tokens,
+        );
     }
 
     // Layer E2: Non-Sequential Ghost Rays & Internal Reflections
@@ -395,17 +414,9 @@ pub fn render_optical_viewport(
 
     // Ghost Focus Highlight Badge (When a pair is isolated in Ghost Matrix)
     if let Some((s_front, s_rear)) = state.selected_ghost_pair {
-        let badge_rect = Rect::from_min_size(
-            Pos2::new(rect.min.x + 10.0, rect.min.y + 10.0),
-            Vec2::new(220.0, 22.0),
-        );
+        let badge_rect = Rect::from_min_size(Pos2::new(rect.min.x + 10.0, rect.min.y + 10.0), Vec2::new(220.0, 22.0));
         painter.rect_filled(badge_rect, CornerRadius::ZERO, tokens.bg_panel);
-        painter.rect_stroke(
-            badge_rect,
-            CornerRadius::ZERO,
-            tokens.border,
-            egui::StrokeKind::Inside,
-        );
+        painter.rect_stroke(badge_rect, CornerRadius::ZERO, tokens.border, egui::StrokeKind::Inside);
         painter.text(
             badge_rect.center(),
             egui::Align2::CENTER_CENTER,
@@ -429,13 +440,7 @@ pub fn render_optical_viewport(
 }
 
 /// Draws an academic background dot/line grid at 10 mm and 50 mm intervals.
-fn draw_grid(
-    painter: &Painter,
-    rect: Rect,
-    center: Pos2,
-    state: &ViewportState,
-    tokens: &OpticsTokens,
-) {
+fn draw_grid(painter: &Painter, rect: Rect, center: Pos2, state: &ViewportState, tokens: &OpticsTokens) {
     if !state.zoom.is_finite() || state.zoom < 0.05 {
         return;
     }
@@ -669,11 +674,17 @@ fn draw_prescription_elements(
             // Sensor bracket caps [ ... ]
             let cap_w = 4.0;
             painter.line_segment(
-                [Pos2::new(img_top.x - cap_w, img_top.y), Pos2::new(img_top.x + cap_w, img_top.y)],
+                [
+                    Pos2::new(img_top.x - cap_w, img_top.y),
+                    Pos2::new(img_top.x + cap_w, img_top.y),
+                ],
                 img_stroke,
             );
             painter.line_segment(
-                [Pos2::new(img_bot.x - cap_w, img_bot.y), Pos2::new(img_bot.x + cap_w, img_bot.y)],
+                [
+                    Pos2::new(img_bot.x - cap_w, img_bot.y),
+                    Pos2::new(img_bot.x + cap_w, img_bot.y),
+                ],
                 img_stroke,
             );
         } else if surf.is_stop {
@@ -734,11 +745,17 @@ fn draw_prescription_elements(
 
             // Outer barrel mount flange ticks
             painter.line_segment(
-                [Pos2::new(top_outer.x - 4.0, top_outer.y), Pos2::new(top_outer.x + 4.0, top_outer.y)],
+                [
+                    Pos2::new(top_outer.x - 4.0, top_outer.y),
+                    Pos2::new(top_outer.x + 4.0, top_outer.y),
+                ],
                 stop_stroke,
             );
             painter.line_segment(
-                [Pos2::new(bot_outer.x - 4.0, bot_outer.y), Pos2::new(bot_outer.x + 4.0, bot_outer.y)],
+                [
+                    Pos2::new(bot_outer.x - 4.0, bot_outer.y),
+                    Pos2::new(bot_outer.x + 4.0, bot_outer.y),
+                ],
                 stop_stroke,
             );
         }
@@ -748,8 +765,12 @@ fn draw_prescription_elements(
             let (has_central_block, block_r) = match &ap.shape {
                 optics_core::surface::ApertureShape::Annular { inner_radius_mm, .. } => (true, *inner_radius_mm),
                 optics_core::surface::ApertureShape::Circular { radius_mm } if ap.is_obscuration => (true, *radius_mm),
-                optics_core::surface::ApertureShape::Rectangular { half_height_mm, .. } if ap.is_obscuration => (true, *half_height_mm),
-                optics_core::surface::ApertureShape::Elliptical { semi_axis_y_mm, .. } if ap.is_obscuration => (true, *semi_axis_y_mm),
+                optics_core::surface::ApertureShape::Rectangular { half_height_mm, .. } if ap.is_obscuration => {
+                    (true, *half_height_mm)
+                }
+                optics_core::surface::ApertureShape::Elliptical { semi_axis_y_mm, .. } if ap.is_obscuration => {
+                    (true, *semi_axis_y_mm)
+                }
                 _ => (false, 0.0),
             };
 
@@ -760,8 +781,20 @@ fn draw_prescription_elements(
                 painter.line_segment([obs_top, obs_bot], obs_stroke);
 
                 let tick_w = 4.0;
-                painter.line_segment([Pos2::new(obs_top.x - tick_w, obs_top.y), Pos2::new(obs_top.x + tick_w, obs_top.y)], obs_stroke);
-                painter.line_segment([Pos2::new(obs_bot.x - tick_w, obs_bot.y), Pos2::new(obs_bot.x + tick_w, obs_bot.y)], obs_stroke);
+                painter.line_segment(
+                    [
+                        Pos2::new(obs_top.x - tick_w, obs_top.y),
+                        Pos2::new(obs_top.x + tick_w, obs_top.y),
+                    ],
+                    obs_stroke,
+                );
+                painter.line_segment(
+                    [
+                        Pos2::new(obs_bot.x - tick_w, obs_bot.y),
+                        Pos2::new(obs_bot.x + tick_w, obs_bot.y),
+                    ],
+                    obs_stroke,
+                );
             }
         }
     }
@@ -837,12 +870,7 @@ fn draw_plane_markers(
         } else if surf.is_stop {
             let outer_y = get_stop_outer_y(prescription, i);
             let top_outer = to_screen(z_vert, outer_y);
-            draw_badge(
-                top_outer,
-                "STO",
-                tokens.warning,
-                tokens.warning.gamma_multiply(0.7),
-            );
+            draw_badge(top_outer, "STO", tokens.warning, tokens.warning.gamma_multiply(0.7));
         }
     }
 }
@@ -861,7 +889,7 @@ fn pupil_fractions(count: usize, max_frac: f64) -> Vec<f64> {
     fracs
 }
 
-/// Traces multi-field and chromatic paraxial rays according to standard optical CAD conventions (Zemax OpticStudio).
+/// Traces multi-field and chromatic paraxial rays according to standard optical CAD conventions.
 fn draw_sequential_rays(
     painter: &Painter,
     prescription: &OpticalPrescription,
@@ -903,12 +931,7 @@ fn draw_sequential_rays(
         if let Some(resolved) = &resolved_opt {
             let u_cos = (1.0 - u_in * u_in).max(0.0).sqrt();
             let dir = Vec3::new(0.0, u_in, u_cos).normalize();
-            if let Ok(ray) = Ray::new(
-                Vec3::new(0.0, y_start, start_z),
-                dir,
-                wav_nm,
-                1.0,
-            ) {
+            if let Ok(ray) = Ray::new(Vec3::new(0.0, y_start, start_z), dir, wav_nm, 1.0) {
                 if let Ok(path_rec) = trace_sequential(resolved, &ray) {
                     if path_rec.points.len() >= 2 {
                         for window in path_rec.points.windows(2) {
@@ -966,7 +989,7 @@ fn draw_sequential_rays(
     };
 
     // -----------------------------------------------------------------------
-    // 1. Zemax Axial (0.0°) Beam
+    // 1. Axial (0.0°) Beam
     //    Signature high-contrast theme ray color (Electric Cyan on dark, Royal Blue on light)
     // -----------------------------------------------------------------------
     let axial_color = tokens.plot_axial;
@@ -986,7 +1009,7 @@ fn draw_sequential_rays(
 
     if ray_count >= 3 {
         for &frac in &[0.85, -0.85] {
-            trace_ray(frac * semi_epd, 0.0, 656.27, c_line_red, 0.95);  // C-line (red)
+            trace_ray(frac * semi_epd, 0.0, 656.27, c_line_red, 0.95); // C-line (red)
             trace_ray(frac * semi_epd, 0.0, 486.13, f_line_blue, 0.95); // F-line (blue)
         }
     }
@@ -1008,17 +1031,17 @@ fn draw_sequential_rays(
     // -----------------------------------------------------------------------
     let off_axis_colors = if tokens.is_canvas_dark() {
         [
-            Color32::from_rgb(34, 197, 94),   // Emerald Green
-            Color32::from_rgb(244, 63, 94),   // Coral Red
-            Color32::from_rgb(168, 85, 247),  // Purple
-            Color32::from_rgb(234, 179, 8),   // Amber
+            Color32::from_rgb(34, 197, 94),  // Emerald Green
+            Color32::from_rgb(244, 63, 94),  // Coral Red
+            Color32::from_rgb(168, 85, 247), // Purple
+            Color32::from_rgb(234, 179, 8),  // Amber
         ]
     } else {
         [
-            Color32::from_rgb(21, 128, 61),   // Deep Forest Green
-            Color32::from_rgb(225, 29, 72),   // Deep Rose Red
-            Color32::from_rgb(126, 34, 206),  // Deep Violet
-            Color32::from_rgb(180, 83, 9),    // Deep Amber
+            Color32::from_rgb(21, 128, 61),  // Deep Forest Green
+            Color32::from_rgb(225, 29, 72),  // Deep Rose Red
+            Color32::from_rgb(126, 34, 206), // Deep Violet
+            Color32::from_rgb(180, 83, 9),   // Deep Amber
         ]
     };
 
@@ -1039,7 +1062,7 @@ fn draw_sequential_rays(
             if let Some(resolved) = &resolved_opt {
                 for &frac in &off_axis_fracs {
                     let pupil_coord = optics_core::types::Pupil::new(0.0, frac)
-                        .unwrap_or_else(|_| optics_core::types::Pupil::new(0.0, 0.0).unwrap());
+                        .unwrap_or_else(|_| optics_core::types::Pupil::center());
                     let field = optics_core::types::Field::AngleDegrees { x: 0.0, y: angle_deg };
                     let wl = optics_core::types::Wavelength::from_nanometers(primary_wl)
                         .unwrap_or(optics_core::types::Wavelength::D_LINE);
@@ -1114,12 +1137,7 @@ fn draw_ghost_rays(
 }
 
 /// Renders an academic floating control bar for ray display and ray density.
-fn draw_viewport_controls(
-    ui: &mut Ui,
-    overlay_rect: Rect,
-    state: &mut ViewportState,
-    tokens: &OpticsTokens,
-) {
+fn draw_viewport_controls(ui: &mut Ui, overlay_rect: Rect, state: &mut ViewportState, tokens: &OpticsTokens) {
     let frame = Frame::NONE
         .fill(tokens.bg_panel)
         .stroke(tokens.border)
@@ -1294,28 +1312,186 @@ fn get_refractive_index(glass: &str, wav_nm: f64) -> f64 {
     }
 
     match g.to_uppercase().as_str() {
-        "WATER" | "H2O" => if is_f { 1.3371 } else if is_c { 1.3311 } else { 1.3330 },
-        "FK54" | "N-FK54" => if is_f { 1.4394 } else if is_c { 1.4346 } else { 1.4370 },
-        "FK51" | "N-FK51" | "N-FK51A" => if is_f { 1.4893 } else if is_c { 1.4845 } else { 1.4866 },
-        "SK16" | "N-SK16" => if is_f { 1.62725 } else if is_c { 1.61750 } else { 1.62041 },
-        "F2" | "N-F2" => if is_f { 1.63186 } else if is_c { 1.61510 } else { 1.62004 },
-        "BK7" | "N-BK7" => if is_f { 1.52238 } else if is_c { 1.51432 } else { 1.51680 },
-        "SF1" | "N-SF1" => if is_f { 1.73462 } else if is_c { 1.71031 } else { 1.71736 },
-        "SF2" | "N-SF2" => if is_f { 1.6534 } else if is_c { 1.6421 } else { 1.6477 },
-        "SF5" | "N-SF5" => if is_f { 1.6830 } else if is_c { 1.6666 } else { 1.6727 },
-        "SF11" | "N-SF11" => if is_f { 1.80645 } else if is_c { 1.77598 } else { 1.78472 },
-        "LAK9" | "N-LAK9" => if is_f { 1.69974 } else if is_c { 1.68750 } else { 1.69100 },
-        "BAF10" | "N-BAF10" => if is_f { 1.67812 } else if is_c { 1.66620 } else { 1.67003 },
-        "LLF1" | "N-LLF1" => if is_f { 1.5542 } else if is_c { 1.5443 } else { 1.5481 },
-        "F5" | "N-F5" => if is_f { 1.6121 } else if is_c { 1.5976 } else { 1.6034 },
-        "SSK2" | "N-SSK2" => if is_f { 1.6285 } else if is_c { 1.6183 } else { 1.6223 },
-        "SK2" | "N-SK2" => if is_f { 1.6128 } else if is_c { 1.6041 } else { 1.6074 },
-        "SK11" | "N-SK11" => if is_f { 1.5694 } else if is_c { 1.5607 } else { 1.5638 },
-        "KZFS4" | "N-KZFS4" => if is_f { 1.6212 } else if is_c { 1.6074 } else { 1.6133 },
-        "FUSED_SILICA" | "FUSED SILICA" | "SILICA" | "LITHOSIL-Q" => {
-            if is_f { 1.46313 } else if is_c { 1.45637 } else { 1.45846 }
+        "WATER" | "H2O" => {
+            if is_f {
+                1.3371
+            } else if is_c {
+                1.3311
+            } else {
+                1.3330
+            }
         }
-        _ => if is_f { 1.53 } else if is_c { 1.515 } else { 1.52 },
+        "FK54" | "N-FK54" => {
+            if is_f {
+                1.4394
+            } else if is_c {
+                1.4346
+            } else {
+                1.4370
+            }
+        }
+        "FK51" | "N-FK51" | "N-FK51A" => {
+            if is_f {
+                1.4893
+            } else if is_c {
+                1.4845
+            } else {
+                1.4866
+            }
+        }
+        "SK16" | "N-SK16" => {
+            if is_f {
+                1.62725
+            } else if is_c {
+                1.61750
+            } else {
+                1.62041
+            }
+        }
+        "F2" | "N-F2" => {
+            if is_f {
+                1.63186
+            } else if is_c {
+                1.61510
+            } else {
+                1.62004
+            }
+        }
+        "BK7" | "N-BK7" => {
+            if is_f {
+                1.52238
+            } else if is_c {
+                1.51432
+            } else {
+                1.51680
+            }
+        }
+        "SF1" | "N-SF1" => {
+            if is_f {
+                1.73462
+            } else if is_c {
+                1.71031
+            } else {
+                1.71736
+            }
+        }
+        "SF2" | "N-SF2" => {
+            if is_f {
+                1.6534
+            } else if is_c {
+                1.6421
+            } else {
+                1.6477
+            }
+        }
+        "SF5" | "N-SF5" => {
+            if is_f {
+                1.6830
+            } else if is_c {
+                1.6666
+            } else {
+                1.6727
+            }
+        }
+        "SF11" | "N-SF11" => {
+            if is_f {
+                1.80645
+            } else if is_c {
+                1.77598
+            } else {
+                1.78472
+            }
+        }
+        "LAK9" | "N-LAK9" => {
+            if is_f {
+                1.69974
+            } else if is_c {
+                1.68750
+            } else {
+                1.69100
+            }
+        }
+        "BAF10" | "N-BAF10" => {
+            if is_f {
+                1.67812
+            } else if is_c {
+                1.66620
+            } else {
+                1.67003
+            }
+        }
+        "LLF1" | "N-LLF1" => {
+            if is_f {
+                1.5542
+            } else if is_c {
+                1.5443
+            } else {
+                1.5481
+            }
+        }
+        "F5" | "N-F5" => {
+            if is_f {
+                1.6121
+            } else if is_c {
+                1.5976
+            } else {
+                1.6034
+            }
+        }
+        "SSK2" | "N-SSK2" => {
+            if is_f {
+                1.6285
+            } else if is_c {
+                1.6183
+            } else {
+                1.6223
+            }
+        }
+        "SK2" | "N-SK2" => {
+            if is_f {
+                1.6128
+            } else if is_c {
+                1.6041
+            } else {
+                1.6074
+            }
+        }
+        "SK11" | "N-SK11" => {
+            if is_f {
+                1.5694
+            } else if is_c {
+                1.5607
+            } else {
+                1.5638
+            }
+        }
+        "KZFS4" | "N-KZFS4" => {
+            if is_f {
+                1.6212
+            } else if is_c {
+                1.6074
+            } else {
+                1.6133
+            }
+        }
+        "FUSED_SILICA" | "FUSED SILICA" | "SILICA" | "LITHOSIL-Q" => {
+            if is_f {
+                1.46313
+            } else if is_c {
+                1.45637
+            } else {
+                1.45846
+            }
+        }
+        _ => {
+            if is_f {
+                1.53
+            } else if is_c {
+                1.515
+            } else {
+                1.52
+            }
+        }
     }
 }
 
@@ -1351,11 +1527,7 @@ fn sample_surface_arc(surf: &OpticalSurface, z_vertex: f64, num_samples: usize) 
         } else {
             let r = surf.radius_mm;
             let disc = r * r - y * y;
-            if disc > 0.0 {
-                r - r.signum() * disc.sqrt()
-            } else {
-                0.0
-            }
+            if disc > 0.0 { r - r.signum() * disc.sqrt() } else { 0.0 }
         };
 
         points.push((z_vertex + sag, y));
@@ -1365,12 +1537,7 @@ fn sample_surface_arc(surf: &OpticalSurface, z_vertex: f64, num_samples: usize) 
 }
 
 /// Draws an academic metric scale bar in the bottom-left corner of the canvas.
-fn draw_scale_indicator(
-    painter: &Painter,
-    canvas_rect: Rect,
-    zoom_px_per_mm: f32,
-    tokens: &OpticsTokens,
-) {
+fn draw_scale_indicator(painter: &Painter, canvas_rect: Rect, zoom_px_per_mm: f32, tokens: &OpticsTokens) {
     let candidate_steps_mm = [1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0, 200.0];
     let mut target_mm = 20.0;
     for &step in &candidate_steps_mm {
@@ -1531,26 +1698,47 @@ pub fn render_optical_viewport_3d(
     painter.rect_filled(rect, CornerRadius::ZERO, tokens.bg_canvas);
 
     // Viewport CAD boundaries
-    painter.line_segment([Pos2::new(rect.min.x, rect.min.y), Pos2::new(rect.min.x, rect.max.y)], tokens.border);
-    painter.line_segment([Pos2::new(rect.max.x, rect.min.y), Pos2::new(rect.max.x, rect.max.y)], tokens.border);
-    painter.line_segment([Pos2::new(rect.min.x, rect.min.y), Pos2::new(rect.max.x, rect.min.y)], tokens.border);
-    painter.line_segment([Pos2::new(rect.min.x, rect.max.y), Pos2::new(rect.max.x, rect.max.y)], tokens.border);
+    painter.line_segment(
+        [Pos2::new(rect.min.x, rect.min.y), Pos2::new(rect.min.x, rect.max.y)],
+        tokens.border,
+    );
+    painter.line_segment(
+        [Pos2::new(rect.max.x, rect.min.y), Pos2::new(rect.max.x, rect.max.y)],
+        tokens.border,
+    );
+    painter.line_segment(
+        [Pos2::new(rect.min.x, rect.min.y), Pos2::new(rect.max.x, rect.min.y)],
+        tokens.border,
+    );
+    painter.line_segment(
+        [Pos2::new(rect.min.x, rect.max.y), Pos2::new(rect.max.x, rect.max.y)],
+        tokens.border,
+    );
 
     let cam = &state.camera_3d;
-    let target = Vec3::new(cam.target_mm[0] as f64, cam.target_mm[1] as f64, cam.target_mm[2] as f64);
+    let target = Vec3::new(
+        cam.target_mm[0] as f64,
+        cam.target_mm[1] as f64,
+        cam.target_mm[2] as f64,
+    );
     let cos_el = (cam.elevation_rad as f64).cos();
     let sin_el = (cam.elevation_rad as f64).sin();
     let cos_az = (cam.azimuth_rad as f64).cos();
     let sin_az = (cam.azimuth_rad as f64).sin();
 
-    let eye = target + Vec3::new(
-        (cam.distance_mm as f64) * cos_el * sin_az,
-        (cam.distance_mm as f64) * sin_el,
-        (cam.distance_mm as f64) * cos_el * cos_az,
-    );
+    let eye = target
+        + Vec3::new(
+            (cam.distance_mm as f64) * cos_el * sin_az,
+            (cam.distance_mm as f64) * sin_el,
+            (cam.distance_mm as f64) * cos_el * cos_az,
+        );
 
     let fwd = (target - eye).normalize();
-    let up_ref = if cos_el.abs() > 0.001 { Vec3::new(0.0, 1.0, 0.0) } else { Vec3::new(0.0, 0.0, -1.0) };
+    let up_ref = if cos_el.abs() > 0.001 {
+        Vec3::new(0.0, 1.0, 0.0)
+    } else {
+        Vec3::new(0.0, 0.0, -1.0)
+    };
     let right = fwd.cross(&up_ref).normalize();
     let up = right.cross(&fwd).normalize();
 
@@ -1579,7 +1767,11 @@ pub fn render_optical_viewport_3d(
     let mut cum_z = 0.0f64;
     for surf in &prescription.surfaces {
         z_vertices.push(cum_z);
-        let th = if surf.thickness_mm.is_finite() && surf.thickness_mm >= 0.0 { surf.thickness_mm } else { 0.0 };
+        let th = if surf.thickness_mm.is_finite() && surf.thickness_mm >= 0.0 {
+            surf.thickness_mm
+        } else {
+            0.0
+        };
         cum_z += th;
     }
 
@@ -1590,7 +1782,10 @@ pub fn render_optical_viewport_3d(
         project_3d(Vec3::new(0.0, 0.0, min_axis_z)),
         project_3d(Vec3::new(0.0, 0.0, max_axis_z)),
     ) {
-        painter.line_segment([p_start, p_end], Stroke::new(1.0, tokens.canvas_fg_muted.gamma_multiply(0.40)));
+        painter.line_segment(
+            [p_start, p_end],
+            Stroke::new(1.0, tokens.canvas_fg_muted.gamma_multiply(0.40)),
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -1643,32 +1838,45 @@ pub fn render_optical_viewport_3d(
                 let pr = Vec3::new(next_semi_d * theta.cos(), next_semi_d * theta.sin(), next_z + sag_r);
 
                 if let (Some((scr_f, _)), Some((scr_r, _))) = (project_3d(pf), project_3d(pr)) {
-                    painter.line_segment([scr_f, scr_r], Stroke::new(1.0, tokens.glass_stroke.color.gamma_multiply(0.45)));
+                    painter.line_segment(
+                        [scr_f, scr_r],
+                        Stroke::new(1.0, tokens.glass_stroke.color.gamma_multiply(0.45)),
+                    );
                 }
             }
 
             // Translucent glass body quads for solid CAD visualization
             for k in 0..num_ang_segments {
                 let theta0 = (k as f64 * 2.0 * std::f64::consts::PI) / num_ang_segments as f64;
-                let theta1 = (((k + 1) % num_ang_segments) as f64 * 2.0 * std::f64::consts::PI) / num_ang_segments as f64;
+                let theta1 =
+                    (((k + 1) % num_ang_segments) as f64 * 2.0 * std::f64::consts::PI) / num_ang_segments as f64;
 
-                let pf0 = Vec3::new(semi_d * theta0.cos(), semi_d * theta0.sin(), z_vert + sample_surface_sag(surf, semi_d));
-                let pf1 = Vec3::new(semi_d * theta1.cos(), semi_d * theta1.sin(), z_vert + sample_surface_sag(surf, semi_d));
-                let pr1 = Vec3::new(next_semi_d * theta1.cos(), next_semi_d * theta1.sin(), next_z + sample_surface_sag(next_surf, next_semi_d));
-                let pr0 = Vec3::new(next_semi_d * theta0.cos(), next_semi_d * theta0.sin(), next_z + sample_surface_sag(next_surf, next_semi_d));
+                let pf0 = Vec3::new(
+                    semi_d * theta0.cos(),
+                    semi_d * theta0.sin(),
+                    z_vert + sample_surface_sag(surf, semi_d),
+                );
+                let pf1 = Vec3::new(
+                    semi_d * theta1.cos(),
+                    semi_d * theta1.sin(),
+                    z_vert + sample_surface_sag(surf, semi_d),
+                );
+                let pr1 = Vec3::new(
+                    next_semi_d * theta1.cos(),
+                    next_semi_d * theta1.sin(),
+                    next_z + sample_surface_sag(next_surf, next_semi_d),
+                );
+                let pr0 = Vec3::new(
+                    next_semi_d * theta0.cos(),
+                    next_semi_d * theta0.sin(),
+                    next_z + sample_surface_sag(next_surf, next_semi_d),
+                );
 
-                if let (Some((s_f0, _)), Some((s_f1, _)), Some((s_r1, _)), Some((s_r0, _))) = (
-                    project_3d(pf0),
-                    project_3d(pf1),
-                    project_3d(pr1),
-                    project_3d(pr0),
-                ) {
+                if let (Some((s_f0, _)), Some((s_f1, _)), Some((s_r1, _)), Some((s_r0, _))) =
+                    (project_3d(pf0), project_3d(pf1), project_3d(pr1), project_3d(pr0))
+                {
                     let quad = vec![s_f0, s_f1, s_r1, s_r0];
-                    painter.add(egui::Shape::convex_polygon(
-                        quad,
-                        tokens.glass_fill,
-                        Stroke::NONE,
-                    ));
+                    painter.add(egui::Shape::convex_polygon(quad, tokens.glass_fill, Stroke::NONE));
                 }
             }
         }
@@ -1696,10 +1904,16 @@ pub fn render_optical_viewport_3d(
                 Vec3::new(w, h, z_vert),
                 Vec3::new(-w, h, z_vert),
             ];
-            let scr_corners: Vec<_> = p_corners.iter().filter_map(|&p| project_3d(p).map(|(s, _)| s)).collect();
+            let scr_corners: Vec<_> = p_corners
+                .iter()
+                .filter_map(|&p| project_3d(p).map(|(s, _)| s))
+                .collect();
             if scr_corners.len() == 4 {
                 for c in 0..4 {
-                    painter.line_segment([scr_corners[c], scr_corners[(c + 1) % 4]], Stroke::new(1.8, tokens.accent));
+                    painter.line_segment(
+                        [scr_corners[c], scr_corners[(c + 1) % 4]],
+                        Stroke::new(1.8, tokens.accent),
+                    );
                 }
                 painter.add(egui::Shape::convex_polygon(
                     scr_corners,
@@ -1773,17 +1987,9 @@ pub fn render_optical_viewport_3d(
 
     // Ghost Focus Highlight Badge (When a pair is isolated in Ghost Matrix)
     if let Some((s_front, s_rear)) = state.selected_ghost_pair {
-        let badge_rect = Rect::from_min_size(
-            Pos2::new(rect.min.x + 10.0, rect.min.y + 36.0),
-            Vec2::new(220.0, 22.0),
-        );
+        let badge_rect = Rect::from_min_size(Pos2::new(rect.min.x + 10.0, rect.min.y + 36.0), Vec2::new(220.0, 22.0));
         painter.rect_filled(badge_rect, CornerRadius::ZERO, tokens.bg_panel);
-        painter.rect_stroke(
-            badge_rect,
-            CornerRadius::ZERO,
-            tokens.border,
-            egui::StrokeKind::Inside,
-        );
+        painter.rect_stroke(badge_rect, CornerRadius::ZERO, tokens.border, egui::StrokeKind::Inside);
         painter.text(
             badge_rect.center(),
             egui::Align2::CENTER_CENTER,
@@ -1862,15 +2068,11 @@ pub fn render_optical_viewport_3d(
 
                 ui.separator();
 
-                let switch_2d_btn = egui::Button::new(
-                    RichText::new("2D")
-                        .size(10.0)
-                        .monospace()
-                        .color(tokens.text_muted),
-                )
-                .fill(tokens.bg_control)
-                .stroke(tokens.border)
-                .corner_radius(CornerRadius::ZERO);
+                let switch_2d_btn =
+                    egui::Button::new(RichText::new("2D").size(10.0).monospace().color(tokens.text_muted))
+                        .fill(tokens.bg_control)
+                        .stroke(tokens.border)
+                        .corner_radius(CornerRadius::ZERO);
 
                 if ui
                     .add(switch_2d_btn)
@@ -2016,9 +2218,8 @@ mod tests {
 
     #[test]
     fn test_cooke_triplet_tessellation_and_camera() {
-        let rx = optics_zemax::presets::cooke_triplet_f4_5().expect("cooke triplet parse");
-        let (triangles, materials) =
-            optics_bvh::prescription_to_trimesh_with_materials(&rx, 32, 16);
+        let rx = optics_formats::presets::cooke_triplet_f4_5().expect("cooke triplet parse");
+        let (triangles, materials) = optics_bvh::prescription_to_trimesh_with_materials(&rx, 32, 16);
         assert!(!triangles.is_empty());
         assert_eq!(materials, vec!["SK16", "F2"]);
 
@@ -2030,12 +2231,8 @@ mod tests {
         let thin_cam = crate::raytrace_viewport::build_thin_lens_camera(&cam);
         let _basis = thin_cam.basis().expect("basis");
 
-        let aabb = optics_bvh::Aabb::from_points(
-            &triangles
-                .iter()
-                .flat_map(|t| [t.v0, t.v1, t.v2])
-                .collect::<Vec<_>>(),
-        );
+        let aabb =
+            optics_bvh::Aabb::from_points(&triangles.iter().flat_map(|t| [t.v0, t.v1, t.v2]).collect::<Vec<_>>());
         assert!(aabb.min.z >= 0.0 && aabb.max.z <= 20.0);
 
         let inst = optics_bvh::BlasInstance::new(0, &aabb, nalgebra::Matrix4::identity());
@@ -2057,30 +2254,19 @@ mod tests {
 
     #[test]
     fn test_cooke_triplet_render_image() {
-        let rx = optics_zemax::presets::cooke_triplet_f4_5().expect("cooke triplet parse");
+        let rx = optics_formats::presets::cooke_triplet_f4_5().expect("cooke triplet parse");
         let mut cam = Viewport3DCamera::default();
         cam.zoom_fit(&rx, Vec2::new(256.0, 256.0));
         let thin_cam = crate::raytrace_viewport::build_thin_lens_camera(&cam);
         let ctx = optics_render::GpuContext::create_sync().unwrap();
-        let (triangles, materials) =
-            optics_bvh::prescription_to_trimesh_with_materials(&rx, 32, 16);
-        let aabb = optics_bvh::Aabb::from_points(
-            &triangles
-                .iter()
-                .flat_map(|t| [t.v0, t.v1, t.v2])
-                .collect::<Vec<_>>(),
-        );
+        let (triangles, materials) = optics_bvh::prescription_to_trimesh_with_materials(&rx, 32, 16);
+        let aabb =
+            optics_bvh::Aabb::from_points(&triangles.iter().flat_map(|t| [t.v0, t.v1, t.v2]).collect::<Vec<_>>());
         let inst = optics_bvh::BlasInstance::new(0, &aabb, nalgebra::Matrix4::identity());
         let scene = optics_bvh::BvhScene::build(vec![triangles], vec![inst]);
-        let mut renderer = optics_render::PathTracingRenderer::new(
-            ctx,
-            &scene,
-            &thin_cam,
-            256,
-            256,
-            wgpu::TextureFormat::Rgba8Unorm,
-        )
-        .unwrap();
+        let mut renderer =
+            optics_render::PathTracingRenderer::new(ctx, &scene, &thin_cam, 256, 256, wgpu::TextureFormat::Rgba8Unorm)
+                .unwrap();
         let gpu_materials: Vec<optics_render::GpuMaterial> = materials
             .iter()
             .map(|name| optics_render::GpuMaterial::from_name(name))

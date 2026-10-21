@@ -14,9 +14,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::analysis::spot_fan::{
-    PupilCoord, PupilPattern, generate_pupil_distribution, launch_pupil_ray,
-};
+use crate::analysis::spot_fan::{PupilCoord, PupilPattern, generate_pupil_distribution, launch_pupil_ray};
 use crate::error::OpticsError;
 use crate::prescription::{ResolvedPrescription, calculate_paraxial_properties, trace_sequential};
 use crate::types::{Ray, Vec3};
@@ -74,10 +72,7 @@ pub fn compute_ray_table(
     wavelength_nm: f64,
 ) -> Result<RayTable, OpticsError> {
     let paraxial = calculate_paraxial_properties(prescription, wavelength_nm)?;
-    let z_first = prescription
-        .surfaces
-        .first()
-        .map_or(0.0, |s| s.conic.vertex_z);
+    let z_first = prescription.surfaces.first().map_or(0.0, |s| s.conic.vertex_z);
     let z_enp = z_first + paraxial.entrance_pupil_pos_mm;
 
     let ray = launch_pupil_ray(
@@ -100,9 +95,7 @@ pub fn compute_ray_table(
         cumulative_opl += current_n * segment_len;
 
         let next_n = if hit.surface_index < prescription.surfaces.len() {
-            prescription.surfaces[hit.surface_index]
-                .material
-                .n(wavelength_nm)
+            prescription.surfaces[hit.surface_index].material.n(wavelength_nm)
         } else {
             current_n
         };
@@ -193,34 +186,19 @@ pub fn compute_footprint_diagram(
     }
 
     let paraxial = calculate_paraxial_properties(prescription, wavelength_nm)?;
-    let z_first = prescription
-        .surfaces
-        .first()
-        .map_or(0.0, |s| s.conic.vertex_z);
+    let z_first = prescription.surfaces.first().map_or(0.0, |s| s.conic.vertex_z);
     let z_enp = z_first + paraxial.entrance_pupil_pos_mm;
 
-    let semi_diameter = prescription.surfaces[target_surface_index]
-        .conic
-        .semi_diam_mm;
+    let semi_diameter = prescription.surfaces[target_surface_index].conic.semi_diam_mm;
 
     let coords = generate_pupil_distribution(pupil_pattern);
     let mut points = Vec::with_capacity(coords.len());
     let mut max_beam_radius = 0.0_f64;
 
     for coord in coords {
-        if let Ok(ray) = launch_pupil_ray(
-            prescription,
-            coord,
-            (0.0, field_angle_deg),
-            wavelength_nm,
-            z_enp,
-        ) {
+        if let Ok(ray) = launch_pupil_ray(prescription, coord, (0.0, field_angle_deg), wavelength_nm, z_enp) {
             if let Ok(path) = trace_sequential(prescription, &ray) {
-                if let Some(hit) = path
-                    .hits
-                    .iter()
-                    .find(|h| h.surface_index == target_surface_index)
-                {
+                if let Some(hit) = path.hits.iter().find(|h| h.surface_index == target_surface_index) {
                     let r = (hit.point.x * hit.point.x + hit.point.y * hit.point.y).sqrt();
                     if !path.is_vignetted && r > max_beam_radius {
                         max_beam_radius = r;
@@ -276,16 +254,11 @@ pub fn compute_opd_fan(
     wavelength_nm: f64,
 ) -> Result<OpdFanData, OpticsError> {
     if num_points < 3 {
-        return Err(OpticsError::InvalidSurface(
-            "num_points must be at least 3".to_string(),
-        ));
+        return Err(OpticsError::InvalidSurface("num_points must be at least 3".to_string()));
     }
 
     let paraxial = calculate_paraxial_properties(prescription, wavelength_nm)?;
-    let z_first = prescription
-        .surfaces
-        .first()
-        .map_or(0.0, |s| s.conic.vertex_z);
+    let z_first = prescription.surfaces.first().map_or(0.0, |s| s.conic.vertex_z);
     let z_enp = z_first + paraxial.entrance_pupil_pos_mm;
 
     let lambda_mm = wavelength_nm * 1e-6;

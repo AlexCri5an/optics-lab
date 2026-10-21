@@ -1,0 +1,6 @@
+# Workspace lints configuration
+# Tests may unwrap, expect and panic: a failing assertion is the point of a test.
+# Shipped production crates enforce #![deny(clippy::unwrap_used)] and #![deny(clippy::expect_used)].
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true

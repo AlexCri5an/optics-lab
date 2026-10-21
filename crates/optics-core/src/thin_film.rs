@@ -318,13 +318,9 @@ impl Coating {
                     phase_rp_rad: 0.0,
                 })
             }
-            Self::Multilayer { layers } => evaluate_tmm_multilayer(
-                n_incident,
-                n_substrate,
-                angle_incident_rad,
-                wavelength_nm,
-                layers,
-            ),
+            Self::Multilayer { layers } => {
+                evaluate_tmm_multilayer(n_incident, n_substrate, angle_incident_rad, wavelength_nm, layers)
+            }
         }
     }
 }
@@ -361,9 +357,7 @@ impl SurfaceCoating {
     pub fn to_coating(&self, _n_substrate: f64) -> Coating {
         match self {
             Self::IdealAr => Coating::IdealAr,
-            Self::MgF2 {
-                design_wavelength_nm,
-            } => {
+            Self::MgF2 { design_wavelength_nm } => {
                 let n_mgf2 = 1.38;
                 let d_nm = design_wavelength_nm / (4.0 * n_mgf2);
                 Coating::Multilayer {
@@ -428,9 +422,9 @@ impl SurfaceCoating {
         }
     }
 
-    /// Parses a Zemax OpticStudio coating name (e.g. `AR`, `MGF2`, `BBAR`, `MIRROR`, `NONE`).
+    /// Parses a standard optical coating name (e.g. `AR`, `MGF2`, `BBAR`, `MIRROR`, `NONE`).
     #[must_use]
-    pub fn from_zemax_name(name: &str) -> Option<Self> {
+    pub fn from_format_name(name: &str) -> Option<Self> {
         let clean = name.trim().to_uppercase();
         if clean.is_empty() || clean == "NONE" || clean == "UNCOATED" {
             return None;
@@ -449,9 +443,9 @@ impl SurfaceCoating {
         }
     }
 
-    /// Formats the coating name for Zemax OpticStudio export.
+    /// Formats the coating name for optical format export.
     #[must_use]
-    pub fn to_zemax_name(&self) -> &'static str {
+    pub fn to_format_name(&self) -> &'static str {
         match self {
             Self::IdealAr => "AR",
             Self::MgF2 { .. } => "MGF2",
@@ -526,16 +520,10 @@ fn evaluate_tmm_multilayer(
         let i_sin_delta = Complex::new(-sin_delta.im, sin_delta.re); // i * sin(delta)
 
         // S-polarization matrix
-        let m_layer_s = [
-            [cos_delta, i_sin_delta / eta_l_s],
-            [i_sin_delta * eta_l_s, cos_delta],
-        ];
+        let m_layer_s = [[cos_delta, i_sin_delta / eta_l_s], [i_sin_delta * eta_l_s, cos_delta]];
 
         // P-polarization matrix
-        let m_layer_p = [
-            [cos_delta, i_sin_delta / eta_l_p],
-            [i_sin_delta * eta_l_p, cos_delta],
-        ];
+        let m_layer_p = [[cos_delta, i_sin_delta / eta_l_p], [i_sin_delta * eta_l_p, cos_delta]];
 
         // Matrix multiplication: M = M * M_layer
         ms = mat_mul_2x2(ms, m_layer_s);

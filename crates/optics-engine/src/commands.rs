@@ -27,6 +27,7 @@ pub struct SurfaceUpdate {
 /// Commands executed on the optical prescription via the engine facade.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "command", content = "args")]
+#[allow(clippy::large_enum_variant)]
 pub enum EngineCommand {
     /// Completely replace the active prescription.
     SetPrescription(OpticalPrescription),
@@ -109,7 +110,7 @@ impl EngineCommand {
                 }
                 if p.surfaces.len() <= 2 {
                     return Err(EngineError::InvalidParameter(
-                        "Cannot remove surface: prescription must retain at least object and image planes".to_string()
+                        "Cannot remove surface: prescription must retain at least object and image planes".to_string(),
                     ));
                 }
                 p.surfaces.remove(*index);
@@ -119,9 +120,10 @@ impl EngineCommand {
                 Ok(format!("Removed surface at index {index}"))
             }
             Self::EditSurface { index, update } => {
-                let surf = p.surfaces.get_mut(*index).ok_or_else(|| {
-                    EngineError::InvalidParameter(format!("Surface index {index} out of bounds"))
-                })?;
+                let surf = p
+                    .surfaces
+                    .get_mut(*index)
+                    .ok_or_else(|| EngineError::InvalidParameter(format!("Surface index {index} out of bounds")))?;
                 if let Some(r) = update.radius_mm {
                     surf.radius_mm = r;
                 }
@@ -162,9 +164,7 @@ impl EngineCommand {
             }
             Self::SetEntrancePupilDiameter { epd_mm } => {
                 if *epd_mm <= 0.0 || !epd_mm.is_finite() {
-                    return Err(EngineError::InvalidParameter(format!(
-                        "Invalid EPD: {epd_mm}"
-                    )));
+                    return Err(EngineError::InvalidParameter(format!("Invalid EPD: {epd_mm}")));
                 }
                 p.entrance_pupil_diameter_mm = *epd_mm;
                 Ok(format!("Set entrance pupil diameter to {epd_mm:.2} mm"))
@@ -185,10 +185,7 @@ impl EngineCommand {
                 }
                 p.wavelengths_nm = wavelengths_nm.clone();
                 p.primary_wavelength_index = *primary_index;
-                Ok(format!(
-                    "Updated {} design wavelengths",
-                    wavelengths_nm.len()
-                ))
+                Ok(format!("Updated {} design wavelengths", wavelengths_nm.len()))
             }
             Self::SetFieldAngles { field_angles_deg } => {
                 if field_angles_deg.is_empty() {
@@ -236,11 +233,7 @@ impl UndoStack {
     }
 
     /// Executes a command, recording state transitions and clearing the redo buffer.
-    pub fn execute(
-        &mut self,
-        cmd: EngineCommand,
-        target: &mut OpticalPrescription,
-    ) -> Result<String, EngineError> {
+    pub fn execute(&mut self, cmd: EngineCommand, target: &mut OpticalPrescription) -> Result<String, EngineError> {
         let before = target.clone();
         let desc = cmd.apply(target)?;
         let after = target.clone();

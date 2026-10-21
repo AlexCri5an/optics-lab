@@ -77,8 +77,7 @@ impl ToleranceCriterion {
                 field_angle_deg,
                 wavelength_nm,
             } => {
-                let wf =
-                    compute_wavefront_map(&resolved, 16, field_angle_deg, wavelength_nm, true)?;
+                let wf = compute_wavefront_map(&resolved, 16, field_angle_deg, wavelength_nm, true)?;
                 Ok(wf.rms_waves)
             }
             ToleranceCriterion::EffectiveFocalLength { wavelength_nm } => {

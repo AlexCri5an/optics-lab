@@ -77,10 +77,7 @@ pub fn compute_wavefront_map(
     let paraxial = calculate_paraxial_properties(prescription, wavelength_nm).ok();
     let lambda_mm = wavelength_nm * 1e-6; // nm to mm
 
-    let z_first = prescription
-        .surfaces
-        .first()
-        .map_or(0.0, |s| s.conic.vertex_z);
+    let z_first = prescription.surfaces.first().map_or(0.0, |s| s.conic.vertex_z);
     let enp_pos = paraxial.as_ref().map_or_else(
         || {
             let stop_idx = prescription.surfaces.iter().position(|s| s.is_stop).unwrap_or(0);
@@ -107,7 +104,10 @@ pub fn compute_wavefront_map(
                 let w = crate::types::Wavelength::from_nanometers(wavelength_nm)?;
                 crate::aiming::trace_aimed_ray(
                     prescription,
-                    crate::types::Field::AngleDegrees { x: 0.0, y: field_angle_deg },
+                    crate::types::Field::AngleDegrees {
+                        x: 0.0,
+                        y: field_angle_deg,
+                    },
                     p,
                     w,
                     crate::aiming::RayAimingMode::RealIterative,
@@ -124,7 +124,11 @@ pub fn compute_wavefront_map(
             }
         }
     };
-    let chief_img_hit = chief_record.hits.last().cloned().unwrap();
+    let chief_img_hit = chief_record
+        .hits
+        .last()
+        .cloned()
+        .ok_or_else(|| OpticsError::RayMissedSurface("Chief ray has no intersection hits".into()))?;
     let chief_img_pt = chief_img_hit.point;
 
     // Chief ray OPL from first surface to image plane
@@ -218,9 +222,9 @@ pub fn compute_wavefront_map(
         }
 
         // Solve 3x3 normal equations for [a0, a1, a2]
-        if let Some((a0, a1, a2)) = solve_3x3_symmetric(
-            sum_1, sum_x, sum_y, sum_xx, sum_xy, sum_yy, sum_w, sum_xw, sum_yw,
-        ) {
+        if let Some((a0, a1, a2)) =
+            solve_3x3_symmetric(sum_1, sum_x, sum_y, sum_xx, sum_xy, sum_yy, sum_w, sum_xw, sum_yw)
+        {
             for (i, j, px, py, _) in &valid_points {
                 let idx = *j * grid_size + *i;
                 if let Some(w) = opd_grid[idx] {
@@ -278,11 +282,7 @@ pub fn compute_wavefront_map(
 }
 
 /// Helper to calculate cumulative optical path length across a sequence of 3D ray hit points.
-fn calculate_path_opl(
-    points: &[Vec3],
-    prescription: &ResolvedPrescription,
-    wavelength_nm: f64,
-) -> f64 {
+fn calculate_path_opl(points: &[Vec3], prescription: &ResolvedPrescription, wavelength_nm: f64) -> f64 {
     let mut opl = 0.0_f64;
     let mut current_n = 1.0_f64; // Air prior to surface 0
 
@@ -310,8 +310,7 @@ fn solve_3x3_symmetric(
     b1: f64,
     b2: f64,
 ) -> Option<(f64, f64, f64)> {
-    let det = m00 * (m11 * m22 - m12 * m12) - m01 * (m01 * m22 - m12 * m02)
-        + m02 * (m01 * m12 - m11 * m02);
+    let det = m00 * (m11 * m22 - m12 * m12) - m01 * (m01 * m22 - m12 * m02) + m02 * (m01 * m12 - m11 * m02);
     if det.abs() < 1e-15 {
         return None;
     }

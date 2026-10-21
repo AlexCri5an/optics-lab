@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+      Name="OpticsLab"
+      Manufacturer="Alexandru Crisan"
+      Version="$(var.Version)"
+      UpgradeCode="7E5C3B1A-4D2F-4A9B-8E1C-6D3F5E7A9C1B"
+      Scope="perMachine"
+      Compressed="yes"
+      Language="1033">
+    <SummaryInformation Description="OpticsLab - Optical Engineering Workbench" Manufacturer="Alexandru Crisan" />
+    <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="A newer version of OpticsLab is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="INSTALLFOLDER" Name="OpticsLab" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder" />
+    <StandardDirectory Id="DesktopFolder" />
+
+    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+      <Component Id="OpticsDesktopExecutable" Guid="8F6D4C2B-5E3A-4B1C-9F2D-7E4A6F8B0D2C">
+        <File Id="OpticsDesktopExe" Source="$(var.BinDir)\optics-desktop.exe" KeyPath="yes" />
+      </Component>
+      <Component Id="OpticsCliExecutable" Guid="9A7E5D3C-6F4B-4C2D-0A3E-8F5B7A9C1E3D">
+        <File Id="OpticsCliExe" Source="$(var.BinDir)\optics-cli.exe" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <Feature Id="Main" Title="OpticsLab" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+    </Feature>
+  </Package>
+</Wix>

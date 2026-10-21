@@ -43,12 +43,7 @@ impl GpuMaterial {
         Self {
             b: [b[0], b[1], b[2], 0.0],
             c: [c[0], c[1], c[2], 0.0],
-            properties: [
-                GpuMaterialType::DielectricSellmeier as u32 as f32,
-                0.0,
-                1.0,
-                0.0,
-            ],
+            properties: [GpuMaterialType::DielectricSellmeier as u32 as f32, 0.0, 1.0, 0.0],
             albedo: [1.0, 1.0, 1.0, 1.0],
         }
     }
@@ -128,11 +123,7 @@ impl GpuMaterial {
     /// Creates a material from a recognized glass name or defaults to N-BK7.
     #[must_use]
     pub fn from_name(name: &str) -> Self {
-        match name
-            .to_ascii_uppercase()
-            .replace(['-', '_', ' '], "")
-            .as_str()
-        {
+        match name.to_ascii_uppercase().replace(['-', '_', ' '], "").as_str() {
             "NBK7" | "BK7" => Self::n_bk7(),
             "SF11" => Self::sf11(),
             "F2" => Self::f2(),

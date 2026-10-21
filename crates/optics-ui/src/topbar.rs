@@ -1,7 +1,7 @@
 //! Responsive academic TopBar component for OpticsLab.
 //!
 //! Includes:
-//! 1. Classic academic menubar (File, Edit, Presets, Analysis, View, Help).
+//! 1. Classic academic menubar (File, Edit, Presets, Analysis, View).
 //! 2. Toolbar with 100% typed Lucide vector icons.
 //! 3. Responsive behavior that collapses button labels and adapts spacing
 //!    gracefully when resizing the window.
@@ -115,7 +115,7 @@ impl Default for TopBarState {
         Self {
             left_panel_open: true,
             right_panel_open: true,
-            theme_mode: ThemeMode::ZemaxClassic,
+            theme_mode: ThemeMode::ClassicCad,
             raytrace_running: false,
             current_file_name: "Cooke Triplet F/4.5.zmx".to_string(),
             is_dirty: false,
@@ -138,7 +138,7 @@ pub fn render_topbar(
 
     ui.vertical(|ui| {
         // -------------------------------------------------------------------
-        // 1. Academic Menubar (File, Edit, Presets, Analysis, View, Help)
+        // 1. Academic Menubar (File, Edit, Presets, Analysis, View)
         // -------------------------------------------------------------------
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing = Vec2::new(8.0, 0.0);
@@ -159,14 +159,14 @@ pub fn render_topbar(
                 RichText::new(doc_title)
                     .monospace()
                     .size(11.0)
-                    .color(if state.is_dirty { tokens.warning } else { tokens.text_muted }),
+                    .color(if state.is_dirty {
+                        tokens.warning
+                    } else {
+                        tokens.text_muted
+                    }),
             );
 
-            ui.label(
-                RichText::new("·")
-                    .size(12.0)
-                    .color(tokens.text_muted),
-            );
+            ui.label(RichText::new("·").size(12.0).color(tokens.text_muted));
 
             // Classic Menus
             MenuBar::new().ui(ui, |ui| {
@@ -340,19 +340,47 @@ pub fn render_topbar(
                         ui.close();
                     }
                     ui.separator();
-                    if ui.button(if state.left_panel_open { "Hide Lens Editor" } else { "Show Lens Editor" }).clicked() {
+                    if ui
+                        .button(if state.left_panel_open {
+                            "Hide Lens Editor"
+                        } else {
+                            "Show Lens Editor"
+                        })
+                        .clicked()
+                    {
                         triggered_action = Some(TopBarAction::ToggleLeftPanel);
                         ui.close();
                     }
-                    if ui.button(if state.right_panel_open { "Hide Analysis Panel" } else { "Show Analysis Panel" }).clicked() {
+                    if ui
+                        .button(if state.right_panel_open {
+                            "Hide Analysis Panel"
+                        } else {
+                            "Show Analysis Panel"
+                        })
+                        .clicked()
+                    {
                         triggered_action = Some(TopBarAction::ToggleRightPanel);
                         ui.close();
                     }
-                    if ui.button(if state.nonseq_drawer_open { "Hide Non-Seq Detector Drawer" } else { "Show Non-Seq Detector Drawer" }).clicked() {
+                    if ui
+                        .button(if state.nonseq_drawer_open {
+                            "Hide Non-Seq Detector Drawer"
+                        } else {
+                            "Show Non-Seq Detector Drawer"
+                        })
+                        .clicked()
+                    {
                         triggered_action = Some(TopBarAction::ToggleNonSeqDrawer);
                         ui.close();
                     }
-                    if ui.button(if state.viewport_3d_mode { "Switch to 2D Cross-Section (Ctrl+2)" } else { "Switch to 3D CAD / Photo Raytrace (Ctrl+3/4)" }).clicked() {
+                    if ui
+                        .button(if state.viewport_3d_mode {
+                            "Switch to 2D Cross-Section (Ctrl+2)"
+                        } else {
+                            "Switch to 3D CAD / Photo Raytrace (Ctrl+3/4)"
+                        })
+                        .clicked()
+                    {
                         triggered_action = Some(TopBarAction::ToggleViewport3DMode);
                         ui.close();
                     }
@@ -367,13 +395,6 @@ pub fn render_topbar(
                             }
                         }
                     });
-                });
-
-                ui.menu_button("Help", |ui| {
-                    if ui.button("About OpticsLab").clicked() {
-                        triggered_action = Some(TopBarAction::OpenAbout);
-                        ui.close();
-                    }
                 });
             });
 
@@ -414,7 +435,8 @@ pub fn render_topbar(
             if lucide_toolbar_button(ui, LucideIcon::FilePlus, "New Prescription (Ctrl+N)", false, tokens).clicked() {
                 triggered_action = Some(TopBarAction::NewFile);
             }
-            if lucide_toolbar_button(ui, LucideIcon::FolderOpen, "Open Prescription (Ctrl+O)", false, tokens).clicked() {
+            if lucide_toolbar_button(ui, LucideIcon::FolderOpen, "Open Prescription (Ctrl+O)", false, tokens).clicked()
+            {
                 triggered_action = Some(TopBarAction::OpenFile);
             }
             if lucide_toolbar_button(ui, LucideIcon::Save, "Save Prescription (Ctrl+S)", false, tokens).clicked() {
@@ -432,10 +454,26 @@ pub fn render_topbar(
             if lucide_toolbar_button(ui, raytrace_icon, raytrace_tooltip, state.raytrace_running, tokens).clicked() {
                 triggered_action = Some(TopBarAction::RunRaytrace);
             }
-            if lucide_toolbar_button(ui, LucideIcon::Wand2, "Automatic Optimization Engine (DLS, Anneal, Global, Glass)", false, tokens).clicked() {
+            if lucide_toolbar_button(
+                ui,
+                LucideIcon::Wand2,
+                "Automatic Optimization Engine (DLS, Anneal, Global, Glass)",
+                false,
+                tokens,
+            )
+            .clicked()
+            {
                 triggered_action = Some(TopBarAction::OpenOptimization);
             }
-            if lucide_toolbar_button(ui, LucideIcon::BarChart2, "Optical Tolerancing & Monte Carlo Simulation", false, tokens).clicked() {
+            if lucide_toolbar_button(
+                ui,
+                LucideIcon::BarChart2,
+                "Optical Tolerancing & Monte Carlo Simulation",
+                false,
+                tokens,
+            )
+            .clicked()
+            {
                 triggered_action = Some(TopBarAction::OpenTolerancing);
             }
 
@@ -448,17 +486,32 @@ pub fn render_topbar(
             if lucide_toolbar_button(ui, LucideIcon::Minus, "Zoom Out (-20%)", false, tokens).clicked() {
                 triggered_action = Some(TopBarAction::ZoomOut);
             }
-            if lucide_toolbar_button(ui, LucideIcon::Maximize2, "Zoom Fit System to Viewport", false, tokens).clicked() {
+            if lucide_toolbar_button(ui, LucideIcon::Maximize2, "Zoom Fit System to Viewport", false, tokens).clicked()
+            {
                 triggered_action = Some(TopBarAction::ZoomFit);
             }
-            if lucide_toolbar_button(ui, LucideIcon::RotateCcw, "Reset View & Center Optical Axis", false, tokens).clicked() {
+            if lucide_toolbar_button(
+                ui,
+                LucideIcon::RotateCcw,
+                "Reset View & Center Optical Axis",
+                false,
+                tokens,
+            )
+            .clicked()
+            {
                 triggered_action = Some(TopBarAction::ResetView);
             }
 
             let (view_3d_tooltip, view_3d_active) = if state.viewport_3d_mode {
-                ("Active: 3D Viewport (Click or Ctrl+2 for 2D CAD, Ctrl+4 for Photo Raytrace)", true)
+                (
+                    "Active: 3D Viewport (Click or Ctrl+2 for 2D CAD, Ctrl+4 for Photo Raytrace)",
+                    true,
+                )
             } else {
-                ("Switch to 3D Viewport (Ctrl+3 for 3D CAD, Ctrl+4 for Photo Raytrace)", false)
+                (
+                    "Switch to 3D Viewport (Ctrl+3 for 3D CAD, Ctrl+4 for Photo Raytrace)",
+                    false,
+                )
             };
             if lucide_toolbar_button(ui, LucideIcon::Box, view_3d_tooltip, view_3d_active, tokens).clicked() {
                 triggered_action = Some(TopBarAction::ToggleViewport3DMode);
@@ -470,36 +523,53 @@ pub fn render_topbar(
             if lucide_toolbar_button(
                 ui,
                 LucideIcon::PanelLeft,
-                if state.left_panel_open { "Hide Lens Data Editor" } else { "Show Lens Data Editor" },
+                if state.left_panel_open {
+                    "Hide Lens Data Editor"
+                } else {
+                    "Show Lens Data Editor"
+                },
                 state.left_panel_open,
                 tokens,
-            ).clicked() {
+            )
+            .clicked()
+            {
                 triggered_action = Some(TopBarAction::ToggleLeftPanel);
             }
 
             if lucide_toolbar_button(
                 ui,
                 LucideIcon::PanelRight,
-                if state.right_panel_open { "Hide Aberration Analysis" } else { "Show Aberration Analysis" },
+                if state.right_panel_open {
+                    "Hide Aberration Analysis"
+                } else {
+                    "Show Aberration Analysis"
+                },
                 state.right_panel_open,
                 tokens,
-            ).clicked() {
+            )
+            .clicked()
+            {
                 triggered_action = Some(TopBarAction::ToggleRightPanel);
             }
 
             if lucide_toolbar_button(
                 ui,
                 LucideIcon::PanelBottom,
-                if state.nonseq_drawer_open { "Hide Non-Seq Detector Drawer" } else { "Show Non-Seq Detector Drawer" },
+                if state.nonseq_drawer_open {
+                    "Hide Non-Seq Detector Drawer"
+                } else {
+                    "Show Non-Seq Detector Drawer"
+                },
                 state.nonseq_drawer_open,
                 tokens,
-            ).clicked() {
+            )
+            .clicked()
+            {
                 triggered_action = Some(TopBarAction::ToggleNonSeqDrawer);
             }
 
             // Right side of toolbar: Retro Theme Selector Dropdown
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-
                 egui::ComboBox::from_id_salt("topbar_theme_dropdown")
                     .selected_text(
                         RichText::new(state.theme_mode.display_name())

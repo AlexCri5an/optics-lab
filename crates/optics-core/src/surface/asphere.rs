@@ -204,9 +204,7 @@ impl EvenAsphere {
             let sag = match self.sag(r) {
                 Ok(s) => s,
                 Err(_) => {
-                    return Err(OpticsError::RayMissedSurface(
-                        "Outside sag domain".to_string(),
-                    ));
+                    return Err(OpticsError::RayMissedSurface("Outside sag domain".to_string()));
                 }
             };
 
@@ -446,11 +444,7 @@ mod tests {
                         (len - 1.0).abs() < 1e-12,
                         "Normal vector at ({x}, {y}) must have exact unit length, got {len}"
                     );
-                    assert!(
-                        n.z < 0.0,
-                        "Normal must face incident medium along -z, got z={}",
-                        n.z
-                    );
+                    assert!(n.z < 0.0, "Normal must face incident medium along -z, got z={}", n.z);
                 }
             }
         }
@@ -464,12 +458,7 @@ mod tests {
         let alpha = vec![0.0, 1e-7]; // small 4th-order perturbation
         let asphere = EvenAsphere::new(c, k, alpha, 25.0)?;
 
-        let ray = Ray::new(
-            Vec3::new(5.0, 0.0, -10.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )?;
+        let ray = Ray::new(Vec3::new(5.0, 0.0, -10.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0)?;
 
         let (t, hit_pt) = asphere.intersect_ray(&ray, 0.0)?;
         assert!(t > 0.0);

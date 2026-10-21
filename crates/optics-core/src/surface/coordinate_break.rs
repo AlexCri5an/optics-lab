@@ -49,41 +49,11 @@ impl CoordinateBreak {
         let ry = self.tilt_y_deg * to_rad;
         let rz = self.tilt_z_deg * to_rad;
 
-        let rot_x = nalgebra::Matrix3::new(
-            1.0,
-            0.0,
-            0.0,
-            0.0,
-            rx.cos(),
-            -rx.sin(),
-            0.0,
-            rx.sin(),
-            rx.cos(),
-        );
+        let rot_x = nalgebra::Matrix3::new(1.0, 0.0, 0.0, 0.0, rx.cos(), -rx.sin(), 0.0, rx.sin(), rx.cos());
 
-        let rot_y = nalgebra::Matrix3::new(
-            ry.cos(),
-            0.0,
-            ry.sin(),
-            0.0,
-            1.0,
-            0.0,
-            -ry.sin(),
-            0.0,
-            ry.cos(),
-        );
+        let rot_y = nalgebra::Matrix3::new(ry.cos(), 0.0, ry.sin(), 0.0, 1.0, 0.0, -ry.sin(), 0.0, ry.cos());
 
-        let rot_z = nalgebra::Matrix3::new(
-            rz.cos(),
-            -rz.sin(),
-            0.0,
-            rz.sin(),
-            rz.cos(),
-            0.0,
-            0.0,
-            0.0,
-            1.0,
-        );
+        let rot_z = nalgebra::Matrix3::new(rz.cos(), -rz.sin(), 0.0, rz.sin(), rz.cos(), 0.0, 0.0, 0.0, 1.0);
 
         rot_z * rot_y * rot_x
     }
@@ -218,12 +188,7 @@ mod tests {
             tilt_first: false,
         };
 
-        let initial_ray = Ray::new(
-            Vec3::new(1.0, 2.0, 3.0),
-            Vec3::new(0.1, 0.2, 0.9746794),
-            587.56,
-            1.0,
-        )?;
+        let initial_ray = Ray::new(Vec3::new(1.0, 2.0, 3.0), Vec3::new(0.1, 0.2, 0.9746794), 587.56, 1.0)?;
 
         let forward = cb.transform_ray_forward(&initial_ray)?;
         let roundtrip = cb.transform_ray_inverse(&forward)?;

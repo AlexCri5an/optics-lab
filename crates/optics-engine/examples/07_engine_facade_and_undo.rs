@@ -13,8 +13,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use optics_engine::{
-    AnalysisRequest, AnalysisResult, DiagnosticLevel, EngineCommand, EngineEvent, OpticalEngine,
-    SurfaceUpdate,
+    AnalysisRequest, AnalysisResult, DiagnosticLevel, EngineCommand, EngineEvent, OpticalEngine, SurfaceUpdate,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -58,10 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("2. Executing Paraxial Analysis via run_analysis:");
     let res1 = engine.run_analysis(&AnalysisRequest::Paraxial)?;
     if let AnalysisResult::Paraxial(p1) = &res1 {
-        println!(
-            "  Computed Paraxial EFL: {:.4} mm, BFL: {:.4} mm",
-            p1.efl_mm, p1.bfl_mm
-        );
+        println!("  Computed Paraxial EFL: {:.4} mm, BFL: {:.4} mm", p1.efl_mm, p1.bfl_mm);
     }
 
     // 4. Demonstrate Result Caching
@@ -89,10 +85,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     })?;
 
     println!("  Post-Command State:");
-    println!(
-        "  New Radius: {:.3} mm",
-        engine.prescription().surfaces[1].radius_mm
-    );
+    println!("  New Radius: {:.3} mm", engine.prescription().surfaces[1].radius_mm);
     println!("  Can Undo:   {}", engine.can_undo());
     println!("  Can Redo:   {}", engine.can_redo());
     println!("  Revision:   {}", engine.revision());

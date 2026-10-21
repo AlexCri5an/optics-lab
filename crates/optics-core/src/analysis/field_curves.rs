@@ -91,30 +91,15 @@ pub fn compute_field_curves(
     let paraxial = calculate_paraxial_properties(prescription, primary_wavelength_nm)?;
     let efl = paraxial.efl_mm;
 
-    let z_first = prescription
-        .surfaces
-        .first()
-        .map_or(0.0, |s| s.conic.vertex_z);
+    let z_first = prescription.surfaces.first().map_or(0.0, |s| s.conic.vertex_z);
     let z_enp = z_first + paraxial.entrance_pupil_pos_mm;
 
     let lambda_f = 486.13;
     let lambda_c = 656.27;
 
     // Axial chromatic shift: trace marginal ray at F and C
-    let ray_f = launch_pupil_ray(
-        prescription,
-        PupilCoord::new(0.0, 1.0),
-        (0.0, 0.0),
-        lambda_f,
-        z_enp,
-    )?;
-    let ray_c = launch_pupil_ray(
-        prescription,
-        PupilCoord::new(0.0, 1.0),
-        (0.0, 0.0),
-        lambda_c,
-        z_enp,
-    )?;
+    let ray_f = launch_pupil_ray(prescription, PupilCoord::new(0.0, 1.0), (0.0, 0.0), lambda_f, z_enp)?;
+    let ray_c = launch_pupil_ray(prescription, PupilCoord::new(0.0, 1.0), (0.0, 0.0), lambda_c, z_enp)?;
 
     let axial_f = trace_sequential(prescription, &ray_f)?;
     let axial_c = trace_sequential(prescription, &ray_c)?;
@@ -270,16 +255,11 @@ pub fn compute_longitudinal_spherical_aberration(
     wavelength_nm: f64,
 ) -> Result<Vec<LongitudinalAberrationPoint>, OpticsError> {
     if num_zones < 2 {
-        return Err(OpticsError::InvalidSurface(
-            "num_zones must be at least 2".to_string(),
-        ));
+        return Err(OpticsError::InvalidSurface("num_zones must be at least 2".to_string()));
     }
 
     let paraxial = calculate_paraxial_properties(prescription, wavelength_nm)?;
-    let z_first = prescription
-        .surfaces
-        .first()
-        .map_or(0.0, |s| s.conic.vertex_z);
+    let z_first = prescription.surfaces.first().map_or(0.0, |s| s.conic.vertex_z);
     let z_enp = z_first + paraxial.entrance_pupil_pos_mm;
 
     let chief_ray = launch_pupil_ray(
@@ -305,13 +285,7 @@ pub fn compute_longitudinal_spherical_aberration(
             continue;
         }
 
-        let ray = launch_pupil_ray(
-            prescription,
-            PupilCoord::new(0.0, py),
-            (0.0, 0.0),
-            wavelength_nm,
-            z_enp,
-        )?;
+        let ray = launch_pupil_ray(prescription, PupilCoord::new(0.0, py), (0.0, 0.0), wavelength_nm, z_enp)?;
         let path = trace_sequential(prescription, &ray)?;
 
         let (y_hit, z_hit, uz) = if let Some(hit) = path.hits.last() {

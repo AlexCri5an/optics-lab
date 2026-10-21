@@ -64,14 +64,12 @@ pub extern "C" fn optics_engine_create() -> *mut OpticalEngine {
     }
 }
 
-/// Creates a new optical engine from a Zemax `.zmx` formatted string.
+/// Creates a new optical engine from a `.zmx` formatted string.
 ///
 /// # Safety
 /// `zmx_content` must be a valid, null-terminated UTF-8 C string.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn optics_engine_create_with_zmx(
-    zmx_content: *const c_char,
-) -> *mut OpticalEngine {
+pub unsafe extern "C" fn optics_engine_create_with_zmx(zmx_content: *const c_char) -> *mut OpticalEngine {
     if zmx_content.is_null() {
         set_last_error("Null pointer provided for zmx_content");
         return std::ptr::null_mut();
@@ -142,15 +140,12 @@ pub extern "C" fn optics_last_error_message() -> *mut c_char {
 // Engine Commands & State
 // ---------------------------------------------------------------------------
 
-/// Loads a Zemax `.zmx` formatted string into an existing engine instance.
+/// Loads a `.zmx` formatted string into an existing engine instance.
 ///
 /// # Safety
 /// `engine` must point to an active [`OpticalEngine`]. `zmx_content` must be a valid C string.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn optics_engine_load_zmx(
-    engine: *mut OpticalEngine,
-    zmx_content: *const c_char,
-) -> c_int {
+pub unsafe extern "C" fn optics_engine_load_zmx(engine: *mut OpticalEngine, zmx_content: *const c_char) -> c_int {
     if engine.is_null() || zmx_content.is_null() {
         set_last_error("Null pointer supplied to optics_engine_load_zmx");
         return OPTICS_ERR_NULL_PTR;
@@ -421,7 +416,7 @@ pub unsafe extern "C" fn optics_engine_export_dxf(engine: *mut OpticalEngine) ->
     }
 }
 
-/// Exports the optical prescription to a Zemax `.zmx` formatted string.
+/// Exports the optical prescription to a `.zmx` formatted string.
 ///
 /// # Safety
 /// `engine` must point to an active [`OpticalEngine`].
@@ -446,9 +441,7 @@ pub unsafe extern "C" fn optics_engine_export_zmx(engine: *mut OpticalEngine) ->
 /// # Safety
 /// `engine` must point to an active [`OpticalEngine`].
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn optics_engine_export_iso10110_md(
-    engine: *mut OpticalEngine,
-) -> *mut c_char {
+pub unsafe extern "C" fn optics_engine_export_iso10110_md(engine: *mut OpticalEngine) -> *mut c_char {
     if engine.is_null() {
         set_last_error("Null engine pointer");
         return std::ptr::null_mut();
@@ -462,9 +455,7 @@ pub unsafe extern "C" fn optics_engine_export_iso10110_md(
 /// # Safety
 /// `engine` must point to an active [`OpticalEngine`].
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn optics_engine_export_project_json(
-    engine: *mut OpticalEngine,
-) -> *mut c_char {
+pub unsafe extern "C" fn optics_engine_export_project_json(engine: *mut OpticalEngine) -> *mut c_char {
     if engine.is_null() {
         set_last_error("Null engine pointer");
         return std::ptr::null_mut();
@@ -542,8 +533,7 @@ mod tests {
         unsafe { optics_string_free(analysis_ptr) };
 
         // Execute Command (Set EPD)
-        let cmd_json =
-            CString::new(r#"{"command":"SetEntrancePupilDiameter","args":{"epd_mm":15.0}}"#)?;
+        let cmd_json = CString::new(r#"{"command":"SetEntrancePupilDiameter","args":{"epd_mm":15.0}}"#)?;
         let cmd_res_ptr = unsafe { optics_engine_execute_command_json(engine, cmd_json.as_ptr()) };
         assert!(!cmd_res_ptr.is_null());
         let cmd_res_cstr = unsafe { CStr::from_ptr(cmd_res_ptr) };

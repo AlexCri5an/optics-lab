@@ -19,4 +19,4 @@ serde           = { workspace = true }
 thiserror       = { workspace = true }
 
 [dev-dependencies]
-optics-zemax = { workspace = true }
+optics-formats = { workspace = true }

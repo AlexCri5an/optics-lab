@@ -16,9 +16,7 @@ use optics_core::analysis::compute_seidel_coefficients;
 use optics_core::conic::{conic_normal, conic_sag};
 use optics_core::fresnel::fresnel_dielectric;
 use optics_core::geometry::{Air, ConstantIndex, RefractiveIndex};
-use optics_core::prescription::{
-    OpticalPrescription, OpticalSurface, calculate_paraxial_properties,
-};
+use optics_core::prescription::{OpticalPrescription, OpticalSurface, calculate_paraxial_properties};
 use optics_core::project::OpticsProject;
 use optics_core::snell::snell_refract;
 use optics_core::surface::asphere::EvenAsphere;
@@ -68,12 +66,7 @@ fn test_prop_snell_vector_cross_product_invariant() -> TestResult {
         // Random normal vector
         let theta_n = rng.range_f64(0.01, std::f64::consts::PI - 0.01);
         let phi_n = rng.range_f64(0.0, 2.0 * std::f64::consts::PI);
-        let normal = Vec3::new(
-            theta_n.sin() * phi_n.cos(),
-            theta_n.sin() * phi_n.sin(),
-            theta_n.cos(),
-        )
-        .normalize();
+        let normal = Vec3::new(theta_n.sin() * phi_n.cos(), theta_n.sin() * phi_n.sin(), theta_n.cos()).normalize();
 
         let n1 = rng.range_f64(1.0, 2.5);
         let n2 = rng.range_f64(1.0, 2.5);
@@ -219,16 +212,8 @@ fn test_prop_fresnel_dielectric_energy_conservation() -> TestResult {
         let n2 = rng.range_f64(1.0, 3.5);
 
         let (rs, rp) = fresnel_dielectric(cos_theta_i, n1, n2);
-        assert!(
-            (0.0..=1.0 + 1e-12).contains(&rs),
-            "rs out of physical range: {}",
-            rs
-        );
-        assert!(
-            (0.0..=1.0 + 1e-12).contains(&rp),
-            "rp out of physical range: {}",
-            rp
-        );
+        assert!((0.0..=1.0 + 1e-12).contains(&rs), "rs out of physical range: {}", rs);
+        assert!((0.0..=1.0 + 1e-12).contains(&rp), "rp out of physical range: {}", rp);
 
         // Dielectric power transmittance Ts = 1 - Rs, Tp = 1 - Rp
         let ts = 1.0 - rs;
@@ -264,12 +249,7 @@ fn test_prop_snell_ray_reversibility() -> TestResult {
     for _ in 0..1000 {
         let theta_n = rng.range_f64(0.01, std::f64::consts::PI - 0.01);
         let phi_n = rng.range_f64(0.0, 2.0 * std::f64::consts::PI);
-        let normal = Vec3::new(
-            theta_n.sin() * phi_n.cos(),
-            theta_n.sin() * phi_n.sin(),
-            theta_n.cos(),
-        )
-        .normalize();
+        let normal = Vec3::new(theta_n.sin() * phi_n.cos(), theta_n.sin() * phi_n.sin(), theta_n.cos()).normalize();
 
         let n1 = rng.range_f64(1.0, 2.5);
         let n2 = rng.range_f64(1.0, 2.5);
@@ -438,7 +418,7 @@ fn test_prop_project_workspace_serialization_roundtrip() -> TestResult {
                 grin_profile: None,
                 profile: None,
                 aperture: None,
-                    coating: None,
+                coating: None,
             });
         }
 
@@ -456,10 +436,7 @@ fn test_prop_project_workspace_serialization_roundtrip() -> TestResult {
         let deserialized = OpticsProject::from_json_str(&json_str)?;
 
         assert_eq!(project.name, deserialized.name);
-        let orig_rx = project
-            .prescription
-            .as_ref()
-            .ok_or("Original prescription missing")?;
+        let orig_rx = project.prescription.as_ref().ok_or("Original prescription missing")?;
         let deser_rx = deserialized
             .prescription
             .as_ref()

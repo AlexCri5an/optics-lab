@@ -1,19 +1,19 @@
 //! Non-sequential ray tracing, 2D radiometric detector viewer, false-color heatmaps, and stray light analysis UI.
 
-use std::sync::Arc;
 use egui::{
-    Button, Color32, CornerRadius, Frame, Label, Margin, Pos2, Rect, RichText, ScrollArea, Sense,
-    Stroke, TextEdit, Ui, Vec2,
+    Button, Color32, CornerRadius, Frame, Label, Margin, Pos2, Rect, RichText, ScrollArea, Sense, Stroke, TextEdit, Ui,
+    Vec2,
 };
-use optics_core::analysis::{compute_two_bounce_ghosts, GhostAnalysis, GhostReflection};
+use optics_core::analysis::{GhostAnalysis, GhostReflection, compute_two_bounce_ghosts};
 use optics_core::prescription::OpticalPrescription;
 use optics_glass::catalog::GlassCatalogDb;
 use optics_nonseq::detector::Detector2D;
 pub use optics_nonseq::detector::RayPathFilter;
 use optics_nonseq::scene::NonSeqScene;
 use optics_nonseq::trace::{NonSeqTraceConfig, NonSeqTraceReport, NonSeqTracer, RayPathSegment};
+use std::sync::Arc;
 
-use crate::icons::{lucide_small_icon_button, LucideIcon};
+use crate::icons::{LucideIcon, lucide_small_icon_button};
 use crate::theme::OpticsTokens;
 
 /// Color palette mapping for false-color detector heatmaps.
@@ -289,15 +289,8 @@ impl Default for NonSeqUiState {
 
 impl NonSeqUiState {
     /// Execute non-sequential ray tracing across the synthesized scene.
-    pub fn execute_trace(
-        &mut self,
-        prescription: &OpticalPrescription,
-        catalog: &GlassCatalogDb,
-    ) {
-        let mut scene = match NonSeqScene::build_from_prescription(
-            prescription,
-            self.detector_resolution,
-        ) {
+    pub fn execute_trace(&mut self, prescription: &OpticalPrescription, catalog: &GlassCatalogDb) {
+        let mut scene = match NonSeqScene::build_from_prescription(prescription, self.detector_resolution) {
             Ok(s) => s,
             Err(e) => {
                 self.status_message = Some(format!("Failed to build NonSeqScene: {e}"));
@@ -373,18 +366,8 @@ impl NonSeqUiState {
                 .filter(|s| s.reflection_count == 0 && s.tir_count == 0)
                 .cloned()
                 .collect(),
-            RayPathFilter::GhostsOnly => rep
-                .paths
-                .iter()
-                .filter(|s| s.reflection_count >= 1)
-                .cloned()
-                .collect(),
-            RayPathFilter::TirOnly => rep
-                .paths
-                .iter()
-                .filter(|s| s.tir_count > 0)
-                .cloned()
-                .collect(),
+            RayPathFilter::GhostsOnly => rep.paths.iter().filter(|s| s.reflection_count >= 1).cloned().collect(),
+            RayPathFilter::TirOnly => rep.paths.iter().filter(|s| s.tir_count > 0).cloned().collect(),
             RayPathFilter::StrayLight => rep
                 .paths
                 .iter()
@@ -395,11 +378,7 @@ impl NonSeqUiState {
     }
 
     /// Evaluates or updates the two-bounce ghost focus matrix for the active prescription.
-    pub fn compute_ghost_matrix(
-        &mut self,
-        prescription: &OpticalPrescription,
-        catalog: &GlassCatalogDb,
-    ) {
+    pub fn compute_ghost_matrix(&mut self, prescription: &OpticalPrescription, catalog: &GlassCatalogDb) {
         let primary_wl = prescription
             .wavelengths_nm
             .get(prescription.primary_wavelength_index)
@@ -507,13 +486,21 @@ pub fn render_nonseq_bottom_drawer(
                 ui.spacing_mut().item_spacing.x = 6.0;
 
                 // Toggle open/close
-                let toggle_icon = if state.drawer_open { LucideIcon::Minus } else { LucideIcon::Plus };
+                let toggle_icon = if state.drawer_open {
+                    LucideIcon::Minus
+                } else {
+                    LucideIcon::Plus
+                };
                 if lucide_small_icon_button(ui, toggle_icon, "Toggle Non-Sequential Viewer", tokens).clicked() {
                     state.drawer_open = !state.drawer_open;
                 }
 
                 // Title (shortened on compact)
-                let title = if is_compact { "NON-SEQ" } else { "NON-SEQUENTIAL & STRAY LIGHT" };
+                let title = if is_compact {
+                    "NON-SEQ"
+                } else {
+                    "NON-SEQUENTIAL & STRAY LIGHT"
+                };
                 ui.label(
                     RichText::new(title)
                         .monospace()
@@ -526,24 +513,62 @@ pub fn render_nonseq_bottom_drawer(
 
                 // Tab buttons
                 let det_active = state.active_tab == NonSeqDrawerTab::DetectorViewer;
-                if ui.add(
-                    Button::new(RichText::new("2D Detector").monospace().size(10.0)
-                        .color(if det_active { tokens.text_primary } else { tokens.text_muted }))
-                        .fill(if det_active { tokens.bg_control_active } else { tokens.bg_control })
-                        .stroke(if det_active { tokens.border_hovered } else { tokens.border })
+                if ui
+                    .add(
+                        Button::new(
+                            RichText::new("2D Detector")
+                                .monospace()
+                                .size(10.0)
+                                .color(if det_active {
+                                    tokens.text_primary
+                                } else {
+                                    tokens.text_muted
+                                }),
+                        )
+                        .fill(if det_active {
+                            tokens.bg_control_active
+                        } else {
+                            tokens.bg_control
+                        })
+                        .stroke(if det_active {
+                            tokens.border_hovered
+                        } else {
+                            tokens.border
+                        })
                         .corner_radius(CornerRadius::ZERO),
-                ).clicked() {
+                    )
+                    .clicked()
+                {
                     state.active_tab = NonSeqDrawerTab::DetectorViewer;
                 }
 
                 let ghost_active = state.active_tab == NonSeqDrawerTab::GhostFocusMatrix;
-                if ui.add(
-                    Button::new(RichText::new("Ghost Matrix").monospace().size(10.0)
-                        .color(if ghost_active { tokens.text_primary } else { tokens.text_muted }))
-                        .fill(if ghost_active { tokens.bg_control_active } else { tokens.bg_control })
-                        .stroke(if ghost_active { tokens.border_hovered } else { tokens.border })
+                if ui
+                    .add(
+                        Button::new(
+                            RichText::new("Ghost Matrix")
+                                .monospace()
+                                .size(10.0)
+                                .color(if ghost_active {
+                                    tokens.text_primary
+                                } else {
+                                    tokens.text_muted
+                                }),
+                        )
+                        .fill(if ghost_active {
+                            tokens.bg_control_active
+                        } else {
+                            tokens.bg_control
+                        })
+                        .stroke(if ghost_active {
+                            tokens.border_hovered
+                        } else {
+                            tokens.border
+                        })
                         .corner_radius(CornerRadius::ZERO),
-                ).clicked() {
+                    )
+                    .clicked()
+                {
                     state.active_tab = NonSeqDrawerTab::GhostFocusMatrix;
                     if state.ghost_analysis.is_none() {
                         state.compute_ghost_matrix(prescription, catalog);
@@ -561,7 +586,11 @@ pub fn render_nonseq_bottom_drawer(
 
                 // Ghost rays checkbox — right-aligned, always visible
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let col = if state.show_ghost_rays_in_viewport { tokens.warning } else { tokens.text_primary };
+                    let col = if state.show_ghost_rays_in_viewport {
+                        tokens.warning
+                    } else {
+                        tokens.text_primary
+                    };
                     ui.checkbox(
                         &mut state.show_ghost_rays_in_viewport,
                         RichText::new(if is_compact { "Ghosts" } else { "Show Ghost Rays" })
@@ -610,236 +639,263 @@ fn render_detector_viewer_tab(
     // 1. Controls Strip: Exactly 2 rows of clean, compact controls
     // Row 1: Execution & Source Parameters (< 480px)
     ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 6.0;
+        ui.spacing_mut().item_spacing.x = 6.0;
 
-                let icon = LucideIcon::Play;
-                let img = egui::Image::from_bytes(icon.uri(), icon.svg_content().as_bytes())
-                    .tint(tokens.accent)
-                    .fit_to_exact_size(Vec2::splat(12.0));
-                let btn = Button::image_and_text(
-                    img,
-                    RichText::new("Trace Non-Seq").monospace().size(10.0),
+        let icon = LucideIcon::Play;
+        let img = egui::Image::from_bytes(icon.uri(), icon.svg_content().as_bytes())
+            .tint(tokens.accent)
+            .fit_to_exact_size(Vec2::splat(12.0));
+        let btn = Button::image_and_text(img, RichText::new("Trace Non-Seq").monospace().size(10.0))
+            .min_size(Vec2::new(115.0, 20.0))
+            .fill(tokens.bg_control)
+            .stroke(tokens.border)
+            .corner_radius(CornerRadius::ZERO);
+
+        if ui.add(btn).clicked() {
+            state.execute_trace(prescription, catalog);
+        }
+
+        ui.label(RichText::new("Rays:").monospace().size(9.5).color(tokens.text_muted));
+        uint_input(ui, egui::Id::new("ns_rays_inp"), &mut state.num_rays, 38.0);
+
+        ui.label(RichText::new("Bounces:").monospace().size(9.5).color(tokens.text_muted));
+        uint_input(ui, egui::Id::new("ns_bounces_inp"), &mut state.max_bounces, 24.0);
+
+        ui.label(RichText::new("Cutoff:").monospace().size(9.5).color(tokens.text_muted));
+        float_input(ui, egui::Id::new("ns_cutoff_inp"), &mut state.min_power_threshold, 44.0);
+
+        ui.checkbox(
+            &mut state.enable_branching,
+            RichText::new("Branching").monospace().size(9.5),
+        );
+
+        if let Some(rep) = &state.last_trace_report {
+            ui.label(RichText::new("|").size(9.0).color(tokens.border.color));
+            ui.label(
+                RichText::new(format!("{} rays", rep.total_rays_traced))
+                    .monospace()
+                    .size(9.0)
+                    .color(tokens.text_muted),
+            );
+        }
+    });
+
+    ui.add_space(2.0);
+
+    // Row 2: Filtering & Visualization Parameters (Filter, Metric, Palette, Scale, Slice)
+    // If available width is sufficient (>= 660px), all 5 controls fit comfortably on Row 2.
+    let wrap_controls = avail_w < 660.0;
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
+
+        // Ray Filter Dropdown
+        ui.label(RichText::new("Filter:").monospace().size(9.5).color(tokens.text_muted));
+        egui::ComboBox::from_id_salt("ns_ray_filter_cb")
+            .selected_text(RichText::new(state.ray_filter.display_name()).monospace().size(9.5))
+            .width(96.0)
+            .show_ui(ui, |ui| {
+                for f in [
+                    RayPathFilter::All,
+                    RayPathFilter::SignalOnly,
+                    RayPathFilter::GhostsOnly,
+                    RayPathFilter::TirOnly,
+                    RayPathFilter::StrayLight,
+                ] {
+                    if ui.selectable_label(state.ray_filter == f, f.display_name()).clicked() {
+                        state.ray_filter = f;
+                    }
+                }
+            });
+
+        // Radiometric vs Photometric
+        ui.label(RichText::new("Metric:").monospace().size(9.5).color(tokens.text_muted));
+        egui::ComboBox::from_id_salt("ns_quantity_cb")
+            .selected_text(RichText::new(state.quantity.display_name()).monospace().size(9.5))
+            .width(90.0)
+            .show_ui(ui, |ui| {
+                for q in [DetectorQuantity::Irradiance, DetectorQuantity::Illuminance] {
+                    if ui.selectable_label(state.quantity == q, q.display_name()).clicked() {
+                        state.quantity = q;
+                    }
+                }
+            });
+
+        if !wrap_controls {
+            ui.separator();
+
+            // Palette dropdown
+            ui.label(RichText::new("Palette:").monospace().size(9.5).color(tokens.text_muted));
+            egui::ComboBox::from_id_salt("ns_palette_cb")
+                .selected_text(RichText::new(state.palette.display_name()).monospace().size(9.5))
+                .width(68.0)
+                .show_ui(ui, |ui| {
+                    for p in [
+                        HeatmapPalette::Inferno,
+                        HeatmapPalette::Viridis,
+                        HeatmapPalette::Turbo,
+                        HeatmapPalette::Greyscale,
+                    ] {
+                        if ui.selectable_label(state.palette == p, p.display_name()).clicked() {
+                            state.palette = p;
+                        }
+                    }
+                });
+
+            // Scale dropdown (Linear vs Log)
+            ui.label(RichText::new("Scale:").monospace().size(9.5).color(tokens.text_muted));
+            egui::ComboBox::from_id_salt("ns_scale_cb")
+                .selected_text(RichText::new(state.color_scale.display_name()).monospace().size(9.5))
+                .width(65.0)
+                .show_ui(ui, |ui| {
+                    for s in [ColorScale::Linear, ColorScale::Logarithmic] {
+                        if ui.selectable_label(state.color_scale == s, s.display_name()).clicked() {
+                            state.color_scale = s;
+                        }
+                    }
+                });
+
+            // 1D Slice Axis
+            ui.label(RichText::new("Slice:").monospace().size(9.5).color(tokens.text_muted));
+            egui::ComboBox::from_id_salt("ns_cs_axis_cb")
+                .selected_text(
+                    RichText::new(state.cross_section_axis.display_name())
+                        .monospace()
+                        .size(9.5),
                 )
-                .min_size(Vec2::new(115.0, 20.0))
-                .fill(tokens.bg_control)
-                .stroke(tokens.border)
-                .corner_radius(CornerRadius::ZERO);
+                .width(78.0)
+                .show_ui(ui, |ui| {
+                    for axis in [
+                        CrossSectionAxis::Horizontal,
+                        CrossSectionAxis::Vertical,
+                        CrossSectionAxis::Both,
+                    ] {
+                        if ui
+                            .selectable_label(state.cross_section_axis == axis, axis.display_name())
+                            .clicked()
+                        {
+                            state.cross_section_axis = axis;
+                        }
+                    }
+                });
+        }
+    });
 
-                if ui.add(btn).clicked() {
-                    state.execute_trace(prescription, catalog);
-                }
+    if wrap_controls {
+        ui.add_space(2.0);
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 6.0;
 
-                ui.label(RichText::new("Rays:").monospace().size(9.5).color(tokens.text_muted));
-                uint_input(ui, egui::Id::new("ns_rays_inp"), &mut state.num_rays, 38.0);
+            // Palette dropdown
+            ui.label(RichText::new("Palette:").monospace().size(9.5).color(tokens.text_muted));
+            egui::ComboBox::from_id_salt("ns_palette_cb_wrap")
+                .selected_text(RichText::new(state.palette.display_name()).monospace().size(9.5))
+                .width(68.0)
+                .show_ui(ui, |ui| {
+                    for p in [
+                        HeatmapPalette::Inferno,
+                        HeatmapPalette::Viridis,
+                        HeatmapPalette::Turbo,
+                        HeatmapPalette::Greyscale,
+                    ] {
+                        if ui.selectable_label(state.palette == p, p.display_name()).clicked() {
+                            state.palette = p;
+                        }
+                    }
+                });
 
-                ui.label(RichText::new("Bounces:").monospace().size(9.5).color(tokens.text_muted));
-                uint_input(ui, egui::Id::new("ns_bounces_inp"), &mut state.max_bounces, 24.0);
+            // Scale dropdown (Linear vs Log)
+            ui.label(RichText::new("Scale:").monospace().size(9.5).color(tokens.text_muted));
+            egui::ComboBox::from_id_salt("ns_scale_cb_wrap")
+                .selected_text(RichText::new(state.color_scale.display_name()).monospace().size(9.5))
+                .width(65.0)
+                .show_ui(ui, |ui| {
+                    for s in [ColorScale::Linear, ColorScale::Logarithmic] {
+                        if ui.selectable_label(state.color_scale == s, s.display_name()).clicked() {
+                            state.color_scale = s;
+                        }
+                    }
+                });
 
-                ui.label(RichText::new("Cutoff:").monospace().size(9.5).color(tokens.text_muted));
-                float_input(ui, egui::Id::new("ns_cutoff_inp"), &mut state.min_power_threshold, 44.0);
+            // 1D Slice Axis
+            ui.label(RichText::new("Slice:").monospace().size(9.5).color(tokens.text_muted));
+            egui::ComboBox::from_id_salt("ns_cs_axis_cb_wrap")
+                .selected_text(
+                    RichText::new(state.cross_section_axis.display_name())
+                        .monospace()
+                        .size(9.5),
+                )
+                .width(78.0)
+                .show_ui(ui, |ui| {
+                    for axis in [
+                        CrossSectionAxis::Horizontal,
+                        CrossSectionAxis::Vertical,
+                        CrossSectionAxis::Both,
+                    ] {
+                        if ui
+                            .selectable_label(state.cross_section_axis == axis, axis.display_name())
+                            .clicked()
+                        {
+                            state.cross_section_axis = axis;
+                        }
+                    }
+                });
+        });
+    }
 
-                ui.checkbox(
-                    &mut state.enable_branching,
-                    RichText::new("Branching").monospace().size(9.5),
+    ui.add_space(3.0);
+
+    // 2. Visualization Area: Dynamically adapts to available height and width
+    let det_opt = state.cached_scene.as_ref().and_then(|s| s.detectors.first().cloned());
+    if let Some(detector) = det_opt {
+        let avail_w = ui.available_width().max(360.0);
+        let vis_h = ui.available_height().clamp(90.0, 260.0);
+
+        // Left: 2D False-Color Detector Heatmap + Colorbar
+        let left_w = (vis_h + 40.0).min(avail_w * 0.35).min(185.0);
+        let right_w = (avail_w - left_w - 18.0).max(180.0);
+
+        ui.horizontal(|ui| {
+            ui.allocate_ui_with_layout(
+                Vec2::new(left_w, vis_h),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    ui.set_max_width(left_w);
+                    render_detector_heatmap_widget(ui, &detector, state, tokens);
+                },
+            );
+
+            ui.separator();
+
+            ui.allocate_ui_with_layout(
+                Vec2::new(right_w, vis_h),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    ui.set_max_width(right_w);
+                    let card_h = 30.0;
+                    let spacing = 4.0;
+                    let plot_h = ((vis_h - card_h - spacing) - 20.0).max(36.0);
+                    render_cross_section_plot(ui, &detector, state, plot_h, tokens);
+                    ui.add_space(spacing);
+                    render_radiometric_kpis_bar(ui, &detector, state, tokens);
+                },
+            );
+        });
+    } else {
+        let vis_h = ui.available_height().max(80.0);
+        ui.allocate_ui(Vec2::new(avail_w, vis_h), |ui| {
+            ui.centered_and_justified(|ui| {
+                ui.label(
+                    RichText::new("Click 'Trace Non-Seq' to trace physical 3D rays and generate detector maps.")
+                        .monospace()
+                        .size(10.5)
+                        .color(tokens.text_muted),
                 );
-
-                if let Some(rep) = &state.last_trace_report {
-                    ui.label(RichText::new("|").size(9.0).color(tokens.border.color));
-                    ui.label(
-                        RichText::new(format!("{} rays", rep.total_rays_traced))
-                            .monospace()
-                            .size(9.0)
-                            .color(tokens.text_muted),
-                    );
-                }
             });
-
-            ui.add_space(2.0);
-
-            // Row 2: Filtering & Visualization Parameters (Filter, Metric, Palette, Scale, Slice)
-            // If available width is sufficient (>= 660px), all 5 controls fit comfortably on Row 2.
-            let wrap_controls = avail_w < 660.0;
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 6.0;
-
-                // Ray Filter Dropdown
-                ui.label(RichText::new("Filter:").monospace().size(9.5).color(tokens.text_muted));
-                egui::ComboBox::from_id_salt("ns_ray_filter_cb")
-                    .selected_text(RichText::new(state.ray_filter.display_name()).monospace().size(9.5))
-                    .width(96.0)
-                    .show_ui(ui, |ui| {
-                        for f in [
-                            RayPathFilter::All,
-                            RayPathFilter::SignalOnly,
-                            RayPathFilter::GhostsOnly,
-                            RayPathFilter::TirOnly,
-                            RayPathFilter::StrayLight,
-                        ] {
-                            if ui.selectable_label(state.ray_filter == f, f.display_name()).clicked() {
-                                state.ray_filter = f;
-                            }
-                        }
-                    });
-
-                // Radiometric vs Photometric
-                ui.label(RichText::new("Metric:").monospace().size(9.5).color(tokens.text_muted));
-                egui::ComboBox::from_id_salt("ns_quantity_cb")
-                    .selected_text(RichText::new(state.quantity.display_name()).monospace().size(9.5))
-                    .width(90.0)
-                    .show_ui(ui, |ui| {
-                        for q in [DetectorQuantity::Irradiance, DetectorQuantity::Illuminance] {
-                            if ui.selectable_label(state.quantity == q, q.display_name()).clicked() {
-                                state.quantity = q;
-                            }
-                        }
-                    });
-
-                if !wrap_controls {
-                    ui.separator();
-
-                    // Palette dropdown
-                    ui.label(RichText::new("Palette:").monospace().size(9.5).color(tokens.text_muted));
-                    egui::ComboBox::from_id_salt("ns_palette_cb")
-                        .selected_text(RichText::new(state.palette.display_name()).monospace().size(9.5))
-                        .width(68.0)
-                        .show_ui(ui, |ui| {
-                            for p in [
-                                HeatmapPalette::Inferno,
-                                HeatmapPalette::Viridis,
-                                HeatmapPalette::Turbo,
-                                HeatmapPalette::Greyscale,
-                            ] {
-                                if ui.selectable_label(state.palette == p, p.display_name()).clicked() {
-                                    state.palette = p;
-                                }
-                            }
-                        });
-
-                    // Scale dropdown (Linear vs Log)
-                    ui.label(RichText::new("Scale:").monospace().size(9.5).color(tokens.text_muted));
-                    egui::ComboBox::from_id_salt("ns_scale_cb")
-                        .selected_text(RichText::new(state.color_scale.display_name()).monospace().size(9.5))
-                        .width(65.0)
-                        .show_ui(ui, |ui| {
-                            for s in [ColorScale::Linear, ColorScale::Logarithmic] {
-                                if ui.selectable_label(state.color_scale == s, s.display_name()).clicked() {
-                                    state.color_scale = s;
-                                }
-                            }
-                        });
-
-                    // 1D Slice Axis
-                    ui.label(RichText::new("Slice:").monospace().size(9.5).color(tokens.text_muted));
-                    egui::ComboBox::from_id_salt("ns_cs_axis_cb")
-                        .selected_text(RichText::new(state.cross_section_axis.display_name()).monospace().size(9.5))
-                        .width(78.0)
-                        .show_ui(ui, |ui| {
-                            for axis in [CrossSectionAxis::Horizontal, CrossSectionAxis::Vertical, CrossSectionAxis::Both] {
-                                if ui.selectable_label(state.cross_section_axis == axis, axis.display_name()).clicked() {
-                                    state.cross_section_axis = axis;
-                                }
-                            }
-                        });
-                }
-            });
-
-            if wrap_controls {
-                ui.add_space(2.0);
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 6.0;
-
-                    // Palette dropdown
-                    ui.label(RichText::new("Palette:").monospace().size(9.5).color(tokens.text_muted));
-                    egui::ComboBox::from_id_salt("ns_palette_cb_wrap")
-                        .selected_text(RichText::new(state.palette.display_name()).monospace().size(9.5))
-                        .width(68.0)
-                        .show_ui(ui, |ui| {
-                            for p in [
-                                HeatmapPalette::Inferno,
-                                HeatmapPalette::Viridis,
-                                HeatmapPalette::Turbo,
-                                HeatmapPalette::Greyscale,
-                            ] {
-                                if ui.selectable_label(state.palette == p, p.display_name()).clicked() {
-                                    state.palette = p;
-                                }
-                            }
-                        });
-
-                    // Scale dropdown (Linear vs Log)
-                    ui.label(RichText::new("Scale:").monospace().size(9.5).color(tokens.text_muted));
-                    egui::ComboBox::from_id_salt("ns_scale_cb_wrap")
-                        .selected_text(RichText::new(state.color_scale.display_name()).monospace().size(9.5))
-                        .width(65.0)
-                        .show_ui(ui, |ui| {
-                            for s in [ColorScale::Linear, ColorScale::Logarithmic] {
-                                if ui.selectable_label(state.color_scale == s, s.display_name()).clicked() {
-                                    state.color_scale = s;
-                                }
-                            }
-                        });
-
-                    // 1D Slice Axis
-                    ui.label(RichText::new("Slice:").monospace().size(9.5).color(tokens.text_muted));
-                    egui::ComboBox::from_id_salt("ns_cs_axis_cb_wrap")
-                        .selected_text(RichText::new(state.cross_section_axis.display_name()).monospace().size(9.5))
-                        .width(78.0)
-                        .show_ui(ui, |ui| {
-                            for axis in [CrossSectionAxis::Horizontal, CrossSectionAxis::Vertical, CrossSectionAxis::Both] {
-                                if ui.selectable_label(state.cross_section_axis == axis, axis.display_name()).clicked() {
-                                    state.cross_section_axis = axis;
-                                }
-                            }
-                        });
-                });
-            }
-
-            ui.add_space(3.0);
-
-            // 2. Visualization Area: Dynamically adapts to available height and width
-            let det_opt = state.cached_scene.as_ref().and_then(|s| s.detectors.first().cloned());
-            if let Some(detector) = det_opt {
-                let avail_w = ui.available_width().max(360.0);
-                let vis_h = ui.available_height().clamp(90.0, 260.0);
-
-                // Left: 2D False-Color Detector Heatmap + Colorbar
-                let left_w = (vis_h + 40.0).min(avail_w * 0.35).min(185.0);
-                let right_w = (avail_w - left_w - 18.0).max(180.0);
-
-                ui.horizontal(|ui| {
-                    ui.allocate_ui_with_layout(Vec2::new(left_w, vis_h), egui::Layout::top_down(egui::Align::Min), |ui| {
-                        ui.set_max_width(left_w);
-                        render_detector_heatmap_widget(ui, &detector, state, tokens);
-                    });
-
-                    ui.separator();
-
-                    ui.allocate_ui_with_layout(Vec2::new(right_w, vis_h), egui::Layout::top_down(egui::Align::Min), |ui| {
-                        ui.set_max_width(right_w);
-                        let card_h = 30.0;
-                        let spacing = 4.0;
-                        let plot_h = ((vis_h - card_h - spacing) - 20.0).max(36.0);
-                        render_cross_section_plot(ui, &detector, state, plot_h, tokens);
-                        ui.add_space(spacing);
-                        render_radiometric_kpis_bar(ui, &detector, state, tokens);
-                    });
-                });
-            } else {
-                let vis_h = ui.available_height().max(80.0);
-                ui.allocate_ui(Vec2::new(avail_w, vis_h), |ui| {
-                    ui.centered_and_justified(|ui| {
-                        ui.label(
-                            RichText::new("Click 'Trace Non-Seq' to trace physical 3D rays and generate detector maps.")
-                                .monospace()
-                                .size(10.5)
-                                .color(tokens.text_muted),
-                        );
-                    });
-                });
-            }
+        });
+    }
 }
 
-/// Renders the systematic Two-Bounce Ghost Focus Matrix table (Zemax Ghost Generator standard).
+/// Renders the systematic Two-Bounce Ghost Focus Matrix table.
 fn render_ghost_matrix_table(
     ui: &mut Ui,
     state: &mut NonSeqUiState,
@@ -853,7 +909,12 @@ fn render_ghost_matrix_table(
     // Row 1: Actions & Filters
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;
-        ui.label(RichText::new("AR Coating:").monospace().size(9.5).color(tokens.text_muted));
+        ui.label(
+            RichText::new("AR Coating:")
+                .monospace()
+                .size(9.5)
+                .color(tokens.text_muted),
+        );
         egui::ComboBox::from_id_salt("ns_ar_coating_cb")
             .selected_text(RichText::new(state.ar_coating.display_name()).monospace().size(9.5))
             .width(135.0)
@@ -864,7 +925,10 @@ fn render_ghost_matrix_table(
                     ArCoatingPreset::BmarMultiLayer,
                     ArCoatingPreset::LaserVCoating,
                 ] {
-                    if ui.selectable_label(state.ar_coating == preset, preset.display_name()).clicked() {
+                    if ui
+                        .selectable_label(state.ar_coating == preset, preset.display_name())
+                        .clicked()
+                    {
                         state.ar_coating = preset;
                         state.compute_ghost_matrix(prescription, catalog);
                     }
@@ -904,7 +968,11 @@ fn render_ghost_matrix_table(
 
             ui.separator();
 
-            let danger_color = if ga.num_focused_ghosts > 0 { tokens.warning } else { tokens.success };
+            let danger_color = if ga.num_focused_ghosts > 0 {
+                tokens.warning
+            } else {
+                tokens.success
+            };
             ui.label(
                 RichText::new(format!("Focused Threats: {}", ga.num_focused_ghosts))
                     .monospace()
@@ -916,10 +984,14 @@ fn render_ghost_matrix_table(
             ui.separator();
 
             ui.label(
-                RichText::new(format!("Total Stray: {:.2e} ({:.3}%)", ga.total_ghost_power_fraction, ga.total_ghost_power_fraction * 100.0))
-                    .monospace()
-                    .size(9.5)
-                    .color(tokens.text_muted),
+                RichText::new(format!(
+                    "Total Stray: {:.2e} ({:.3}%)",
+                    ga.total_ghost_power_fraction,
+                    ga.total_ghost_power_fraction * 100.0
+                ))
+                .monospace()
+                .size(9.5)
+                .color(tokens.text_muted),
             );
 
             if let Some((f, r)) = state.selected_ghost_pair {
@@ -970,25 +1042,61 @@ fn render_ghost_matrix_table(
                         .min_col_width(70.0)
                         .show(ui, |ui| {
                             // Table Header Row
-                            ui.label(RichText::new("Pair (S↔S)").monospace().strong().size(9.5).color(tokens.text_primary));
+                            ui.label(
+                                RichText::new("Pair (S↔S)")
+                                    .monospace()
+                                    .strong()
+                                    .size(9.5)
+                                    .color(tokens.text_primary),
+                            );
 
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                ui.label(RichText::new("Defocus Δz").monospace().strong().size(9.5).color(tokens.text_primary));
+                                ui.label(
+                                    RichText::new("Defocus Δz")
+                                        .monospace()
+                                        .strong()
+                                        .size(9.5)
+                                        .color(tokens.text_primary),
+                                );
                             });
 
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                ui.label(RichText::new("Marginal y").monospace().strong().size(9.5).color(tokens.text_primary));
+                                ui.label(
+                                    RichText::new("Marginal y")
+                                        .monospace()
+                                        .strong()
+                                        .size(9.5)
+                                        .color(tokens.text_primary),
+                                );
                             });
 
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                ui.label(RichText::new("Power Frac.").monospace().strong().size(9.5).color(tokens.text_primary));
+                                ui.label(
+                                    RichText::new("Power Frac.")
+                                        .monospace()
+                                        .strong()
+                                        .size(9.5)
+                                        .color(tokens.text_primary),
+                                );
                             });
 
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                ui.label(RichText::new("Rel. Irrad.").monospace().strong().size(9.5).color(tokens.text_primary));
+                                ui.label(
+                                    RichText::new("Rel. Irrad.")
+                                        .monospace()
+                                        .strong()
+                                        .size(9.5)
+                                        .color(tokens.text_primary),
+                                );
                             });
 
-                            ui.label(RichText::new("Threat Assessment").monospace().strong().size(9.5).color(tokens.text_primary));
+                            ui.label(
+                                RichText::new("Threat Assessment")
+                                    .monospace()
+                                    .strong()
+                                    .size(9.5)
+                                    .color(tokens.text_primary),
+                            );
                             ui.end_row();
 
                             // Table Data Rows
@@ -1002,11 +1110,16 @@ fn render_ghost_matrix_table(
                                 } else {
                                     (tokens.bg_control, tokens.border, tokens.text_primary)
                                 };
-                                let btn = Button::new(RichText::new(pair_label).monospace().size(9.5).color(text_color))
-                                    .fill(bg)
-                                    .stroke(stroke)
-                                    .corner_radius(CornerRadius::ZERO);
-                                if ui.add(btn).on_hover_text("Click to isolate this ghost reflection trajectory in viewport").clicked() {
+                                let btn =
+                                    Button::new(RichText::new(pair_label).monospace().size(9.5).color(text_color))
+                                        .fill(bg)
+                                        .stroke(stroke)
+                                        .corner_radius(CornerRadius::ZERO);
+                                if ui
+                                    .add(btn)
+                                    .on_hover_text("Click to isolate this ghost reflection trajectory in viewport")
+                                    .clicked()
+                                {
                                     if is_selected {
                                         state.selected_ghost_pair = None;
                                     } else {
@@ -1022,11 +1135,20 @@ fn render_ghost_matrix_table(
                                             RichText::new(format!("{}{:.2} mm", sign, g.ghost_defocus_mm))
                                                 .monospace()
                                                 .size(9.5)
-                                                .color(if is_selected { tokens.text_primary } else { tokens.text_muted }),
-                                        ).sense(Sense::click()),
+                                                .color(if is_selected {
+                                                    tokens.text_primary
+                                                } else {
+                                                    tokens.text_muted
+                                                }),
+                                        )
+                                        .sense(Sense::click()),
                                     );
                                     if resp.clicked() {
-                                        state.selected_ghost_pair = if is_selected { None } else { Some((g.surface_front, g.surface_rear)) };
+                                        state.selected_ghost_pair = if is_selected {
+                                            None
+                                        } else {
+                                            Some((g.surface_front, g.surface_rear))
+                                        };
                                     }
                                 });
 
@@ -1037,11 +1159,20 @@ fn render_ghost_matrix_table(
                                             RichText::new(format!("{:.3} mm", g.ghost_marginal_height_mm))
                                                 .monospace()
                                                 .size(9.5)
-                                                .color(if is_selected { tokens.text_primary } else { tokens.text_muted }),
-                                        ).sense(Sense::click()),
+                                                .color(if is_selected {
+                                                    tokens.text_primary
+                                                } else {
+                                                    tokens.text_muted
+                                                }),
+                                        )
+                                        .sense(Sense::click()),
                                     );
                                     if resp.clicked() {
-                                        state.selected_ghost_pair = if is_selected { None } else { Some((g.surface_front, g.surface_rear)) };
+                                        state.selected_ghost_pair = if is_selected {
+                                            None
+                                        } else {
+                                            Some((g.surface_front, g.surface_rear))
+                                        };
                                     }
                                 });
 
@@ -1053,10 +1184,15 @@ fn render_ghost_matrix_table(
                                                 .monospace()
                                                 .size(9.5)
                                                 .color(if is_selected { tokens.accent } else { tokens.text_muted }),
-                                        ).sense(Sense::click()),
+                                        )
+                                        .sense(Sense::click()),
                                     );
                                     if resp.clicked() {
-                                        state.selected_ghost_pair = if is_selected { None } else { Some((g.surface_front, g.surface_rear)) };
+                                        state.selected_ghost_pair = if is_selected {
+                                            None
+                                        } else {
+                                            Some((g.surface_front, g.surface_rear))
+                                        };
                                     }
                                 });
 
@@ -1067,11 +1203,20 @@ fn render_ghost_matrix_table(
                                             RichText::new(format!("{:.2e}×", g.relative_irradiance))
                                                 .monospace()
                                                 .size(9.5)
-                                                .color(if is_selected { tokens.text_primary } else { tokens.text_muted }),
-                                        ).sense(Sense::click()),
+                                                .color(if is_selected {
+                                                    tokens.text_primary
+                                                } else {
+                                                    tokens.text_muted
+                                                }),
+                                        )
+                                        .sense(Sense::click()),
                                     );
                                     if resp.clicked() {
-                                        state.selected_ghost_pair = if is_selected { None } else { Some((g.surface_front, g.surface_rear)) };
+                                        state.selected_ghost_pair = if is_selected {
+                                            None
+                                        } else {
+                                            Some((g.surface_front, g.surface_rear))
+                                        };
                                     }
                                 });
 
@@ -1090,10 +1235,15 @@ fn render_ghost_matrix_table(
                                             .strong()
                                             .size(9.0)
                                             .color(badge_color),
-                                    ).sense(Sense::click()),
+                                    )
+                                    .sense(Sense::click()),
                                 );
                                 if resp.clicked() {
-                                    state.selected_ghost_pair = if is_selected { None } else { Some((g.surface_front, g.surface_rear)) };
+                                    state.selected_ghost_pair = if is_selected {
+                                        None
+                                    } else {
+                                        Some((g.surface_front, g.surface_rear))
+                                    };
                                 }
 
                                 ui.end_row();
@@ -1116,12 +1266,7 @@ fn render_ghost_matrix_table(
 }
 
 /// Renders the 2D false-color pixel array and vertical colorbar scale.
-fn render_detector_heatmap_widget(
-    ui: &mut Ui,
-    detector: &Detector2D,
-    state: &NonSeqUiState,
-    tokens: &OpticsTokens,
-) {
+fn render_detector_heatmap_widget(ui: &mut Ui, detector: &Detector2D, state: &NonSeqUiState, tokens: &OpticsTokens) {
     // Find max value in detector for normalization
     let area = detector.pixel_area_m2().max(1e-12);
     let conv_factor = if state.quantity == DetectorQuantity::Illuminance {
@@ -1131,8 +1276,7 @@ fn render_detector_heatmap_widget(
         1.0
     };
 
-    let (pixel_flux_data, _total_filtered_flux, _filtered_hits) =
-        detector.filtered_pixel_flux(state.ray_filter);
+    let (pixel_flux_data, _total_filtered_flux, _filtered_hits) = detector.filtered_pixel_flux(state.ray_filter);
 
     let max_flux = pixel_flux_data.iter().copied().fold(0.0_f64, f64::max);
     let max_val = (max_flux / area * conv_factor).max(1e-12);
@@ -1251,12 +1395,7 @@ fn render_detector_heatmap_widget(
                     .color(tokens.text_muted),
             );
             ui.add_space(label_space);
-            ui.label(
-                RichText::new("0.0")
-                    .monospace()
-                    .size(8.0)
-                    .color(tokens.text_muted),
-            );
+            ui.label(RichText::new("0.0").monospace().size(8.0).color(tokens.text_muted));
         });
     });
 }
@@ -1396,12 +1535,7 @@ fn render_cross_section_plot(
 }
 
 /// Renders radiometric and energy balance metrics in a 2-row × 6-column micro-grid perfectly aligned with the plot.
-fn render_radiometric_kpis_bar(
-    ui: &mut Ui,
-    detector: &Detector2D,
-    state: &NonSeqUiState,
-    tokens: &OpticsTokens,
-) {
+fn render_radiometric_kpis_bar(ui: &mut Ui, detector: &Detector2D, state: &NonSeqUiState, tokens: &OpticsTokens) {
     let area = detector.pixel_area_m2().max(1e-12);
     let conv = if state.quantity == DetectorQuantity::Illuminance {
         683.0 * optics_nonseq::detector::photopic_luminous_efficiency(587.56)
@@ -1409,8 +1543,7 @@ fn render_radiometric_kpis_bar(
         1.0
     };
 
-    let (pixel_flux_data, total_filtered_flux, filtered_hits) =
-        detector.filtered_pixel_flux(state.ray_filter);
+    let (pixel_flux_data, total_filtered_flux, filtered_hits) = detector.filtered_pixel_flux(state.ray_filter);
     let max_flux = pixel_flux_data.iter().copied().fold(0.0_f64, f64::max);
     let peak_val = max_flux / area * conv;
     let (cx, cy) = detector.centroid_mm();
@@ -1420,7 +1553,11 @@ fn render_radiometric_kpis_bar(
         let ratio = rep.energy_conservation_ratio() * 100.0;
         (
             format!("{:.1}%", ratio),
-            if (ratio - 100.0).abs() < 1.0 { tokens.success } else { tokens.warning },
+            if (ratio - 100.0).abs() < 1.0 {
+                tokens.success
+            } else {
+                tokens.warning
+            },
         )
     } else {
         ("100.0%".to_string(), tokens.success)
@@ -1441,7 +1578,12 @@ fn render_radiometric_kpis_bar(
                     .color(tokens.text_primary),
             );
 
-            ui.label(RichText::new("Centroid:").monospace().size(8.5).color(tokens.text_muted));
+            ui.label(
+                RichText::new("Centroid:")
+                    .monospace()
+                    .size(8.5)
+                    .color(tokens.text_muted),
+            );
             ui.label(
                 RichText::new(format!("({:.1}, {:.1})", cx, cy))
                     .monospace()
@@ -1477,12 +1619,7 @@ fn render_radiometric_kpis_bar(
             );
 
             ui.label(RichText::new("Energy:").monospace().size(8.5).color(tokens.text_muted));
-            ui.label(
-                RichText::new(energy_str)
-                    .monospace()
-                    .size(8.5)
-                    .color(energy_color),
-            );
+            ui.label(RichText::new(energy_str).monospace().size(8.5).color(energy_color));
             ui.end_row();
         });
 }
@@ -1490,7 +1627,7 @@ fn render_radiometric_kpis_bar(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use optics_zemax::presets::cooke_triplet_f4_5;
+    use optics_formats::presets::cooke_triplet_f4_5;
 
     type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -1509,7 +1646,12 @@ mod tests {
 
     #[test]
     fn test_heatmap_palette_mapping() {
-        for p in [HeatmapPalette::Inferno, HeatmapPalette::Viridis, HeatmapPalette::Turbo, HeatmapPalette::Greyscale] {
+        for p in [
+            HeatmapPalette::Inferno,
+            HeatmapPalette::Viridis,
+            HeatmapPalette::Turbo,
+            HeatmapPalette::Greyscale,
+        ] {
             let c0 = p.map_color(0.0);
             let c1 = p.map_color(1.0);
             let c_mid = p.map_color(0.5);
@@ -1545,7 +1687,10 @@ mod tests {
         assert!(state.status_message.is_some());
 
         let ghost_paths = state.ghost_ray_paths();
-        assert!(!ghost_paths.is_empty(), "Ghost ray paths must be available for viewport overlay");
+        assert!(
+            !ghost_paths.is_empty(),
+            "Ghost ray paths must be available for viewport overlay"
+        );
 
         Ok(())
     }
@@ -1558,10 +1703,16 @@ mod tests {
         let mut state = NonSeqUiState::default();
         state.compute_ghost_matrix(&cooke, &catalog);
 
-        assert!(state.ghost_analysis.is_some(), "Ghost analysis matrix should be computed");
+        assert!(
+            state.ghost_analysis.is_some(),
+            "Ghost analysis matrix should be computed"
+        );
         if let Some(ga) = &state.ghost_analysis {
             assert!(!ga.ghosts.is_empty(), "Ghost pairs must be populated for Cooke Triplet");
-            assert!(ga.total_ghost_power_fraction > 0.0, "Total ghost power fraction must be positive");
+            assert!(
+                ga.total_ghost_power_fraction > 0.0,
+                "Total ghost power fraction must be positive"
+            );
         }
 
         // Verify AR coating presets
@@ -1610,14 +1761,21 @@ mod tests {
         state_bmar.ar_coating = ArCoatingPreset::BmarMultiLayer;
         state_bmar.compute_ghost_matrix(&cooke, &catalog);
 
-        let p_uncoated = state_uncoated.ghost_analysis.as_ref().unwrap().total_ghost_power_fraction;
+        let p_uncoated = state_uncoated
+            .ghost_analysis
+            .as_ref()
+            .unwrap()
+            .total_ghost_power_fraction;
         let p_bmar = state_bmar.ghost_analysis.as_ref().unwrap().total_ghost_power_fraction;
 
         // BMAR (0.5% reflectance) vs Uncoated (4.0% reflectance) drops 2-bounce ghost power by (0.005/0.040)^2 = (1/8)^2 = 1/64 ≈ 64x
         assert!(p_uncoated > 0.0);
         assert!(p_bmar > 0.0);
         let attenuation = p_uncoated / p_bmar;
-        assert!(attenuation > 50.0, "BMAR coating must attenuate two-bounce ghost power by > 50x, got {attenuation}x");
+        assert!(
+            attenuation > 50.0,
+            "BMAR coating must attenuate two-bounce ghost power by > 50x, got {attenuation}x"
+        );
 
         Ok(())
     }

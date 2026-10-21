@@ -10,14 +10,14 @@
 //! - ISO 10110 optical element drawing specification (Markdown)
 //! - OpticsProjectWorkspace versioned JSON serialization
 
-use optics_zemax::cad::{
+use optics_formats::cad::{
     DxfConfig, SvgConfig, export_dxf_layout, export_obj_system, export_stl_lens, export_svg_layout,
 };
-use optics_zemax::codev::{CodeVSystem, write_seq};
-use optics_zemax::iso10110::Iso10110DrawingSheet;
-use optics_zemax::oslo::{OsloSystem, write_len};
-use optics_zemax::presets::cooke_triplet_f4_5;
-use optics_zemax::project::OpticsProjectWorkspace;
+use optics_formats::codev::{CodeVSystem, write_seq};
+use optics_formats::iso10110::Iso10110DrawingSheet;
+use optics_formats::oslo::{OsloSystem, write_len};
+use optics_formats::presets::cooke_triplet_f4_5;
+use optics_formats::project::OpticsProjectWorkspace;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== OpticsLab Example 06: CAD & Interoperability Format Export ===\n");
@@ -25,10 +25,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let prescription = cooke_triplet_f4_5()?;
     println!("Loaded Optical Prescription: {}", prescription.name);
     println!("  Surfaces: {}", prescription.surfaces.len());
-    println!(
-        "  EPD:      {:.2} mm\n",
-        prescription.entrance_pupil_diameter_mm
-    );
+    println!("  EPD:      {:.2} mm\n", prescription.entrance_pupil_diameter_mm);
 
     // 1. Export 2D SVG Technical Diagram
     let svg_config = SvgConfig::default();

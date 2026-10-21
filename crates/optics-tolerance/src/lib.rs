@@ -12,21 +12,15 @@ pub mod sensitivity;
 
 pub use distribution::{Rng64, ToleranceDistribution};
 pub use error::ToleranceError;
-pub use inverse::{
-    BudgetedToleranceItem, InverseToleranceConfig, InverseToleranceReport, InverseTolerancing,
-};
+pub use inverse::{BudgetedToleranceItem, InverseToleranceConfig, InverseToleranceReport, InverseTolerancing};
 pub use monte_carlo::{MonteCarloConfig, MonteCarloReport, MonteCarloSimulator, PercentileSummary};
 pub use operand::{ToleranceGrade, ToleranceOperand, ToleranceOperandType};
-pub use sensitivity::{
-    Compensator, SensitivityAnalyzer, SensitivityRecord, SensitivityReport, ToleranceCriterion,
-};
+pub use sensitivity::{Compensator, SensitivityAnalyzer, SensitivityRecord, SensitivityReport, ToleranceCriterion};
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use optics_core::prescription::{
-        OpticalPrescription, OpticalSurface, calculate_paraxial_properties,
-    };
+    use optics_core::prescription::{OpticalPrescription, OpticalSurface, calculate_paraxial_properties};
     use optics_glass::catalog::GlassCatalogDb;
 
     type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -161,12 +155,9 @@ mod tests {
             field_angle_deg: 0.0,
             wavelength_nm: 587.56,
         };
-        let compensator = Compensator::ParaxialRefocus {
-            wavelength_nm: 587.56,
-        };
+        let compensator = Compensator::ParaxialRefocus { wavelength_nm: 587.56 };
 
-        let report =
-            SensitivityAnalyzer::analyze(&presc, &operands, &criterion, &compensator, &catalog)?;
+        let report = SensitivityAnalyzer::analyze(&presc, &operands, &criterion, &compensator, &catalog)?;
 
         assert_eq!(report.records.len(), 3);
         assert!(report.estimated_rss_degradation > 0.0);
@@ -209,9 +200,7 @@ mod tests {
             field_angle_deg: 0.0,
             wavelength_nm: 587.56,
         };
-        let compensator = Compensator::ParaxialRefocus {
-            wavelength_nm: 587.56,
-        };
+        let compensator = Compensator::ParaxialRefocus { wavelength_nm: 587.56 };
 
         let sim = MonteCarloSimulator::new(MonteCarloConfig {
             num_trials: 50,
@@ -266,9 +255,7 @@ mod tests {
             field_angle_deg: 0.0,
             wavelength_nm: 587.56,
         };
-        let compensator = Compensator::ParaxialRefocus {
-            wavelength_nm: 587.56,
-        };
+        let compensator = Compensator::ParaxialRefocus { wavelength_nm: 587.56 };
 
         let config = InverseToleranceConfig {
             performance_threshold: 80.0,
@@ -276,14 +263,7 @@ mod tests {
             validation_trials: 30,
         };
 
-        let report = InverseTolerancing::budget(
-            &presc,
-            &operands,
-            &criterion,
-            &compensator,
-            &catalog,
-            &config,
-        )?;
+        let report = InverseTolerancing::budget(&presc, &operands, &criterion, &compensator, &catalog, &config)?;
 
         assert_eq!(report.budgeted_operands.len(), 2);
         assert!(report.achieved_yield_percent >= 50.0);
@@ -331,26 +311,10 @@ mod tests {
         let mean_n = sum_n / (n_samples as f64);
         let mean_p = sum_p / (n_samples as f64);
         let mean_b = sum_b / (n_samples as f64);
-        assert!(
-            mean_u.abs() < 0.1,
-            "Uniform mean should be near 0, got {}",
-            mean_u
-        );
-        assert!(
-            mean_n.abs() < 0.1,
-            "Normal mean should be near 0, got {}",
-            mean_n
-        );
-        assert!(
-            mean_p.abs() < 0.1,
-            "Parabolic mean should be near 0, got {}",
-            mean_p
-        );
-        assert!(
-            mean_b.abs() < 0.1,
-            "Bimodal mean should be near 0, got {}",
-            mean_b
-        );
+        assert!(mean_u.abs() < 0.1, "Uniform mean should be near 0, got {}", mean_u);
+        assert!(mean_n.abs() < 0.1, "Normal mean should be near 0, got {}", mean_n);
+        assert!(mean_p.abs() < 0.1, "Parabolic mean should be near 0, got {}", mean_p);
+        assert!(mean_b.abs() < 0.1, "Bimodal mean should be near 0, got {}", mean_b);
 
         Ok(())
     }
@@ -358,7 +322,7 @@ mod tests {
     /// Acceptance test: Automatic default operand generator produces correct operands for Cooke Triplet.
     #[test]
     fn test_default_operand_generation_and_histogram() -> TestResult {
-        let cooke = optics_zemax::presets::cooke_triplet_f4_5()?;
+        let cooke = optics_formats::presets::cooke_triplet_f4_5()?;
         let operands_comm = ToleranceOperand::generate_default_operands(&cooke, ToleranceGrade::Commercial);
         let operands_prec = ToleranceOperand::generate_default_operands(&cooke, ToleranceGrade::Precision);
 
@@ -454,7 +418,7 @@ mod tests {
     #[test]
     fn test_cooke_triplet_wavefront_tolerancing() -> TestResult {
         let catalog = GlassCatalogDb::load_bundled()?;
-        let cooke = optics_zemax::presets::cooke_triplet_f4_5()?;
+        let cooke = optics_formats::presets::cooke_triplet_f4_5()?;
 
         let operands = vec![
             ToleranceOperand::new(
@@ -486,12 +450,9 @@ mod tests {
             field_angle_deg: 0.0,
             wavelength_nm: 587.56,
         };
-        let compensator = Compensator::ParaxialRefocus {
-            wavelength_nm: 587.56,
-        };
+        let compensator = Compensator::ParaxialRefocus { wavelength_nm: 587.56 };
 
-        let sens =
-            SensitivityAnalyzer::analyze(&cooke, &operands, &criterion, &compensator, &catalog)?;
+        let sens = SensitivityAnalyzer::analyze(&cooke, &operands, &criterion, &compensator, &catalog)?;
         assert_eq!(sens.records.len(), 3);
         assert!(sens.estimated_rss_degradation > 0.0);
 

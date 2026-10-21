@@ -102,9 +102,7 @@ impl SurfaceProfile {
     /// Returns [`OpticsError`] if out of domain or singular.
     pub fn normal(&self, x: f64, y: f64) -> Result<Vec3, OpticsError> {
         match self {
-            Self::Planar | Self::Paraxial { .. } | Self::Dummy | Self::Mirror => {
-                Ok(Vec3::new(0.0, 0.0, -1.0))
-            }
+            Self::Planar | Self::Paraxial { .. } | Self::Dummy | Self::Mirror => Ok(Vec3::new(0.0, 0.0, -1.0)),
             Self::Conic(conic) => {
                 let z = self.sag(x, y)?;
                 let hit_pt = Vec3::new(x, y, z);
@@ -126,11 +124,7 @@ impl SurfaceProfile {
     ///
     /// # Errors
     /// Returns [`OpticsError::RayMissedSurface`] if ray fails to intersect the profile within tolerances.
-    pub fn intersect_ray(
-        &self,
-        ray: &crate::types::Ray,
-        vertex_z: f64,
-    ) -> Result<(f64, Vec3), OpticsError> {
+    pub fn intersect_ray(&self, ray: &crate::types::Ray, vertex_z: f64) -> Result<(f64, Vec3), OpticsError> {
         match self {
             Self::EvenAsphere(asph) => asph.intersect_ray(ray, vertex_z),
             Self::Biconic(biconic) => biconic.intersect_ray(ray, vertex_z),
@@ -142,9 +136,7 @@ impl SurfaceProfile {
             }
             Self::Planar | Self::Dummy | Self::Mirror | Self::Paraxial { .. } | Self::Diffractive(_) => {
                 if ray.direction.z.abs() < 1e-15 {
-                    return Err(OpticsError::RayMissedSurface(
-                        "Ray parallel to plane".to_string(),
-                    ));
+                    return Err(OpticsError::RayMissedSurface("Ray parallel to plane".to_string()));
                 }
                 let t = (vertex_z - ray.origin.z) / ray.direction.z;
                 if t < 0.0 {
@@ -166,16 +158,16 @@ impl SurfaceProfile {
                 }
                 for _ in 0..35 {
                     let p = ray.at(t);
-                    let sag = self.sag(p.x, p.y).map_err(|_| {
-                        OpticsError::RayMissedSurface("Outside sag domain".to_string())
-                    })?;
+                    let sag = self
+                        .sag(p.x, p.y)
+                        .map_err(|_| OpticsError::RayMissedSurface("Outside sag domain".to_string()))?;
                     let f = (p.z - vertex_z) - sag;
                     if f.abs() < 1e-11 {
                         return Ok((t, p));
                     }
-                    let norm = self.normal(p.x, p.y).map_err(|_| {
-                        OpticsError::RayMissedSurface("Singular normal".to_string())
-                    })?;
+                    let norm = self
+                        .normal(p.x, p.y)
+                        .map_err(|_| OpticsError::RayMissedSurface("Singular normal".to_string()))?;
                     let dz_dx = -norm.x / norm.z;
                     let dz_dy = -norm.y / norm.z;
                     let f_prime = ray.direction.z - (dz_dx * ray.direction.x + dz_dy * ray.direction.y);

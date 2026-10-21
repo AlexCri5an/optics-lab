@@ -83,11 +83,7 @@ pub fn compute_diffraction_mtf(
     let dx_mm = psf.pixel_size_um * 1e-3;
 
     let total_psf: f64 = psf.data.iter().sum();
-    let norm = if total_psf > 1e-15 {
-        1.0 / total_psf
-    } else {
-        1.0
-    };
+    let norm = if total_psf > 1e-15 { 1.0 / total_psf } else { 1.0 };
 
     let center = n / 2;
     let mut points = Vec::with_capacity(num_frequencies);
@@ -147,11 +143,7 @@ pub fn compute_diffraction_mtf(
 }
 
 /// Computes the Geometric MTF directly from a real-ray [`SpotDiagram`].
-pub fn compute_geometric_mtf(
-    spot: &SpotDiagram,
-    max_frequency_lpm: f64,
-    num_frequencies: usize,
-) -> Vec<MtfPoint> {
+pub fn compute_geometric_mtf(spot: &SpotDiagram, max_frequency_lpm: f64, num_frequencies: usize) -> Vec<MtfPoint> {
     let n_pts = spot.points.len() as f64;
     if n_pts == 0.0 || num_frequencies == 0 {
         return Vec::new();

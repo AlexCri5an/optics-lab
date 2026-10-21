@@ -85,9 +85,7 @@ pub struct VariableSet {
 impl VariableSet {
     /// Create a new empty variable set.
     pub fn new() -> Self {
-        Self {
-            variables: Vec::new(),
-        }
+        Self { variables: Vec::new() }
     }
 
     /// Add a variable to the set.
@@ -98,12 +96,7 @@ impl VariableSet {
     }
 
     /// Add a variable with explicit bounds to the set.
-    pub fn add_with_bounds(
-        &mut self,
-        var_type: VariableType,
-        min_value: f64,
-        max_value: f64,
-    ) -> usize {
+    pub fn add_with_bounds(&mut self, var_type: VariableType, min_value: f64, max_value: f64) -> usize {
         let id = self.variables.len();
         self.variables
             .push(VariableDef::new(id, var_type).with_bounds(min_value, max_value));
@@ -116,10 +109,7 @@ impl VariableSet {
     }
 
     /// Extract current numerical parameter values $\mathbf{x} \in \mathbb{R}^P$ from the prescription.
-    pub fn extract_values(
-        &self,
-        prescription: &OpticalPrescription,
-    ) -> Result<Vec<f64>, OptimizeError> {
+    pub fn extract_values(&self, prescription: &OpticalPrescription) -> Result<Vec<f64>, OptimizeError> {
         let mut values = Vec::new();
         for var in &self.variables {
             if !var.enabled {
@@ -142,28 +132,19 @@ impl VariableSet {
                 }
                 VariableType::Thickness { surface_index } => {
                     let surf = prescription.surfaces.get(surface_index).ok_or_else(|| {
-                        OptimizeError::InvalidVariable(format!(
-                            "Surface index {} out of range",
-                            surface_index
-                        ))
+                        OptimizeError::InvalidVariable(format!("Surface index {} out of range", surface_index))
                     })?;
                     surf.thickness_mm
                 }
                 VariableType::Conic { surface_index } => {
                     let surf = prescription.surfaces.get(surface_index).ok_or_else(|| {
-                        OptimizeError::InvalidVariable(format!(
-                            "Surface index {} out of range",
-                            surface_index
-                        ))
+                        OptimizeError::InvalidVariable(format!("Surface index {} out of range", surface_index))
                     })?;
                     surf.conic_constant
                 }
                 VariableType::SemiDiameter { surface_index } => {
                     let surf = prescription.surfaces.get(surface_index).ok_or_else(|| {
-                        OptimizeError::InvalidVariable(format!(
-                            "Surface index {} out of range",
-                            surface_index
-                        ))
+                        OptimizeError::InvalidVariable(format!("Surface index {} out of range", surface_index))
                     })?;
                     surf.semi_diameter_mm
                 }
@@ -174,11 +155,7 @@ impl VariableSet {
     }
 
     /// Apply updated numerical parameter vector $\mathbf{x}$ to the prescription.
-    pub fn apply_values(
-        &self,
-        prescription: &mut OpticalPrescription,
-        values: &[f64],
-    ) -> Result<(), OptimizeError> {
+    pub fn apply_values(&self, prescription: &mut OpticalPrescription, values: &[f64]) -> Result<(), OptimizeError> {
         let mut val_idx = 0;
         for var in &self.variables {
             if !var.enabled {
@@ -195,15 +172,9 @@ impl VariableSet {
 
             match var.var_type {
                 VariableType::Curvature { surface_index } => {
-                    let surf = prescription
-                        .surfaces
-                        .get_mut(surface_index)
-                        .ok_or_else(|| {
-                            OptimizeError::InvalidVariable(format!(
-                                "Surface index {} out of range",
-                                surface_index
-                            ))
-                        })?;
+                    let surf = prescription.surfaces.get_mut(surface_index).ok_or_else(|| {
+                        OptimizeError::InvalidVariable(format!("Surface index {} out of range", surface_index))
+                    })?;
                     if clamped_val.abs() < 1e-12 {
                         surf.radius_mm = f64::INFINITY;
                     } else {
@@ -211,39 +182,21 @@ impl VariableSet {
                     }
                 }
                 VariableType::Thickness { surface_index } => {
-                    let surf = prescription
-                        .surfaces
-                        .get_mut(surface_index)
-                        .ok_or_else(|| {
-                            OptimizeError::InvalidVariable(format!(
-                                "Surface index {} out of range",
-                                surface_index
-                            ))
-                        })?;
+                    let surf = prescription.surfaces.get_mut(surface_index).ok_or_else(|| {
+                        OptimizeError::InvalidVariable(format!("Surface index {} out of range", surface_index))
+                    })?;
                     surf.thickness_mm = clamped_val;
                 }
                 VariableType::Conic { surface_index } => {
-                    let surf = prescription
-                        .surfaces
-                        .get_mut(surface_index)
-                        .ok_or_else(|| {
-                            OptimizeError::InvalidVariable(format!(
-                                "Surface index {} out of range",
-                                surface_index
-                            ))
-                        })?;
+                    let surf = prescription.surfaces.get_mut(surface_index).ok_or_else(|| {
+                        OptimizeError::InvalidVariable(format!("Surface index {} out of range", surface_index))
+                    })?;
                     surf.conic_constant = clamped_val;
                 }
                 VariableType::SemiDiameter { surface_index } => {
-                    let surf = prescription
-                        .surfaces
-                        .get_mut(surface_index)
-                        .ok_or_else(|| {
-                            OptimizeError::InvalidVariable(format!(
-                                "Surface index {} out of range",
-                                surface_index
-                            ))
-                        })?;
+                    let surf = prescription.surfaces.get_mut(surface_index).ok_or_else(|| {
+                        OptimizeError::InvalidVariable(format!("Surface index {} out of range", surface_index))
+                    })?;
                     surf.semi_diameter_mm = clamped_val;
                 }
             }

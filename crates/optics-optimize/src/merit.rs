@@ -35,9 +35,7 @@ pub struct MeritFunction {
 impl MeritFunction {
     /// Create a new empty merit function.
     pub fn new() -> Self {
-        Self {
-            operands: Vec::new(),
-        }
+        Self { operands: Vec::new() }
     }
 
     /// Add an operand to the merit function.
@@ -75,7 +73,7 @@ impl MeritFunction {
         for op in &self.operands {
             let val = match op.evaluate(&resolved) {
                 Ok(v) if v.is_finite() => v,
-                _ => 100_000.0, // Finite penalty fallback for ray-trace / paraxial failure (Zemax standard)
+                _ => 100_000.0, // Finite penalty fallback for ray-trace / paraxial failure
             };
             let diff = (val - op.target).clamp(-1e6, 1e6);
             let res = op.weight.sqrt() * diff;
@@ -89,11 +87,7 @@ impl MeritFunction {
             operand_ids.push(op.id.clone());
         }
 
-        let finite_merit = if total_merit.is_finite() {
-            total_merit
-        } else {
-            1e12
-        };
+        let finite_merit = if total_merit.is_finite() { total_merit } else { 1e12 };
 
         Ok(MeritEvaluation {
             total_merit: finite_merit,
@@ -147,10 +141,7 @@ impl MeritFunction {
     }
 
     /// Generate a default RMS Wavefront Error merit function targeting zero OPD error and optional EFL constraint.
-    pub fn default_rms_wavefront(
-        prescription: &OpticalPrescription,
-        target_efl: Option<f64>,
-    ) -> Self {
+    pub fn default_rms_wavefront(prescription: &OpticalPrescription, target_efl: Option<f64>) -> Self {
         let mut mf = Self::new();
         let primary_wl = prescription
             .wavelengths_nm

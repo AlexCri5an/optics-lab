@@ -10,8 +10,8 @@
 use optics_core::prescription::{OpticalPrescription, OpticalSurface};
 use optics_glass::catalog::GlassCatalogDb;
 use optics_tolerance::{
-    Compensator, MonteCarloConfig, MonteCarloSimulator, SensitivityAnalyzer, ToleranceCriterion,
-    ToleranceOperand, ToleranceOperandType,
+    Compensator, MonteCarloConfig, MonteCarloSimulator, SensitivityAnalyzer, ToleranceCriterion, ToleranceOperand,
+    ToleranceOperandType,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -40,7 +40,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 grin_profile: None,
                 profile: None,
                 aperture: None,
-                    coating: None,
+                coating: None,
             },
             OpticalSurface {
                 surface_index: 1,
@@ -55,7 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 grin_profile: None,
                 profile: None,
                 aperture: None,
-                    coating: None,
+                coating: None,
             },
             OpticalSurface {
                 surface_index: 2,
@@ -70,7 +70,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 grin_profile: None,
                 profile: None,
                 aperture: None,
-                    coating: None,
+                coating: None,
             },
         ],
     };
@@ -128,14 +128,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         field_angle_deg: 0.0,
         wavelength_nm: 587.56,
     };
-    let compensator = Compensator::ParaxialRefocus {
-        wavelength_nm: 587.56,
-    };
+    let compensator = Compensator::ParaxialRefocus { wavelength_nm: 587.56 };
 
     // 3. Sensitivity Analysis
     println!("Running Sensitivity Analysis with Paraxial Refocus Compensator...");
-    let sens_report =
-        SensitivityAnalyzer::analyze(&prescription, &operands, &criterion, &compensator, &catalog)?;
+    let sens_report = SensitivityAnalyzer::analyze(&prescription, &operands, &criterion, &compensator, &catalog)?;
 
     println!(
         "Nominal Performance (RMS Spot Radius): {:.4} µm\n",

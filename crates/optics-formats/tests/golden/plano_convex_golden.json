@@ -1,0 +1,29 @@
+{
+  "system_name": "Plano-Convex Singlet 100mm",
+  "source_references": [
+    "Hecht, Optics, 4th ed., Addison-Wesley, 2002",
+    "Born and Wolf, Principles of Optics, 7th ed., Cambridge University Press, 1999"
+  ],
+  "nominal_parameters": {
+    "wavelength_nm": 587.56,
+    "entrance_pupil_diameter_mm": 10.0,
+    "material": "N-BK7",
+    "nd": 1.51680,
+    "r1_mm": 51.68,
+    "r2_mm": null,
+    "thickness_mm": 5.0
+  },
+  "analytical_benchmarks": {
+    "efl_mm": 100.00,
+    "bfl_mm": 96.7036,
+    "petzval_sum": 0.0065928,
+    "brewster_angle_deg": 56.602,
+    "normal_incidence_reflectance": 0.042173
+  },
+  "tolerances": {
+    "efl_relative_tolerance": 0.001,
+    "bfl_relative_tolerance": 0.005,
+    "petzval_relative_tolerance": 0.01,
+    "fresnel_absolute_tolerance": 1e-5
+  }
+}

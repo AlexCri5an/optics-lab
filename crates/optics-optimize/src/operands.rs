@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use optics_core::aiming::{RayAimingMode, trace_aimed_ray};
 use optics_core::analysis::{
-    PupilPattern, compute_diffraction_mtf, compute_field_curves, compute_seidel_coefficients,
-    compute_wavefront_map, trace_spot_diagram,
+    PupilPattern, compute_diffraction_mtf, compute_field_curves, compute_seidel_coefficients, compute_wavefront_map,
+    trace_spot_diagram,
 };
 use optics_core::conic::conic_sag;
 use optics_core::prescription::{ResolvedPrescription, calculate_paraxial_properties};
@@ -195,9 +195,7 @@ impl MeritOperand {
         match self.operand_type {
             OperandType::EffectiveFocalLength { wavelength_nm } => {
                 match calculate_paraxial_properties(resolved, wavelength_nm) {
-                    Ok(paraxial) if paraxial.efl_mm.is_finite() && paraxial.efl_mm.abs() > 0.01 => {
-                        Ok(paraxial.efl_mm)
-                    }
+                    Ok(paraxial) if paraxial.efl_mm.is_finite() && paraxial.efl_mm.abs() > 0.01 => Ok(paraxial.efl_mm),
                     _ => Ok(10_000.0), // Finite penalty for concentric / zero-power / singular paraxial trace
                 }
             }
@@ -240,7 +238,7 @@ impl MeritOperand {
                     Ok(spot) if spot.metrics.passed_rays_count > 0 && spot.metrics.rms_radius_um.is_finite() => {
                         Ok(spot.metrics.rms_radius_um)
                     }
-                    _ => Ok(100_000.0), // Standard Zemax-style 100 mm penalty for failed ray trace / TIR
+                    _ => Ok(100_000.0), // Standard 100 mm penalty for failed ray trace / TIR
                 }
             }
             OperandType::RmsWavefrontError {
@@ -248,13 +246,7 @@ impl MeritOperand {
                 wavelength_nm,
                 grid_size,
             } => {
-                match compute_wavefront_map(
-                    resolved,
-                    grid_size.max(8),
-                    field_angle_deg,
-                    wavelength_nm,
-                    true,
-                ) {
+                match compute_wavefront_map(resolved, grid_size.max(8), field_angle_deg, wavelength_nm, true) {
                     Ok(wf) if wf.rms_waves.is_finite() => Ok(wf.rms_waves),
                     _ => Ok(100.0), // Finite penalty in waves for wavefront failure
                 }
@@ -322,11 +314,7 @@ impl MeritOperand {
                     let diff = (pt.spatial_frequency_lpm - frequency_lpm).abs();
                     if diff < min_diff {
                         min_diff = diff;
-                        best_val = if tangential {
-                            pt.tangential_mtf
-                        } else {
-                            pt.sagittal_mtf
-                        };
+                        best_val = if tangential { pt.tangential_mtf } else { pt.sagittal_mtf };
                     }
                 }
                 Ok(best_val)
@@ -367,10 +355,7 @@ impl MeritOperand {
                 )?;
                 let path = optics_core::trace_sequential(resolved, &aimed_ray)?;
                 let hit = path.hits.get(surface_index).ok_or_else(|| {
-                    OptimizeError::OperandEvaluation(format!(
-                        "Surface {} not reached in ray path",
-                        surface_index
-                    ))
+                    OptimizeError::OperandEvaluation(format!("Surface {} not reached in ray path", surface_index))
                 })?;
                 Ok(hit.point.y)
             }
@@ -378,9 +363,10 @@ impl MeritOperand {
                 surface_index,
                 min_thickness_mm,
             } => {
-                let surf = resolved.surfaces.get(surface_index).ok_or_else(|| {
-                    OptimizeError::OperandEvaluation(format!("Invalid surface {}", surface_index))
-                })?;
+                let surf = resolved
+                    .surfaces
+                    .get(surface_index)
+                    .ok_or_else(|| OptimizeError::OperandEvaluation(format!("Invalid surface {}", surface_index)))?;
                 // If thickness is below minimum, value violates constraint
                 let t = surf.thickness_mm;
                 if t < min_thickness_mm {
@@ -394,9 +380,10 @@ impl MeritOperand {
                 surface_index,
                 max_thickness_mm,
             } => {
-                let surf = resolved.surfaces.get(surface_index).ok_or_else(|| {
-                    OptimizeError::OperandEvaluation(format!("Invalid surface {}", surface_index))
-                })?;
+                let surf = resolved
+                    .surfaces
+                    .get(surface_index)
+                    .ok_or_else(|| OptimizeError::OperandEvaluation(format!("Invalid surface {}", surface_index)))?;
                 let t = surf.thickness_mm;
                 if t > max_thickness_mm {
                     Ok(t - max_thickness_mm)
@@ -408,14 +395,12 @@ impl MeritOperand {
                 surface_index,
                 min_edge_mm,
             } => {
-                let surf1 = resolved.surfaces.get(surface_index).ok_or_else(|| {
-                    OptimizeError::OperandEvaluation(format!("Invalid surface {}", surface_index))
-                })?;
+                let surf1 = resolved
+                    .surfaces
+                    .get(surface_index)
+                    .ok_or_else(|| OptimizeError::OperandEvaluation(format!("Invalid surface {}", surface_index)))?;
                 let surf2 = resolved.surfaces.get(surface_index + 1).ok_or_else(|| {
-                    OptimizeError::OperandEvaluation(format!(
-                        "Invalid back surface {}",
-                        surface_index + 1
-                    ))
+                    OptimizeError::OperandEvaluation(format!("Invalid back surface {}", surface_index + 1))
                 })?;
                 let y_max = surf1.conic.semi_diam_mm.min(surf2.conic.semi_diam_mm);
                 let z1 = conic_sag(y_max, surf1.conic.curvature, surf1.conic.conic_constant)?;

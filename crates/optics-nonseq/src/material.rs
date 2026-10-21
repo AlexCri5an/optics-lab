@@ -59,11 +59,7 @@ impl Default for OpticalMedium {
 
 impl OpticalMedium {
     /// Compute refractive index at specified wavelength in nanometers.
-    pub fn refractive_index(
-        &self,
-        wavelength_nm: f64,
-        catalog: Option<&GlassCatalogDb>,
-    ) -> Result<f64, NonSeqError> {
+    pub fn refractive_index(&self, wavelength_nm: f64, catalog: Option<&GlassCatalogDb>) -> Result<f64, NonSeqError> {
         if wavelength_nm <= 0.0 || !wavelength_nm.is_finite() {
             return Err(NonSeqError::InvalidGeometry(format!(
                 "Invalid wavelength: {wavelength_nm}"
@@ -74,29 +70,19 @@ impl OpticalMedium {
             OpticalMedium::Air => Ok(1.0),
             OpticalMedium::Constant { n } => {
                 if n < 1.0 || !n.is_finite() {
-                    return Err(NonSeqError::Material(format!(
-                        "Invalid refractive index: {n}"
-                    )));
+                    return Err(NonSeqError::Material(format!("Invalid refractive index: {n}")));
                 }
                 Ok(n)
             }
             OpticalMedium::GlassCatalog { ref name } => {
-                let cat = catalog.ok_or_else(|| {
-                    NonSeqError::Catalog("Glass catalog database required for lookup".to_string())
-                })?;
-                let glass = cat.lookup(name).ok_or_else(|| {
-                    NonSeqError::Catalog(format!("Glass '{name}' not found in catalog"))
-                })?;
+                let cat = catalog
+                    .ok_or_else(|| NonSeqError::Catalog("Glass catalog database required for lookup".to_string()))?;
+                let glass = cat
+                    .lookup(name)
+                    .ok_or_else(|| NonSeqError::Catalog(format!("Glass '{name}' not found in catalog")))?;
                 Ok(glass.refractive_index(wavelength_nm))
             }
-            OpticalMedium::Sellmeier1 {
-                b1,
-                c1,
-                b2,
-                c2,
-                b3,
-                c3,
-            } => {
+            OpticalMedium::Sellmeier1 { b1, c1, b2, c2, b3, c3 } => {
                 let l_um = wavelength_nm * 1e-3;
                 let l2 = l_um * l_um;
                 let term1 = (b1 * l2) / (l2 - c1);
@@ -110,14 +96,7 @@ impl OpticalMedium {
                 }
                 Ok(n2.sqrt())
             }
-            OpticalMedium::Schott {
-                a0,
-                a1,
-                a2,
-                a3,
-                a4,
-                a5,
-            } => {
+            OpticalMedium::Schott { a0, a1, a2, a3, a4, a5 } => {
                 let l_um = wavelength_nm * 1e-3;
                 let l2 = l_um * l_um;
                 let inv_l2 = 1.0 / l2;
@@ -147,14 +126,8 @@ pub struct BulkAbsorption {
 
 impl BulkAbsorption {
     /// Create a bulk absorption model from internal transmittance.
-    pub fn new(
-        internal_transmittance: f64,
-        reference_thickness_mm: f64,
-    ) -> Result<Self, NonSeqError> {
-        if internal_transmittance <= 0.0
-            || internal_transmittance > 1.0
-            || !internal_transmittance.is_finite()
-        {
+    pub fn new(internal_transmittance: f64, reference_thickness_mm: f64) -> Result<Self, NonSeqError> {
+        if internal_transmittance <= 0.0 || internal_transmittance > 1.0 || !internal_transmittance.is_finite() {
             return Err(NonSeqError::Material(
                 "Internal transmittance must be in (0, 1]".to_string(),
             ));

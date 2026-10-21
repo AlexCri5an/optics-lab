@@ -14,9 +14,7 @@ pub mod variables;
 
 pub use dls::{ControlFlow, DlsConfig, DlsOptimizer, OptimizationCallback, OptimizationResult};
 pub use error::OptimizeError;
-pub use global::{
-    MultiStartConfig, MultiStartOptimizer, SimulatedAnnealingConfig, SimulatedAnnealingOptimizer,
-};
+pub use global::{MultiStartConfig, MultiStartOptimizer, SimulatedAnnealingConfig, SimulatedAnnealingOptimizer};
 pub use hammer::{GlassHammerConfig, GlassHammerOptimizer};
 pub use merit::{MeritEvaluation, MeritFunction};
 pub use operands::{MeritOperand, OperandType};
@@ -27,9 +25,7 @@ mod tests {
     use super::*;
     use optics_core::analysis::spot_fan::PupilPattern;
     use optics_core::analysis::trace_spot_diagram;
-    use optics_core::prescription::{
-        OpticalPrescription, OpticalSurface, calculate_paraxial_properties,
-    };
+    use optics_core::prescription::{OpticalPrescription, OpticalSurface, calculate_paraxial_properties};
     use optics_glass::catalog::GlassCatalogDb;
 
     type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -93,9 +89,7 @@ mod tests {
         let mut mf = MeritFunction::new();
         mf.add_operand(MeritOperand::new(
             "TARGET_EFL",
-            OperandType::EffectiveFocalLength {
-                wavelength_nm: 587.56,
-            },
+            OperandType::EffectiveFocalLength { wavelength_nm: 587.56 },
             100.0,
             500.0,
         ));
@@ -317,9 +311,7 @@ mod tests {
         let mut mf = MeritFunction::new();
         mf.add_operand(MeritOperand::new(
             "TARGET_EFL",
-            OperandType::EffectiveFocalLength {
-                wavelength_nm: 587.56,
-            },
+            OperandType::EffectiveFocalLength { wavelength_nm: 587.56 },
             100.0,
             100.0,
         ));
@@ -417,13 +409,19 @@ SURF 7
   DISZ 0.000000
   DIAM 10.000000
 "#;
-        let sys = optics_zemax::parse_zmx(zmx)?;
+        let sys = optics_formats::parse_zmx(zmx)?;
         let initial_presc = sys.to_optical_prescription();
 
         let mut vars = VariableSet::new();
         // Variable curvatures for all 6 active surfaces
         for surf_idx in 0..6 {
-            vars.add_with_bounds(VariableType::Curvature { surface_index: surf_idx }, -0.1, 0.1);
+            vars.add_with_bounds(
+                VariableType::Curvature {
+                    surface_index: surf_idx,
+                },
+                -0.1,
+                0.1,
+            );
         }
 
         let mf = MeritFunction::default_rms_spot(&initial_presc, Some(50.0));

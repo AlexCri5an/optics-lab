@@ -65,8 +65,7 @@ impl XyPolynomialSurface {
             || !terms.iter().all(|t| t.coefficient.is_finite())
         {
             return Err(OpticsError::InvalidParameter(
-                "XyPolynomialSurface parameters must be finite and semi-diameter non-negative"
-                    .to_string(),
+                "XyPolynomialSurface parameters must be finite and semi-diameter non-negative".to_string(),
             ));
         }
 
@@ -84,9 +83,7 @@ impl XyPolynomialSurface {
     /// Returns [`OpticsError::GeometryOutsideAperture`] if $(x, y)$ exceeds the base conic boundary.
     pub fn sag(&self, x: f64, y: f64) -> Result<f64, OpticsError> {
         if !x.is_finite() || !y.is_finite() {
-            return Err(OpticsError::InvalidParameter(
-                "Coordinates must be finite".to_string(),
-            ));
+            return Err(OpticsError::InvalidParameter("Coordinates must be finite".to_string()));
         }
 
         let r2 = x * x + y * y;
@@ -106,8 +103,7 @@ impl XyPolynomialSurface {
 
         let mut poly_sag = 0.0;
         for term in &self.terms {
-            poly_sag +=
-                term.coefficient * x.powi(term.x_power as i32) * y.powi(term.y_power as i32);
+            poly_sag += term.coefficient * x.powi(term.x_power as i32) * y.powi(term.y_power as i32);
         }
 
         Ok(conic_sag + poly_sag)
@@ -208,8 +204,7 @@ impl ZernikeSagSurface {
             || !coefficients.iter().all(|(_, c)| c.is_finite())
         {
             return Err(OpticsError::InvalidParameter(
-                "ZernikeSagSurface requires finite parameters and positive normalization radius"
-                    .to_string(),
+                "ZernikeSagSurface requires finite parameters and positive normalization radius".to_string(),
             ));
         }
 
@@ -229,13 +224,13 @@ impl ZernikeSagSurface {
             2 => 2.0 * rho * theta.cos(),                                              // Tilt X
             3 => 2.0 * rho * theta.sin(),                                              // Tilt Y
             4 => (3.0_f64).sqrt() * (2.0 * rho * rho - 1.0),                           // Defocus
-            5 => (6.0_f64).sqrt() * rho * rho * (2.0 * theta).sin(), // Astigmatism 45°
-            6 => (6.0_f64).sqrt() * rho * rho * (2.0 * theta).cos(), // Astigmatism 0°
+            5 => (6.0_f64).sqrt() * rho * rho * (2.0 * theta).sin(),                   // Astigmatism 45°
+            6 => (6.0_f64).sqrt() * rho * rho * (2.0 * theta).cos(),                   // Astigmatism 0°
             7 => (8.0_f64).sqrt() * (3.0 * rho * rho * rho - 2.0 * rho) * theta.sin(), // Coma Y
             8 => (8.0_f64).sqrt() * (3.0 * rho * rho * rho - 2.0 * rho) * theta.cos(), // Coma X
-            9 => (8.0_f64).sqrt() * rho * rho * rho * (3.0 * theta).sin(), // Trefoil Y
-            10 => (8.0_f64).sqrt() * rho * rho * rho * (3.0 * theta).cos(), // Trefoil X
-            11 => (5.0_f64).sqrt() * (6.0 * rho.powi(4) - 6.0 * rho * rho + 1.0), // Primary Spherical
+            9 => (8.0_f64).sqrt() * rho * rho * rho * (3.0 * theta).sin(),             // Trefoil Y
+            10 => (8.0_f64).sqrt() * rho * rho * rho * (3.0 * theta).cos(),            // Trefoil X
+            11 => (5.0_f64).sqrt() * (6.0 * rho.powi(4) - 6.0 * rho * rho + 1.0),      // Primary Spherical
             _ => 0.0, // Higher-order polynomial fallback
         }
     }

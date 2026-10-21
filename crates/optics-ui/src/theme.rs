@@ -1,4 +1,4 @@
-//! Academic minimalist design tokens inspired by classic scientific software (Zemax 95, SGI IRIX,
+//! Academic minimalist design tokens inspired by classic scientific software (Classic CAD 95, SGI IRIX,
 //! VT220/VT100 terminals, NeXTSTEP, Blueprint drafting, and Solarized).
 
 use egui::{Color32, Stroke};
@@ -60,9 +60,9 @@ impl OpticsTokens {
 /// Available retro and scientific engineering theme modes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum ThemeMode {
-    /// Classic Zemax OpticStudio 95 workstation (Windows 95/NT retro CAD).
+    /// Classic CAD 95 workstation (Windows 95/NT retro CAD).
     #[default]
-    ZemaxClassic,
+    ClassicCad,
     /// Amber Phosphor CRT Terminal (DEC VT220 vintage amber monochrome).
     AmberPhosphor,
     /// Green Phosphor CRT Terminal (IBM 3270 / VT100 monochrome green).
@@ -90,7 +90,7 @@ pub enum ThemeMode {
 impl ThemeMode {
     /// List of all available themes.
     pub const ALL: [ThemeMode; 12] = [
-        ThemeMode::ZemaxClassic,
+        ThemeMode::ClassicCad,
         ThemeMode::AmberPhosphor,
         ThemeMode::GreenPhosphor,
         ThemeMode::SgiIrix,
@@ -108,7 +108,7 @@ impl ThemeMode {
     #[must_use]
     pub const fn display_name(self) -> &'static str {
         match self {
-            Self::ZemaxClassic => "Classic CAD 95",
+            Self::ClassicCad => "Classic CAD 95",
             Self::AmberPhosphor => "Amber CRT (VT220)",
             Self::GreenPhosphor => "Green CRT (VT100)",
             Self::SgiIrix => "SGI IRIX Unix",
@@ -127,7 +127,7 @@ impl ThemeMode {
     #[must_use]
     pub const fn is_dark(self) -> bool {
         match self {
-            Self::ZemaxClassic | Self::SolarizedLight | Self::PaperLight => false,
+            Self::ClassicCad | Self::SolarizedLight | Self::PaperLight => false,
             _ => true,
         }
     }
@@ -143,8 +143,8 @@ impl ThemeMode {
     #[must_use]
     pub fn tokens(self) -> OpticsTokens {
         match self {
-            // 1. Zemax Classic 95 (Retro Windows 95 / NT CAD)
-            Self::ZemaxClassic => OpticsTokens {
+            // 1. Classic CAD 95 (Retro Windows 95 / NT CAD)
+            Self::ClassicCad => OpticsTokens {
                 bg_canvas: Color32::from_rgb(212, 208, 200),
                 bg_panel: Color32::from_rgb(212, 208, 200),
                 bg_control: Color32::from_rgb(240, 238, 232),

@@ -10,12 +10,12 @@
 use std::collections::BTreeSet;
 
 use egui::{
-    Align, Area, Button, CornerRadius, DragValue, Frame, Id, Image, Layout, Margin, RichText,
-    ScrollArea, TextEdit, Ui, Vec2,
+    Align, Area, Button, CornerRadius, DragValue, Frame, Id, Image, Layout, Margin, RichText, ScrollArea, TextEdit, Ui,
+    Vec2,
 };
 use optics_core::surface::{
-    Aperture, ApertureShape, BiconicSurface, CoordinateBreak, ForbesQbfsSurface, ForbesQconSurface,
-    GrinProfile, SurfaceProfile, ToroidalSurface, ZernikeSagSurface,
+    Aperture, ApertureShape, BiconicSurface, CoordinateBreak, ForbesQbfsSurface, ForbesQconSurface, GrinProfile,
+    SurfaceProfile, ToroidalSurface, ZernikeSagSurface,
 };
 use optics_core::{OpticalPrescription, OpticalSurface, SurfaceCoating};
 use optics_glass::GlassCatalogDb;
@@ -154,13 +154,9 @@ pub fn render_lens_editor(
             // Insert Surface Button with Lucide Plus icon
             if lucide_text_button(ui, LucideIcon::Plus, "Insert Surface", tokens).clicked() {
                 let total_surfs = prescription.surfaces.len();
-                let insert_at = state.selected_surface.unwrap_or_else(|| {
-                    if total_surfs > 1 {
-                        total_surfs - 1
-                    } else {
-                        total_surfs
-                    }
-                });
+                let insert_at = state
+                    .selected_surface
+                    .unwrap_or_else(|| if total_surfs > 1 { total_surfs - 1 } else { total_surfs });
                 let new_surf = OpticalSurface {
                     surface_index: insert_at,
                     radius_mm: 50.0,
@@ -208,7 +204,11 @@ pub fn render_lens_editor(
                 let var_count = state.total_variable_count();
                 if var_count > 0 {
                     ui.spacing_mut().item_spacing = Vec2::new(4.0, 0.0);
-                    if ui.small_button(RichText::new("Clear Var").size(9.5).color(tokens.text_muted)).on_hover_text("Reset all variable flags back to fixed").clicked() {
+                    if ui
+                        .small_button(RichText::new("Clear Var").size(9.5).color(tokens.text_muted))
+                        .on_hover_text("Reset all variable flags back to fixed")
+                        .clicked()
+                    {
                         state.clear_all_variables();
                     }
                     ui.label(
@@ -217,7 +217,13 @@ pub fn render_lens_editor(
                             .strong()
                             .size(10.5)
                             .color(tokens.accent),
-                    ).on_hover_text(format!("Active optimization variables: {} radii, {} thicknesses, {} conics", state.variable_radii.len(), state.variable_thicknesses.len(), state.variable_conics.len()));
+                    )
+                    .on_hover_text(format!(
+                        "Active optimization variables: {} radii, {} thicknesses, {} conics",
+                        state.variable_radii.len(),
+                        state.variable_thicknesses.len(),
+                        state.variable_conics.len()
+                    ));
                     ui.separator();
                 }
 
@@ -1401,13 +1407,8 @@ fn render_glass_picker(
         let old_mat = surf.material_name.clone();
         let mut mat_buf = surf.material_name.clone();
 
-        let is_known = surf.material_name.to_uppercase() == "AIR"
-            || catalog.lookup(&surf.material_name).is_some();
-        let text_color = if is_known {
-            tokens.text_primary
-        } else {
-            tokens.warning
-        };
+        let is_known = surf.material_name.to_uppercase() == "AIR" || catalog.lookup(&surf.material_name).is_some();
+        let text_color = if is_known { tokens.text_primary } else { tokens.warning };
 
         let tooltip = if surf.material_name.to_uppercase() == "AIR" {
             "AIR: Refractive index 1.0 (free space)".to_string()
@@ -1469,13 +1470,21 @@ fn render_glass_picker(
                                             ui.spacing_mut().item_spacing = Vec2::new(0.0, 1.0);
 
                                             if air_matches {
-                                                let row_resp = ui.allocate_response(Vec2::new(ui.available_width(), 22.0), egui::Sense::click());
+                                                let row_resp = ui.allocate_response(
+                                                    Vec2::new(ui.available_width(), 22.0),
+                                                    egui::Sense::click(),
+                                                );
                                                 let is_hov = row_resp.hovered();
                                                 if is_hov {
-                                                    ui.painter().rect_filled(row_resp.rect, 0.0, tokens.bg_control_active);
+                                                    ui.painter().rect_filled(
+                                                        row_resp.rect,
+                                                        0.0,
+                                                        tokens.bg_control_active,
+                                                    );
                                                 }
                                                 let text_pos = row_resp.rect.left_center() + Vec2::new(6.0, 0.0);
-                                                let text_color = if is_hov { tokens.accent } else { tokens.text_primary };
+                                                let text_color =
+                                                    if is_hov { tokens.accent } else { tokens.text_primary };
                                                 ui.painter().text(
                                                     text_pos,
                                                     egui::Align2::LEFT_CENTER,
@@ -1491,13 +1500,21 @@ fn render_glass_picker(
                                             }
 
                                             for g in matches {
-                                                let row_resp = ui.allocate_response(Vec2::new(ui.available_width(), 22.0), egui::Sense::click());
+                                                let row_resp = ui.allocate_response(
+                                                    Vec2::new(ui.available_width(), 22.0),
+                                                    egui::Sense::click(),
+                                                );
                                                 let is_hov = row_resp.hovered();
                                                 if is_hov {
-                                                    ui.painter().rect_filled(row_resp.rect, 0.0, tokens.bg_control_active);
+                                                    ui.painter().rect_filled(
+                                                        row_resp.rect,
+                                                        0.0,
+                                                        tokens.bg_control_active,
+                                                    );
                                                 }
                                                 let text_pos = row_resp.rect.left_center() + Vec2::new(6.0, 0.0);
-                                                let text_color = if is_hov { tokens.accent } else { tokens.text_primary };
+                                                let text_color =
+                                                    if is_hov { tokens.accent } else { tokens.text_primary };
                                                 let label = format!("{:<9} nd={:.4} Vd={:.1}", g.name, g.nd, g.vd);
                                                 ui.painter().text(
                                                     text_pos,
@@ -1533,16 +1550,13 @@ fn render_glass_picker(
         }
 
         // 2. Discrete academic [...] browse button
-        let browse_btn = Button::new(
-            RichText::new("...")
-                .monospace()
-                .size(10.5)
-                .color(tokens.text_muted),
-        )
-        .fill(tokens.bg_control)
-        .corner_radius(CornerRadius::ZERO);
+        let browse_btn = Button::new(RichText::new("...").monospace().size(10.5).color(tokens.text_muted))
+            .fill(tokens.bg_control)
+            .corner_radius(CornerRadius::ZERO);
 
-        let btn_resp = ui.add(browse_btn).on_hover_text("Open Materials Catalog tab for this surface");
+        let btn_resp = ui
+            .add(browse_btn)
+            .on_hover_text("Open Materials Catalog tab for this surface");
         if btn_resp.clicked() {
             state.materials_target_surface = idx;
             state.active_tab = LeftPanelTab::Materials;
@@ -1605,12 +1619,7 @@ fn feature_pill(
             format!("● {}", label),
         )
     } else {
-        (
-            tokens.bg_control,
-            tokens.border,
-            tokens.text_muted,
-            label.to_string(),
-        )
+        (tokens.bg_control, tokens.border, tokens.text_muted, label.to_string())
     };
 
     let btn = Button::new(RichText::new(text).size(9.5).strong().color(text_color))
@@ -1623,19 +1632,17 @@ fn feature_pill(
 }
 
 /// Renders an academic variable toggle badge ('V' for Variable, 'F' for Fixed).
-fn render_variable_badge(
-    ui: &mut Ui,
-    is_variable: bool,
-    param_name: &str,
-    tokens: &OpticsTokens,
-) -> bool {
+fn render_variable_badge(ui: &mut Ui, is_variable: bool, param_name: &str, tokens: &OpticsTokens) -> bool {
     let (bg, stroke, text_color, text, tooltip) = if is_variable {
         (
             tokens.bg_control_active,
             egui::Stroke::new(1.0, tokens.accent),
             tokens.accent,
             "V",
-            format!("{} is Variable for optimization (DLS will adjust this value). Click to set Fixed.", param_name),
+            format!(
+                "{} is Variable for optimization (DLS will adjust this value). Click to set Fixed.",
+                param_name
+            ),
         )
     } else {
         (
@@ -1643,7 +1650,10 @@ fn render_variable_badge(
             tokens.border,
             tokens.text_muted.gamma_multiply(0.65),
             "F",
-            format!("{} is Fixed. Click to mark as Variable (V) for optimization.", param_name),
+            format!(
+                "{} is Fixed. Click to mark as Variable (V) for optimization.",
+                param_name
+            ),
         )
     };
 
@@ -1906,7 +1916,7 @@ fn render_specification_card(
                     }
                 });
 
-                // Standard Spectral Discharge Lamps (Zemax / NIST)
+                // Standard Spectral Discharge Lamps (ISO / NIST)
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing = Vec2::new(4.0, 2.0);
                     ui.label(RichText::new("Lamps:").size(10.0).color(tokens.text_muted));
@@ -2101,8 +2111,14 @@ mod tests {
         let mut rx = OpticalPrescription {
             name: "Test System".to_string(),
             surfaces: vec![
-                OpticalSurface { surface_index: 99, ..Default::default() },
-                OpticalSurface { surface_index: 42, ..Default::default() },
+                OpticalSurface {
+                    surface_index: 99,
+                    ..Default::default()
+                },
+                OpticalSurface {
+                    surface_index: 42,
+                    ..Default::default()
+                },
             ],
             ..Default::default()
         };

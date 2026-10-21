@@ -82,12 +82,7 @@ pub fn sellmeier_1(wavelength_um: f64, k: [f64; 3], l: [f64; 3]) -> Result<f64, 
 ///
 /// # Errors
 /// Returns [`OpticsError::NumericalSingularity`] at resonance or if $n^2 \le 0$.
-pub fn sellmeier_2(
-    wavelength_um: f64,
-    a: f64,
-    b: [f64; 2],
-    c: [f64; 2],
-) -> Result<f64, OpticsError> {
+pub fn sellmeier_2(wavelength_um: f64, a: f64, b: [f64; 2], c: [f64; 2]) -> Result<f64, OpticsError> {
     validate_wavelength(wavelength_um)?;
     let l2 = wavelength_um * wavelength_um;
     let mut sum = a;
@@ -145,14 +140,7 @@ pub fn sellmeier_3(wavelength_um: f64, k: [f64; 4], l: [f64; 4]) -> Result<f64, 
 ///
 /// # Errors
 /// Returns [`OpticsError::NumericalSingularity`] at resonance or if $n^2 \le 0$.
-pub fn sellmeier_4(
-    wavelength_um: f64,
-    a: f64,
-    b: f64,
-    c: f64,
-    d: f64,
-    e: f64,
-) -> Result<f64, OpticsError> {
+pub fn sellmeier_4(wavelength_um: f64, a: f64, b: f64, c: f64, d: f64, e: f64) -> Result<f64, OpticsError> {
     validate_wavelength(wavelength_um)?;
     let l2 = wavelength_um * wavelength_um;
     let denom1 = l2 - c;
@@ -249,13 +237,7 @@ pub fn conrady_dispersion(wavelength_um: f64, n0: f64, a: f64, b: f64) -> Result
 ///
 /// # Errors
 /// Returns [`OpticsError::NumericalSingularity`] if resonance is hit or $n^2 \le 0$.
-pub fn handbook_of_optics_1(
-    wavelength_um: f64,
-    a: f64,
-    b: f64,
-    c: f64,
-    d: f64,
-) -> Result<f64, OpticsError> {
+pub fn handbook_of_optics_1(wavelength_um: f64, a: f64, b: f64, c: f64, d: f64) -> Result<f64, OpticsError> {
     validate_wavelength(wavelength_um)?;
     let l2 = wavelength_um * wavelength_um;
     let denom = l2 - c;
@@ -279,13 +261,7 @@ pub fn handbook_of_optics_1(
 ///
 /// # Errors
 /// Returns [`OpticsError::NumericalSingularity`] if resonance is hit or $n^2 \le 0$.
-pub fn handbook_of_optics_2(
-    wavelength_um: f64,
-    a: f64,
-    b: f64,
-    c: f64,
-    d: f64,
-) -> Result<f64, OpticsError> {
+pub fn handbook_of_optics_2(wavelength_um: f64, a: f64, b: f64, c: f64, d: f64) -> Result<f64, OpticsError> {
     validate_wavelength(wavelength_um)?;
     let l2 = wavelength_um * wavelength_um;
     let denom = l2 - c;
@@ -351,8 +327,7 @@ pub fn extended_2(wavelength_um: f64, a: [f64; 7]) -> Result<f64, OpticsError> {
     let inv_l4 = inv_l2 * inv_l2;
     let inv_l6 = inv_l4 * inv_l2;
 
-    let n2 =
-        a[0] + a[1] * l2 + a[2] * inv_l2 + a[3] * inv_l4 + a[4] * inv_l6 + a[5] * l4 + a[6] * l6;
+    let n2 = a[0] + a[1] * l2 + a[2] * inv_l2 + a[3] * inv_l4 + a[4] * inv_l6 + a[5] * l4 + a[6] * l6;
 
     if n2 <= 0.0 || !n2.is_finite() {
         return Err(OpticsError::NumericalSingularity(format!(
@@ -368,13 +343,7 @@ pub fn extended_2(wavelength_um: f64, a: [f64; 7]) -> Result<f64, OpticsError> {
 ///
 /// # Errors
 /// Returns [`OpticsError::NumericalSingularity`] if $n \le 0$.
-pub fn extended_cauchy(
-    wavelength_um: f64,
-    a: f64,
-    b: f64,
-    c: f64,
-    d: f64,
-) -> Result<f64, OpticsError> {
+pub fn extended_cauchy(wavelength_um: f64, a: f64, b: f64, c: f64, d: f64) -> Result<f64, OpticsError> {
     validate_wavelength(wavelength_um)?;
     let inv_l2 = 1.0 / (wavelength_um * wavelength_um);
     let inv_l4 = inv_l2 * inv_l2;

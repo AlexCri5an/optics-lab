@@ -12,9 +12,7 @@ pub mod scene;
 pub mod source;
 pub mod trace;
 
-pub use detector::{
-    photopic_luminous_efficiency, watts_to_lumens, Detector2D, DetectorHit, RayPathFilter,
-};
+pub use detector::{Detector2D, DetectorHit, RayPathFilter, photopic_luminous_efficiency, watts_to_lumens};
 pub use error::NonSeqError;
 pub use geometry::{NonSeqHit, PrimitiveGeometry, Transform3D};
 pub use material::{BulkAbsorption, NonSeqMaterial, OpticalMedium, SurfaceFinish};
@@ -82,12 +80,7 @@ mod tests {
         scene.add_detector(det_refl);
 
         // Single normal incidence ray with 1.0 Watt power launched from z = -5 mm along +z
-        let ray = Ray::new(
-            Vec3::new(0.0, 0.0, -5.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )?;
+        let ray = Ray::new(Vec3::new(0.0, 0.0, -5.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0)?;
         let nonseq_rays = vec![NonSeqRay::new(ray, 0)];
 
         let tracer = NonSeqTracer::new(NonSeqTraceConfig {
@@ -198,10 +191,7 @@ mod tests {
             .iter()
             .filter(|p| p.interaction == "TotalInternalReflection")
             .count();
-        assert!(
-            tir_segments >= 1,
-            "Ray should have undergone TIR on cylinder wall"
-        );
+        assert!(tir_segments >= 1, "Ray should have undergone TIR on cylinder wall");
 
         Ok(())
     }
@@ -243,12 +233,7 @@ mod tests {
         )?;
         scene.add_detector(det);
 
-        let ray = Ray::new(
-            Vec3::new(0.0, 0.0, -5.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )?;
+        let ray = Ray::new(Vec3::new(0.0, 0.0, -5.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0)?;
         let nonseq_ray = NonSeqRay::new(ray, 0);
 
         let tracer = NonSeqTracer::new(NonSeqTraceConfig {
@@ -332,10 +317,7 @@ mod tests {
         let p0 = det0.total_flux_watts;
         let p60 = det60.total_flux_watts;
 
-        assert!(
-            (p0 - beam_flux).abs() < 1e-4,
-            "Det0 should capture all beam power"
-        );
+        assert!((p0 - beam_flux).abs() < 1e-4, "Det0 should capture all beam power");
         assert!(p60 > 0.0, "Det60 should capture rays");
 
         // Projected area and average irradiance scale by cos(60 deg) = 0.500
@@ -464,9 +446,7 @@ mod tests {
             direction: Vec3::new(0.0, 0.0, 1.0),
             radius: 4.0,
             total_flux_watts: 1.0,
-            spectrum: SourceSpectrum::Monochromatic {
-                wavelength_nm: 587.56,
-            },
+            spectrum: SourceSpectrum::Monochromatic { wavelength_nm: 587.56 },
         };
         let rays = source.generate_rays(100, 42)?;
 
@@ -480,10 +460,7 @@ mod tests {
         tracer.trace_rays(&mut scene, &rays, Some(&catalog))?;
 
         let hit_count = scene.detectors[0].total_rays_hit;
-        assert!(
-            hit_count > 50,
-            "Most rays should reach focal detector, got {hit_count}"
-        );
+        assert!(hit_count > 50, "Most rays should reach focal detector, got {hit_count}");
 
         let (cx, cy) = scene.detectors[0].centroid_mm();
         assert!(cx.abs() < 0.2, "Centroid X should be on-axis, got {cx}");
@@ -501,13 +478,21 @@ mod tests {
     /// Verification of automatic NonSeqScene synthesis from full Cooke Triplet prescription.
     #[test]
     fn test_cooke_triplet_build_from_prescription_and_raytrace() -> TestResult {
-        let cooke = optics_zemax::presets::cooke_triplet_f4_5()?;
+        let cooke = optics_formats::presets::cooke_triplet_f4_5()?;
         let catalog = GlassCatalogDb::load_bundled()?;
 
         let mut scene = NonSeqScene::build_from_prescription(&cooke, 40)?;
-        assert_eq!(scene.objects.len(), 3, "Cooke triplet must synthesize exactly 3 glass elements");
+        assert_eq!(
+            scene.objects.len(),
+            3,
+            "Cooke triplet must synthesize exactly 3 glass elements"
+        );
         assert_eq!(scene.detectors.len(), 1, "Must contain exactly 1 focal plane detector");
-        assert_eq!(scene.sources.len(), 1, "Must contain 1 entrance pupil collimated source");
+        assert_eq!(
+            scene.sources.len(),
+            1,
+            "Must contain 1 entrance pupil collimated source"
+        );
 
         // Trace non-sequential rays with branching enabled
         let rays = scene.sources[0].generate_rays(80, 12345)?;
@@ -520,7 +505,10 @@ mod tests {
 
         let report = tracer.trace_rays(&mut scene, &rays, Some(&catalog))?;
         assert!(report.total_rays_traced > 0);
-        assert!(report.paths.len() > rays.len(), "Ray branching must produce reflected/refracted paths");
+        assert!(
+            report.paths.len() > rays.len(),
+            "Ray branching must produce reflected/refracted paths"
+        );
 
         let det = &scene.detectors[0];
         assert!(det.total_rays_hit > 0, "Detector must capture focused rays");
@@ -538,7 +526,10 @@ mod tests {
 
         let (_ghost_grid, ghost_flux, _ghost_hits) = det.filtered_pixel_flux(RayPathFilter::GhostsOnly);
         assert!(ghost_flux >= 0.0);
-        assert!(ghost_flux < signal_flux, "Ghost flux should be a small fraction of signal flux");
+        assert!(
+            ghost_flux < signal_flux,
+            "Ghost flux should be a small fraction of signal flux"
+        );
 
         Ok(())
     }
@@ -594,7 +585,10 @@ mod tests {
         let cos_tir1 = angle_above_c.cos();
         let sin2_tir1 = (1.0 - cos_tir1 * cos_tir1).max(0.0);
         let radicand = 1.0 - (n2 / n1).powi(2) * sin2_tir1;
-        assert!(radicand < 0.0, "Radicand must be negative indicating evanescent wave / TIR");
+        assert!(
+            radicand < 0.0,
+            "Radicand must be negative indicating evanescent wave / TIR"
+        );
 
         Ok(())
     }
@@ -603,17 +597,29 @@ mod tests {
     /// with 6 elements, entrance pupil collimated source, focal detector, and ray branching report.
     #[test]
     fn test_scene_synthesis_double_gauss_all_elements() -> TestResult {
-        let dg = optics_zemax::presets::double_gauss_50mm()?;
+        let dg = optics_formats::presets::double_gauss_50mm()?;
         let catalog = GlassCatalogDb::load_bundled()?;
 
         let mut scene = NonSeqScene::build_from_prescription(&dg, 36)?;
-        assert_eq!(scene.objects.len(), 6, "Double Gauss must synthesize exactly 6 optical elements");
+        assert_eq!(
+            scene.objects.len(),
+            6,
+            "Double Gauss must synthesize exactly 6 optical elements"
+        );
         assert_eq!(scene.detectors.len(), 1, "Must contain exactly 1 focal plane detector");
-        assert_eq!(scene.sources.len(), 1, "Must contain 1 entrance pupil collimated source");
+        assert_eq!(
+            scene.sources.len(),
+            1,
+            "Must contain 1 entrance pupil collimated source"
+        );
 
         // Verify entrance pupil collimated source parameters
         match &scene.sources[0] {
-            RaySource::CollimatedBeam { radius, total_flux_watts, .. } => {
+            RaySource::CollimatedBeam {
+                radius,
+                total_flux_watts,
+                ..
+            } => {
                 assert!((radius - dg.entrance_pupil_diameter_mm * 0.5).abs() < 1e-3);
                 assert_eq!(*total_flux_watts, 1.0);
             }

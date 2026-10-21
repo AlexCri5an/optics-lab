@@ -1,0 +1,52 @@
+OpticsLab
+Copyright (c) 2026 Alexandru Crisan and the OpticsLab contributors.
+Licensed under the MIT License or the Apache License, Version 2.0, at your option
+(LICENSE-MIT, LICENSE-APACHE).
+
+Third-party material
+
+This product bundles third-party material under its own licenses, listed below.
+The per-file list (author, source, license, purpose) is in ASSETS.md.
+
+1. Lucide Icons (crates/optics-ui/src/icons.rs)
+   Derived from the Lucide project (https://lucide.dev).
+   Licensed under the ISC License:
+
+   ISC License
+
+   Copyright (c) for portions of Lucide are held by Cole Bemis 2013-2022 as part of Feather (MIT).
+   All other portions Copyright (c) Lucide Contributors 2022.
+
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
+
+   THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+   WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+   MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+   ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+   WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+   ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+2. Optical Glass Catalog (crates/optics-glass/data/optical_glasses.json)
+   Physical dispersion coefficients (Sellmeier, Cauchy, and polynomial constants)
+   for 646 optical materials from optical glass manufacturers (Schott AG, Ohara Corp,
+   CDGM Glass Co., Hoya Corp, Hikari, Sumita Optical Glass, and public domain infrared
+   crystals).
+   Physical refractive indices and dispersion constants represent factual physical
+   properties of materials and are published openly by manufacturers for engineering
+   and academic simulation.
+
+3. Typography (egui / epaint default fonts)
+   The desktop application embeds default typefaces provided through the epaint
+   framework under their respective open-source licenses:
+   - Ubuntu Light: Ubuntu Font Licence 1.0
+   - Hack: MIT License
+   - Noto Emoji: SIL Open Font License 1.1
+
+4. Rust Crates & Dependencies
+   Rust dependencies (egui, eframe, wgpu, nalgebra, serde, thiserror, clap, ...)
+   are fetched through crates.io under their own permissive licenses (mostly MIT
+   and/or Apache-2.0; also BSD-2-Clause, BSD-3-Clause, ISC, Zlib, BSL-1.0, CC0-1.0,
+   0BSD, and Unicode-3.0), as verified by deny.toml.

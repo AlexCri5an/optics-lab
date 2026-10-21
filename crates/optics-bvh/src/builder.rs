@@ -67,11 +67,7 @@ pub enum SplitDecision {
 
 /// Evaluates the optimal split plane for a set of primitives using 16-bin SAH.
 #[must_use]
-pub fn find_best_split(
-    triangles: &[Triangle],
-    indices: &[usize],
-    parent_aabb: &Aabb,
-) -> SplitDecision {
+pub fn find_best_split(triangles: &[Triangle], indices: &[usize], parent_aabb: &Aabb) -> SplitDecision {
     let count = indices.len();
     if count <= MAX_LEAF_PRIMITIVES {
         return SplitDecision::MakeLeaf;
@@ -159,9 +155,7 @@ pub fn find_best_split(
             let sa_r = right_bounds[i].surface_area();
 
             let cost = SAH_TRAVERSAL_COST
-                + (sa_l * nl as f64 * SAH_INTERSECTION_COST
-                    + sa_r * nr as f64 * SAH_INTERSECTION_COST)
-                    / parent_sa;
+                + (sa_l * nl as f64 * SAH_INTERSECTION_COST + sa_r * nr as f64 * SAH_INTERSECTION_COST) / parent_sa;
 
             if cost < best_cost {
                 best_cost = cost;
@@ -219,9 +213,7 @@ fn subdivide_bvh_node(
     let decision = find_best_split(triangles, &indices[start..start + count], &node_aabb);
 
     match decision {
-        SplitDecision::Split {
-            axis, split_pos, ..
-        } => {
+        SplitDecision::Split { axis, split_pos, .. } => {
             // Partition primitives around split_pos
             let mut left = start;
             let mut right = start + count - 1;
@@ -337,12 +329,7 @@ mod tests {
         assert_eq!(nodes[0].count, 1);
         assert_eq!(indices.len(), 1);
 
-        let ray = optics_core::Ray::new(
-            Vec3::new(0.0, 0.0, 0.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            587.56,
-            1.0,
-        )?;
+        let ray = optics_core::Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(0.0, 0.0, 1.0), 587.56, 1.0)?;
 
         let hit = tri.intersect(&ray, 0);
         assert!(hit.is_some());

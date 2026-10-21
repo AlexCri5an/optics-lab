@@ -9,25 +9,25 @@ pub enum EngineError {
     #[error("Optics core error: {0}")]
     Core(#[from] optics_core::error::OpticsError),
 
-    /// Zemax OpticStudio parser error.
-    #[error("Zemax parse error: {0}")]
-    Zemax(#[from] optics_zemax::error::ZemaxParseError),
+    /// Optical format parser error.
+    #[error("Format parse error: {0}")]
+    Format(#[from] optics_formats::error::FormatParseError),
 
     /// Synopsys CODE V macro parser error.
     #[error("CODE V parse error: {0}")]
-    CodeV(#[from] optics_zemax::CodeVParseError),
+    CodeV(#[from] optics_formats::CodeVParseError),
 
     /// Lambda Research OSLO parser error.
     #[error("OSLO parse error: {0}")]
-    Oslo(#[from] optics_zemax::OsloParseError),
+    Oslo(#[from] optics_formats::OsloParseError),
 
     /// CAD layout and mesh export error.
     #[error("CAD export error: {0}")]
-    Cad(#[from] optics_zemax::CadExportError),
+    Cad(#[from] optics_formats::CadExportError),
 
     /// Project workspace persistence error.
     #[error("Project error: {0}")]
-    Project(#[from] optics_zemax::ProjectError),
+    Project(#[from] optics_formats::ProjectError),
 
     /// Lens optimization error.
     #[error("Optimization error: {0}")]

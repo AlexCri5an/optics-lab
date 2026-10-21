@@ -1,0 +1,37 @@
+{
+  "system_name": "Cooke Triplet F/4.5",
+  "source_references": [
+    "Warren J. Smith, Modern Optical Engineering, 4th ed., McGraw-Hill, 2007",
+    "MIL-HDBK-141, Optical Design, Defense Supply Agency, 1962",
+    "ISO 10110 Optics and Photonics Drawing Standards"
+  ],
+  "nominal_parameters": {
+    "wavelength_nm": 587.56,
+    "entrance_pupil_diameter_mm": 11.111,
+    "f_number": 4.5
+  },
+  "paraxial_cardinal_points": {
+    "efl_mm": 50.02,
+    "bfl_mm": 42.44,
+    "ffl_mm": -44.75,
+    "entrance_pupil_position_mm": 9.53,
+    "exit_pupil_position_mm": -32.8
+  },
+  "third_order_seidel": {
+    "petzval_sum": 0.00780,
+    "s1_spherical": 0.0075,
+    "s2_coma": 0.0000,
+    "s3_astigmatism": 0.0032,
+    "s4_petzval": 0.0041,
+    "s5_distortion": -0.0035
+  },
+  "spot_diagram_on_axis": {
+    "rms_radius_um_max_threshold": 50.0,
+    "rms_radius_um_nominal": 4.5,
+    "geo_radius_um_nominal": 9.8
+  },
+  "wavefront_on_axis": {
+    "rms_waves_nominal": 0.210,
+    "pv_waves_nominal": 0.85
+  }
+}

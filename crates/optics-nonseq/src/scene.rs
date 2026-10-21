@@ -157,12 +157,14 @@ impl NonSeqScene {
         slices: u32,
         rings: u32,
     ) -> Result<usize, NonSeqError> {
-        let surf_front = prescription.surfaces.get(surf_front_idx).ok_or_else(|| {
-            NonSeqError::InvalidGeometry(format!("Surface index {surf_front_idx} out of range"))
-        })?;
-        let surf_back = prescription.surfaces.get(surf_back_idx).ok_or_else(|| {
-            NonSeqError::InvalidGeometry(format!("Surface index {surf_back_idx} out of range"))
-        })?;
+        let surf_front = prescription
+            .surfaces
+            .get(surf_front_idx)
+            .ok_or_else(|| NonSeqError::InvalidGeometry(format!("Surface index {surf_front_idx} out of range")))?;
+        let surf_back = prescription
+            .surfaces
+            .get(surf_back_idx)
+            .ok_or_else(|| NonSeqError::InvalidGeometry(format!("Surface index {surf_back_idx} out of range")))?;
 
         let mut z_front = 0.0;
         for s in &prescription.surfaces[..surf_front_idx] {
@@ -219,10 +221,8 @@ impl NonSeqScene {
             0.0
         };
 
-        let sag_f =
-            optics_core::conic_sag(semi_diam, c_front, surf_front.conic_constant).unwrap_or(0.0);
-        let sag_b =
-            optics_core::conic_sag(semi_diam, c_back, surf_back.conic_constant).unwrap_or(0.0);
+        let sag_f = optics_core::conic_sag(semi_diam, c_front, surf_front.conic_constant).unwrap_or(0.0);
+        let sag_b = optics_core::conic_sag(semi_diam, c_back, surf_back.conic_constant).unwrap_or(0.0);
 
         let z_edge_f = z_front + sag_f;
         let z_edge_b = z_back + sag_b;
@@ -277,19 +277,9 @@ impl NonSeqScene {
 
             if is_glass {
                 let name = format!("Element_{}_{}", element_idx, mat);
-                let medium = OpticalMedium::GlassCatalog {
-                    name: mat.to_string(),
-                };
+                let medium = OpticalMedium::GlassCatalog { name: mat.to_string() };
                 let material = NonSeqMaterial::dielectric(medium);
-                scene.add_prescription_lens(
-                    &name,
-                    prescription,
-                    i,
-                    i + 1,
-                    material,
-                    32,
-                    16,
-                )?;
+                scene.add_prescription_lens(&name, prescription, i, i + 1, material, 32, 16)?;
                 element_idx += 1;
             }
             i += 1;
@@ -301,11 +291,7 @@ impl NonSeqScene {
             z_image += s.thickness_mm;
         }
 
-        let img_semi_diam = prescription
-            .surfaces
-            .last()
-            .map(|s| s.semi_diameter_mm)
-            .unwrap_or(10.0);
+        let img_semi_diam = prescription.surfaces.last().map(|s| s.semi_diameter_mm).unwrap_or(10.0);
         let det_size = (img_semi_diam * 2.0).max(4.0);
         let res = detector_res.clamp(10, 256);
 

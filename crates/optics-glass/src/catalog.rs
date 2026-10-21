@@ -44,15 +44,13 @@ impl Default for GlassCatalogDb {
 }
 
 impl GlassCatalogDb {
-
     /// Parses glass catalog from a JSON byte slice.
     ///
     /// # Errors
     /// Returns [`OpticsError::ParseError`] if parsing fails.
     pub fn from_json_slice(slice: &[u8]) -> Result<Self, OpticsError> {
-        let entries: Vec<RawGlassEntry> = serde_json::from_slice(slice).map_err(|e| {
-            OpticsError::ParseError(format!("Failed to parse optical_glasses.json: {e}"))
-        })?;
+        let entries: Vec<RawGlassEntry> = serde_json::from_slice(slice)
+            .map_err(|e| OpticsError::ParseError(format!("Failed to parse optical_glasses.json: {e}")))?;
 
         let mut glasses_by_name = HashMap::with_capacity(entries.len());
 
@@ -69,31 +67,15 @@ impl GlassCatalogDb {
                 2 if raw.coefficients.len() >= 7 => {
                     // Formula 2: Schott Sellmeier 1: [0, B1, C1, B2, C2, B3, C3]
                     DispersionModel::Sellmeier1 {
-                        b: [
-                            raw.coefficients[1],
-                            raw.coefficients[3],
-                            raw.coefficients[5],
-                        ],
-                        c: [
-                            raw.coefficients[2],
-                            raw.coefficients[4],
-                            raw.coefficients[6],
-                        ],
+                        b: [raw.coefficients[1], raw.coefficients[3], raw.coefficients[5]],
+                        c: [raw.coefficients[2], raw.coefficients[4], raw.coefficients[6]],
                     }
                 }
                 1 if raw.coefficients.len() >= 7 => {
                     // Formula 1 variant: Sellmeier 1 with offset
                     DispersionModel::Sellmeier1 {
-                        b: [
-                            raw.coefficients[1],
-                            raw.coefficients[3],
-                            raw.coefficients[5],
-                        ],
-                        c: [
-                            raw.coefficients[2],
-                            raw.coefficients[4],
-                            raw.coefficients[6],
-                        ],
+                        b: [raw.coefficients[1], raw.coefficients[3], raw.coefficients[5]],
+                        c: [raw.coefficients[2], raw.coefficients[4], raw.coefficients[6]],
                     }
                 }
                 _ => {
@@ -225,7 +207,10 @@ impl GlassCatalogDb {
 
         // Classic Schott FK54
         if key == "FK54" || key == "N-FK54" {
-            return self.glasses_by_name.get("FK54").or_else(|| self.glasses_by_name.get("N-FK51A"));
+            return self
+                .glasses_by_name
+                .get("FK54")
+                .or_else(|| self.glasses_by_name.get("N-FK51A"));
         }
 
         // Try N- prefix for classic Schott designations (e.g. "SK16" -> "N-SK16")
@@ -266,11 +251,7 @@ impl GlassCatalogDb {
     /// Ranges are supplied as `(min, max)` tuples. If a range is inverted (e.g. `(max, min)`),
     /// it is automatically normalized.
     #[must_use]
-    pub fn search_by_nd_vd(
-        &self,
-        nd_range: (f64, f64),
-        vd_range: (f64, f64),
-    ) -> Vec<&GlassMaterial> {
+    pub fn search_by_nd_vd(&self, nd_range: (f64, f64), vd_range: (f64, f64)) -> Vec<&GlassMaterial> {
         let (nd_min, nd_max) = (nd_range.0.min(nd_range.1), nd_range.0.max(nd_range.1));
         let (vd_min, vd_max) = (vd_range.0.min(vd_range.1), vd_range.0.max(vd_range.1));
 
@@ -337,9 +318,7 @@ impl optics_core::MaterialResolver for GlassCatalogDb {
         }
 
         // 5. Fallback crown glass (N-BK7) so real external files never crash the analysis diagnostics
-        let fallback = self.lookup("N-BK7")
-            .cloned()
-            .unwrap_or_else(GlassMaterial::n_bk7);
+        let fallback = self.lookup("N-BK7").cloned().unwrap_or_else(GlassMaterial::n_bk7);
         Ok(std::sync::Arc::new(fallback))
     }
 }

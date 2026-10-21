@@ -15,10 +15,7 @@ use crate::material::{DispersionModel, GlassCatalog, GlassMaterial};
 ///
 /// # Errors
 /// Returns [`OpticsError::ParseError`] if data format cannot be interpreted.
-pub fn parse_refractiveindex_yaml(
-    name: &str,
-    yaml_text: &str,
-) -> Result<GlassMaterial, OpticsError> {
+pub fn parse_refractiveindex_yaml(name: &str, yaml_text: &str) -> Result<GlassMaterial, OpticsError> {
     let mut formula_type = 2; // Default Sellmeier 1
     let mut coefficients = Vec::new();
 

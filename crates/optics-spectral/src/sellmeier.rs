@@ -29,11 +29,7 @@ use optics_core::OpticsError;
 /// # Errors
 /// Returns [`OpticsError::NumericalSingularity`] if `wavelength_um` is non-finite, $\le 0$,
 /// or if $\lambda^2 \approx C_i$.
-pub fn sellmeier_formula_1(
-    wavelength_um: f64,
-    b: [f64; 3],
-    c: [f64; 3],
-) -> Result<f64, OpticsError> {
+pub fn sellmeier_formula_1(wavelength_um: f64, b: [f64; 3], c: [f64; 3]) -> Result<f64, OpticsError> {
     if !wavelength_um.is_finite() || wavelength_um <= 0.0 {
         return Err(OpticsError::NumericalSingularity(
             "Wavelength must be positive and finite".to_string(),
@@ -70,11 +66,7 @@ pub fn sellmeier_formula_1(
 ///
 /// # Errors
 /// Returns [`OpticsError::NumericalSingularity`] if wavelength is non-finite or resonance is hit.
-pub fn sellmeier_formula_2(
-    wavelength_um: f64,
-    a: [f64; 3],
-    b: [f64; 3],
-) -> Result<f64, OpticsError> {
+pub fn sellmeier_formula_2(wavelength_um: f64, a: [f64; 3], b: [f64; 3]) -> Result<f64, OpticsError> {
     if !wavelength_um.is_finite() || wavelength_um <= 0.0 {
         return Err(OpticsError::NumericalSingularity(
             "Wavelength must be positive and finite".to_string(),

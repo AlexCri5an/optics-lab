@@ -56,18 +56,11 @@ pub fn compute_through_focus_spot(
     num_steps: usize,
 ) -> Result<ThroughFocusAnalysis, OpticsError> {
     if num_steps < 3 {
-        return Err(OpticsError::InvalidSurface(
-            "num_steps must be at least 3".to_string(),
-        ));
+        return Err(OpticsError::InvalidSurface("num_steps must be at least 3".to_string()));
     }
 
     let paraxial = calculate_paraxial_properties(prescription, wavelength_nm)?;
-    let base_spot = trace_spot_diagram(
-        prescription,
-        (0.0, field_angle_deg),
-        wavelength_nm,
-        pupil_pattern,
-    )?;
+    let base_spot = trace_spot_diagram(prescription, (0.0, field_angle_deg), wavelength_nm, pupil_pattern)?;
     let nominal_metrics = spot_diagram_metrics(
         &base_spot.points,
         wavelength_nm,
@@ -277,7 +270,7 @@ pub fn compute_two_bounce_ghosts(
     })
 }
 
-/// High-level Zemax-style prescription summary table.
+/// High-level prescription summary table.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PrescriptionSummary {
     /// System name.
@@ -310,11 +303,7 @@ pub fn generate_prescription_summary(
     let paraxial = calculate_paraxial_properties(prescription, wavelength_nm)?;
     let total_track: f64 = prescription.surfaces.iter().map(|s| s.thickness_mm).sum();
 
-    let stop_idx = prescription
-        .surfaces
-        .iter()
-        .position(|s| s.is_stop)
-        .unwrap_or(0);
+    let stop_idx = prescription.surfaces.iter().position(|s| s.is_stop).unwrap_or(0);
 
     Ok(PrescriptionSummary {
         name: prescription.name.clone(),
@@ -347,10 +336,10 @@ mod tests {
 
     #[test]
     fn test_compute_two_bounce_ghosts_singlet() -> Result<(), Box<dyn std::error::Error>> {
-        use std::sync::Arc;
         use crate::conic::ConicSurface;
         use crate::geometry::{Air, ConstantIndex};
         use crate::prescription::{ResolvedPrescription, ResolvedSurface};
+        use std::sync::Arc;
 
         let presc = ResolvedPrescription {
             name: "Plano-Convex Singlet".to_string(),
@@ -408,7 +397,11 @@ mod tests {
         };
 
         let ghost_analysis = compute_two_bounce_ghosts(&presc, 587.56, 0.04)?;
-        assert_eq!(ghost_analysis.ghosts.len(), 1, "Singlet has exactly 1 pair between surface 0 and 1");
+        assert_eq!(
+            ghost_analysis.ghosts.len(),
+            1,
+            "Singlet has exactly 1 pair between surface 0 and 1"
+        );
         let g = &ghost_analysis.ghosts[0];
         assert_eq!(g.surface_front, 0);
         assert_eq!(g.surface_rear, 1);

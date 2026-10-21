@@ -22,12 +22,7 @@ pub enum ControlFlow {
 /// Trait for observing optimization progress or requesting early cancellation.
 pub trait OptimizationCallback: Send + Sync {
     /// Invoked at the completion of each optimization iteration.
-    fn on_iteration(
-        &mut self,
-        iteration: usize,
-        merit_value: f64,
-        parameter_vector: &[f64],
-    ) -> ControlFlow;
+    fn on_iteration(&mut self, iteration: usize, merit_value: f64, parameter_vector: &[f64]) -> ControlFlow;
 }
 
 /// Configuration settings for the Damped Least Squares optimizer.
@@ -202,10 +197,7 @@ impl DlsOptimizer {
                         variables.clamp_values(&mut candidate_params);
 
                         let mut test_presc = current_prescription.clone();
-                        if variables
-                            .apply_values(&mut test_presc, &candidate_params)
-                            .is_ok()
-                        {
+                        if variables.apply_values(&mut test_presc, &candidate_params).is_ok() {
                             if let Ok(test_eval) = merit_function.evaluate(&test_presc, catalog) {
                                 if test_eval.total_merit.is_finite() && test_eval.total_merit < current_merit {
                                     // Successful reduction!

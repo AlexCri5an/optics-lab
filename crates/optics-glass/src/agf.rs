@@ -1,4 +1,4 @@
-//! Zemax AGF (ASCII Glass File) catalog parser.
+//! AGF (ASCII Glass File) catalog parser.
 //!
 //! Parses industry-standard `.agf` optical glass catalog files containing
 //! glass names, dispersion formula types, coefficients, thermal parameters,
@@ -9,7 +9,7 @@ use optics_spectral::thermal::SchottThermalModel;
 
 use crate::material::{DispersionModel, GlassCatalog, GlassMaterial};
 
-/// Parses a Zemax AGF glass catalog string into a vector of [`GlassMaterial`]s.
+/// Parses an AGF glass catalog string into a vector of [`GlassMaterial`]s.
 ///
 /// # Errors
 /// Returns [`OpticsError::ParseError`] if the format is invalid.
@@ -37,24 +37,13 @@ pub fn parse_agf(agf_text: &str) -> Result<Vec<GlassMaterial>, OpticsError> {
                 }
 
                 if tokens.len() < 2 {
-                    return Err(OpticsError::ParseError(
-                        "AGF 'NM' line missing glass name".to_string(),
-                    ));
+                    return Err(OpticsError::ParseError("AGF 'NM' line missing glass name".to_string()));
                 }
 
                 let name = tokens[1].to_string();
-                formula_code = tokens
-                    .get(2)
-                    .and_then(|s| s.parse::<u32>().ok())
-                    .unwrap_or(2);
-                let nd = tokens
-                    .get(4)
-                    .and_then(|s| s.parse::<f64>().ok())
-                    .unwrap_or(1.5);
-                let vd = tokens
-                    .get(5)
-                    .and_then(|s| s.parse::<f64>().ok())
-                    .unwrap_or(50.0);
+                formula_code = tokens.get(2).and_then(|s| s.parse::<u32>().ok()).unwrap_or(2);
+                let nd = tokens.get(4).and_then(|s| s.parse::<f64>().ok()).unwrap_or(1.5);
+                let vd = tokens.get(5).and_then(|s| s.parse::<f64>().ok()).unwrap_or(50.0);
 
                 current_glass = Some(GlassMaterial {
                     name,
@@ -103,16 +92,9 @@ pub fn parse_agf(agf_text: &str) -> Result<Vec<GlassMaterial>, OpticsError> {
             "IT" => {
                 if let Some(ref mut glass) = current_glass {
                     if tokens.len() >= 3 {
-                        if let (Ok(wl_um), Ok(transmittance)) =
-                            (tokens[1].parse::<f64>(), tokens[2].parse::<f64>())
-                        {
-                            let thickness = tokens
-                                .get(3)
-                                .and_then(|s| s.parse::<f64>().ok())
-                                .unwrap_or(10.0);
-                            glass
-                                .internal_transmittance
-                                .push((wl_um * 1000.0, transmittance));
+                        if let (Ok(wl_um), Ok(transmittance)) = (tokens[1].parse::<f64>(), tokens[2].parse::<f64>()) {
+                            let thickness = tokens.get(3).and_then(|s| s.parse::<f64>().ok()).unwrap_or(10.0);
+                            glass.internal_transmittance.push((wl_um * 1000.0, transmittance));
                             glass.test_thickness_mm = thickness;
                         }
                     }

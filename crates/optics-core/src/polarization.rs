@@ -370,11 +370,7 @@ pub fn surface_coating_jones(coating: &CoatingResponse) -> (JonesMatrix, JonesMa
 ///
 /// # Errors
 /// Returns [`OpticsError::InvalidParameter`] if refractive indices are invalid.
-pub fn surface_fresnel_jones(
-    n1: f64,
-    n2: f64,
-    angle_i_rad: f64,
-) -> Result<(JonesMatrix, JonesMatrix), OpticsError> {
+pub fn surface_fresnel_jones(n1: f64, n2: f64, angle_i_rad: f64) -> Result<(JonesMatrix, JonesMatrix), OpticsError> {
     if !n1.is_finite() || n1 <= 0.0 || !n2.is_finite() || n2 <= 0.0 || !angle_i_rad.is_finite() {
         return Err(OpticsError::InvalidParameter(
             "Invalid parameters to surface_fresnel_jones".to_string(),
@@ -388,8 +384,7 @@ pub fn surface_fresnel_jones(
     if sin_t.abs() > 1.0 {
         // Total internal reflection: rs and rp have magnitude 1.0 with phase shift
         let rs_phase = -2.0 * ((sin_i * sin_i - (n2 / n1).powi(2)).sqrt() / cos_i).atan();
-        let rp_phase = -2.0
-            * (((n1 / n2).powi(2) * (sin_i * sin_i - (n2 / n1).powi(2)).sqrt()) / cos_i).atan();
+        let rp_phase = -2.0 * (((n1 / n2).powi(2) * (sin_i * sin_i - (n2 / n1).powi(2)).sqrt()) / cos_i).atan();
 
         let rs = Complex::new(rs_phase.cos(), rs_phase.sin());
         let rp = Complex::new(rp_phase.cos(), rp_phase.sin());

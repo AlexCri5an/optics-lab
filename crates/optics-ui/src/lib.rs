@@ -1,5 +1,17 @@
 //! OpticsLab UI — academic minimalist design tokens, responsive layout, and Lucide icons.
 
+#![allow(
+    clippy::too_many_arguments,
+    clippy::field_reassign_with_default,
+    clippy::len_zero,
+    clippy::unnecessary_map_or,
+    clippy::match_like_matches_macro,
+    clippy::collapsible_if,
+    clippy::manual_clamp,
+    clippy::needless_range_loop,
+    clippy::overly_complex_bool_expr
+)]
+
 pub mod analysis;
 pub mod app;
 pub mod glass_browser;
@@ -18,24 +30,19 @@ pub use raytrace_viewport::{RaytraceEngine, render_raytrace_viewport};
 
 pub use analysis::{AnalysisPanelState, AnalysisTab, render_analysis_panel};
 pub use app::OpticsWorkbenchApp;
-pub use glass_browser::{
-    MaterialVendorFilter, render_materials_panel,
-};
-pub use icons::{
-    LucideIcon, lucide_small_icon_button, lucide_text_button, lucide_toolbar_button,
-    render_lucide_icon,
-};
+pub use glass_browser::{MaterialVendorFilter, render_materials_panel};
+pub use icons::{LucideIcon, lucide_small_icon_button, lucide_text_button, lucide_toolbar_button, render_lucide_icon};
 pub use layout::{Breakpoint, LayoutMetrics};
 pub use lens_editor::{LeftPanelTab, LensEditorState, render_lens_editor};
 pub use nonseq::{
-    render_nonseq_bottom_drawer, ArCoatingPreset, ColorScale, CrossSectionAxis, DetectorQuantity,
-    HeatmapPalette, NonSeqDrawerTab, NonSeqUiState, RayPathFilter,
+    ArCoatingPreset, ColorScale, CrossSectionAxis, DetectorQuantity, HeatmapPalette, NonSeqDrawerTab, NonSeqUiState,
+    RayPathFilter, render_nonseq_bottom_drawer,
 };
 pub use optimization::{DlsRunSummary, OptimizationModalState, render_optimization_panel};
 pub use theme::{OpticsTokens, ThemeMode};
 pub use tolerancing::{
-    render_tolerancing_dialog, render_tolerancing_panel_view, TolerancingAction,
-    TolerancingModalState, TolerancingSubtab,
+    TolerancingAction, TolerancingModalState, TolerancingSubtab, render_tolerancing_dialog,
+    render_tolerancing_panel_view,
 };
 pub use topbar::{TopBarAction, TopBarState, render_topbar};
 pub use viewport::{ViewportState, render_optical_viewport};

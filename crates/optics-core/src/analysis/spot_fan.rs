@@ -177,10 +177,7 @@ pub fn launch_pupil_ray(
     let norm_dir = Vec3::new(kx, ky, kz);
 
     // Launch plane placed in front of the first optical surface vertex, scaled by pupil size
-    let z_first = prescription
-        .surfaces
-        .first()
-        .map_or(0.0, |s| s.conic.vertex_z);
+    let z_first = prescription.surfaces.first().map_or(0.0, |s| s.conic.vertex_z);
     let margin = (prescription.entrance_pupil_diameter_mm * 1.5).clamp(0.5, 10.0);
     let z_launch = z_first - margin;
 
@@ -350,10 +347,7 @@ pub fn trace_spot_diagram(
         },
         |p| p.entrance_pupil_pos_mm,
     );
-    let z_first = prescription
-        .surfaces
-        .first()
-        .map_or(0.0, |s| s.conic.vertex_z);
+    let z_first = prescription.surfaces.first().map_or(0.0, |s| s.conic.vertex_z);
     let z_enp = z_first + enp_pos;
 
     // Trace reference chief ray (Px = 0, Py = 0)
@@ -370,9 +364,7 @@ pub fn trace_spot_diagram(
             let last_surf = prescription.surfaces.last();
             let is_plane = last_surf.is_some_and(|s| s.thickness_mm == 0.0);
             if is_plane {
-                path.hits
-                    .last()
-                    .map_or((0.0, 0.0), |h| (h.point.x, h.point.y))
+                path.hits.last().map_or((0.0, 0.0), |h| (h.point.x, h.point.y))
             } else {
                 let d = last_surf.map_or(0.0, |s| s.thickness_mm);
                 let z_target = last_surf.map_or(0.0, |s| s.conic.vertex_z) + d;
@@ -391,8 +383,7 @@ pub fn trace_spot_diagram(
     let mut points = Vec::with_capacity(total_traced);
 
     for pupil in pupil_coords {
-        let Ok(ray) = launch_pupil_ray(prescription, pupil, field_angle_deg, wavelength_nm, z_enp)
-        else {
+        let Ok(ray) = launch_pupil_ray(prescription, pupil, field_angle_deg, wavelength_nm, z_enp) else {
             continue;
         };
 
@@ -400,9 +391,7 @@ pub fn trace_spot_diagram(
             let last_surf = prescription.surfaces.last();
             let is_plane = last_surf.is_some_and(|s| s.thickness_mm == 0.0);
             let (x_mm, y_mm) = if is_plane {
-                path.hits
-                    .last()
-                    .map_or((0.0, 0.0), |h| (h.point.x, h.point.y))
+                path.hits.last().map_or((0.0, 0.0), |h| (h.point.x, h.point.y))
             } else {
                 let d = last_surf.map_or(0.0, |s| s.thickness_mm);
                 let z_target = last_surf.map_or(0.0, |s| s.conic.vertex_z) + d;
@@ -487,10 +476,7 @@ pub fn trace_ray_fan(
         },
         |p| p.entrance_pupil_pos_mm,
     );
-    let z_first = prescription
-        .surfaces
-        .first()
-        .map_or(0.0, |s| s.conic.vertex_z);
+    let z_first = prescription.surfaces.first().map_or(0.0, |s| s.conic.vertex_z);
     let z_enp = z_first + enp_pos;
 
     // Trace reference chief ray (Px = 0, Py = 0)
@@ -507,9 +493,7 @@ pub fn trace_ray_fan(
             let last_surf = prescription.surfaces.last();
             let is_plane = last_surf.is_some_and(|s| s.thickness_mm == 0.0);
             if is_plane {
-                path.hits
-                    .last()
-                    .map_or((0.0, 0.0), |h| (h.point.x, h.point.y))
+                path.hits.last().map_or((0.0, 0.0), |h| (h.point.x, h.point.y))
             } else {
                 let d = last_surf.map_or(0.0, |s| s.thickness_mm);
                 let z_target = last_surf.map_or(0.0, |s| s.conic.vertex_z) + d;
@@ -747,12 +731,7 @@ mod tests {
         }
 
         // 2. Spot diagram must have zero RMS blur (< 1e-6 um) and be strictly diffraction-limited
-        let spot = trace_spot_diagram(
-            &presc,
-            (0.0, 0.0),
-            587.56,
-            PupilPattern::Hexapolar { num_rings: 6 },
-        )?;
+        let spot = trace_spot_diagram(&presc, (0.0, 0.0), 587.56, PupilPattern::Hexapolar { num_rings: 6 })?;
         assert!(spot.metrics.rms_radius_um < 1e-6);
         assert!(spot.metrics.geo_radius_um < 1e-6);
         assert!(spot.metrics.is_diffraction_limited);
@@ -965,12 +944,12 @@ mod tests {
                         surface_index: 1,
                         conic: ConicSurface::sphere(r1, 15.0)?.with_vertex_z(0.0),
                         asphere: None,
-                    coordinate_break: None,
-                    global_transform: None,
-                    grin_profile: None,
-                    profile: None,
+                        coordinate_break: None,
+                        global_transform: None,
+                        grin_profile: None,
+                        profile: None,
                         aperture: None,
-                    coating: None,
+                        coating: None,
                         thickness_mm: d,
                         material: Arc::new(ConstantIndex(n_val)),
                         material_name: "Glass".to_string(),
@@ -980,12 +959,12 @@ mod tests {
                         surface_index: 2,
                         conic: ConicSurface::sphere(r2, 15.0)?.with_vertex_z(d),
                         asphere: None,
-                    coordinate_break: None,
-                    global_transform: None,
-                    grin_profile: None,
-                    profile: None,
+                        coordinate_break: None,
+                        global_transform: None,
+                        grin_profile: None,
+                        profile: None,
                         aperture: None,
-                    coating: None,
+                        coating: None,
                         thickness_mm: bfl_d,
                         material: Arc::new(Air),
                         material_name: "AIR".to_string(),
@@ -995,12 +974,12 @@ mod tests {
                         surface_index: 3,
                         conic: ConicSurface::plane(15.0)?.with_vertex_z(d + bfl_d),
                         asphere: None,
-                    coordinate_break: None,
-                    global_transform: None,
-                    grin_profile: None,
-                    profile: None,
+                        coordinate_break: None,
+                        global_transform: None,
+                        grin_profile: None,
+                        profile: None,
                         aperture: None,
-                    coating: None,
+                        coating: None,
                         thickness_mm: 0.0,
                         material: Arc::new(Air),
                         material_name: "AIR".to_string(),
