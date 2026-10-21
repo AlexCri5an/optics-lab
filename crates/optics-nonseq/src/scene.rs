@@ -4,7 +4,7 @@ use crate::detector::Detector2D;
 use crate::error::NonSeqError;
 use crate::geometry::{NonSeqHit, PrimitiveGeometry, Transform3D};
 use crate::material::{NonSeqMaterial, OpticalMedium};
-use crate::source::RaySource;
+use crate::source::{RaySource, SourceSpectrum};
 use optics_core::prescription::OpticalPrescription;
 use optics_core::tessellate::{tessellate_conic_surface, tessellate_lens_rim};
 use optics_core::{Ray, Vec3};
@@ -248,5 +248,100 @@ impl NonSeqScene {
         };
 
         Ok(self.add_object(obj))
+    }
+
+    /// Automatically synthesizes a complete non-sequential scene from an optical prescription,
+    /// converting sequential surfaces into solid 3D watertight elements, a collimated entrance pupil
+    /// source, and a pixelated radiometric detector at the image surface.
+    pub fn build_from_prescription(
+        prescription: &OpticalPrescription,
+        detector_res: usize,
+    ) -> Result<Self, NonSeqError> {
+        let mut scene = Self::new();
+        let num_surfaces = prescription.surfaces.len();
+        if num_surfaces < 2 {
+            return Err(NonSeqError::InvalidGeometry(
+                "Prescription must contain at least 2 surfaces to build a scene".to_string(),
+            ));
+        }
+
+        let mut element_idx = 1;
+        let mut i = 0;
+        while i + 1 < num_surfaces {
+            let surf = &prescription.surfaces[i];
+            let mat = surf.material_name.trim();
+            let is_glass = !mat.is_empty()
+                && !mat.eq_ignore_ascii_case("AIR")
+                && !mat.eq_ignore_ascii_case("VACUUM")
+                && !mat.eq_ignore_ascii_case("NONE");
+
+            if is_glass {
+                let name = format!("Element_{}_{}", element_idx, mat);
+                let medium = OpticalMedium::GlassCatalog {
+                    name: mat.to_string(),
+                };
+                let material = NonSeqMaterial::dielectric(medium);
+                scene.add_prescription_lens(
+                    &name,
+                    prescription,
+                    i,
+                    i + 1,
+                    material,
+                    32,
+                    16,
+                )?;
+                element_idx += 1;
+            }
+            i += 1;
+        }
+
+        // Calculate total track distance to image plane
+        let mut z_image = 0.0;
+        for s in &prescription.surfaces[..num_surfaces - 1] {
+            z_image += s.thickness_mm;
+        }
+
+        let img_semi_diam = prescription
+            .surfaces
+            .last()
+            .map(|s| s.semi_diameter_mm)
+            .unwrap_or(10.0);
+        let det_size = (img_semi_diam * 2.0).max(4.0);
+        let res = detector_res.clamp(10, 256);
+
+        // Add 2D pixelated detector at image plane
+        let detector = Detector2D::new(
+            0,
+            "ImageDetector",
+            Vec3::new(0.0, 0.0, z_image),
+            Vec3::new(0.0, 0.0, 1.0),
+            Vec3::new(0.0, 1.0, 0.0),
+            det_size,
+            det_size,
+            res,
+            res,
+        )?;
+        scene.add_detector(detector);
+
+        let primary_wl = prescription
+            .wavelengths_nm
+            .get(prescription.primary_wavelength_index)
+            .copied()
+            .unwrap_or(587.56);
+
+        // Add collimated source on entrance pupil
+        let epd = prescription.entrance_pupil_diameter_mm.max(1.0);
+        let source = RaySource::CollimatedBeam {
+            center: Vec3::new(0.0, 0.0, -10.0),
+            direction: Vec3::new(0.0, 0.0, 1.0),
+            radius: epd * 0.5,
+            total_flux_watts: 1.0,
+            spectrum: SourceSpectrum::Monochromatic {
+                wavelength_nm: primary_wl,
+            },
+        };
+        scene.add_source(source);
+
+        Ok(scene)
     }
 }

@@ -2604,6 +2604,7 @@ dependencies = [
  "optics-core",
  "optics-engine",
  "optics-glass",
+ "optics-nonseq",
  "optics-optimize",
  "optics-tolerance",
  "optics-zemax",

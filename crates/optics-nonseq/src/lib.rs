@@ -495,4 +495,39 @@ mod tests {
 
         Ok(())
     }
+
+    /// Verification of automatic NonSeqScene synthesis from full Cooke Triplet prescription.
+    #[test]
+    fn test_cooke_triplet_build_from_prescription_and_raytrace() -> TestResult {
+        let cooke = optics_zemax::presets::cooke_triplet_f4_5()?;
+        let catalog = GlassCatalogDb::load_bundled()?;
+
+        let mut scene = NonSeqScene::build_from_prescription(&cooke, 40)?;
+        assert_eq!(scene.objects.len(), 3, "Cooke triplet must synthesize exactly 3 glass elements");
+        assert_eq!(scene.detectors.len(), 1, "Must contain exactly 1 focal plane detector");
+        assert_eq!(scene.sources.len(), 1, "Must contain 1 entrance pupil collimated source");
+
+        // Trace non-sequential rays with branching enabled
+        let rays = scene.sources[0].generate_rays(80, 12345)?;
+        let tracer = NonSeqTracer::new(NonSeqTraceConfig {
+            max_bounces: 15,
+            min_power_threshold: 1e-5,
+            enable_branching: true,
+            record_paths: true,
+        });
+
+        let report = tracer.trace_rays(&mut scene, &rays, Some(&catalog))?;
+        assert!(report.total_rays_traced > 0);
+        assert!(report.paths.len() > rays.len(), "Ray branching must produce reflected/refracted paths");
+
+        let det = &scene.detectors[0];
+        assert!(det.total_rays_hit > 0, "Detector must capture focused rays");
+        assert!(det.total_flux_watts > 0.0);
+
+        let (cx, cy) = det.centroid_mm();
+        assert!(cx.abs() < 0.5, "Centroid X should be near axis, got {cx}");
+        assert!(cy.abs() < 0.5, "Centroid Y should be near axis, got {cy}");
+
+        Ok(())
+    }
 }
