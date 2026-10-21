@@ -506,85 +506,100 @@ pub fn render_nonseq_bottom_drawer(
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 6.0;
-                let toggle_icon = if state.drawer_open {
-                    LucideIcon::Minus
-                } else {
-                    LucideIcon::Plus
-                };
-                if lucide_small_icon_button(ui, toggle_icon, "Toggle Non-Sequential Viewer", tokens).clicked() {
-                    state.drawer_open = !state.drawer_open;
-                }
 
-                let title = if is_compact {
-                    "NON-SEQ & GHOSTS"
-                } else {
-                    "NON-SEQUENTIAL DETECTOR VIEWER & STRAY LIGHT"
-                };
-                ui.label(
-                    RichText::new(title)
-                        .monospace()
-                        .strong()
-                        .size(10.5)
-                        .color(tokens.text_primary),
-                );
-
-                ui.separator();
-
-                let det_active = state.active_tab == NonSeqDrawerTab::DetectorViewer;
-                let det_label = if is_compact { "2D Detector" } else { "2D Detector Map" };
-                let btn_det = ui.add(
-                    Button::new(
-                        RichText::new(det_label)
-                            .monospace()
-                            .size(10.0)
-                            .color(if det_active { tokens.text_primary } else { tokens.text_muted }),
-                    )
-                    .fill(if det_active { tokens.bg_control_active } else { tokens.bg_control })
-                    .stroke(if det_active { tokens.border_hovered } else { tokens.border })
-                    .corner_radius(CornerRadius::ZERO),
-                );
-                if btn_det.clicked() {
-                    state.active_tab = NonSeqDrawerTab::DetectorViewer;
-                }
-
-                let ghost_active = state.active_tab == NonSeqDrawerTab::GhostFocusMatrix;
-                let ghost_label = if is_compact { "Ghost Matrix" } else { "Ghost Focus Matrix (2-Bounce)" };
-                let btn_ghost = ui.add(
-                    Button::new(
-                        RichText::new(ghost_label)
-                            .monospace()
-                            .size(10.0)
-                            .color(if ghost_active { tokens.text_primary } else { tokens.text_muted }),
-                    )
-                    .fill(if ghost_active { tokens.bg_control_active } else { tokens.bg_control })
-                    .stroke(if ghost_active { tokens.border_hovered } else { tokens.border })
-                    .corner_radius(CornerRadius::ZERO),
-                );
-                if btn_ghost.clicked() {
-                    state.active_tab = NonSeqDrawerTab::GhostFocusMatrix;
-                    if state.ghost_analysis.is_none() {
-                        state.compute_ghost_matrix(prescription, catalog);
-                    }
-                }
-
-                if !is_compact {
-                    if let Some(msg) = &state.status_message {
-                        ui.label(RichText::new("|").size(9.0).color(tokens.border.color));
-                        let short_msg = if msg.len() > 45 { &msg[..45] } else { msg.as_str() };
-                        ui.label(
-                            RichText::new(short_msg)
-                                .monospace()
-                                .size(9.5)
-                                .color(tokens.text_muted),
-                        );
-                    }
-                }
-
+                // Right-aligned checkbox placed first to guarantee full visibility
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let ghost_label_color = if state.show_ghost_rays_in_viewport {
+                        tokens.warning
+                    } else {
+                        tokens.text_primary
+                    };
                     ui.checkbox(
                         &mut state.show_ghost_rays_in_viewport,
-                        RichText::new(if is_compact { "Ghost Rays" } else { "Show Ghost Rays" }).monospace().size(10.0),
-                    );
+                        RichText::new(if is_compact { "Ghost Rays" } else { "Show Ghost Rays" })
+                            .monospace()
+                            .strong()
+                            .size(10.0)
+                            .color(ghost_label_color),
+                    )
+                    .on_hover_text("Toggle non-sequential ghost reflections overlay in 2D CAD & 3D viewports");
+
+                    // Left-to-right contents
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                        let toggle_icon = if state.drawer_open {
+                            LucideIcon::Minus
+                        } else {
+                            LucideIcon::Plus
+                        };
+                        if lucide_small_icon_button(ui, toggle_icon, "Toggle Non-Sequential Viewer", tokens).clicked() {
+                            state.drawer_open = !state.drawer_open;
+                        }
+
+                        let title = if is_compact {
+                            "NON-SEQ & GHOSTS"
+                        } else {
+                            "NON-SEQUENTIAL DETECTOR VIEWER & STRAY LIGHT"
+                        };
+                        ui.label(
+                            RichText::new(title)
+                                .monospace()
+                                .strong()
+                                .size(10.5)
+                                .color(tokens.text_primary),
+                        );
+
+                        ui.separator();
+
+                        let det_active = state.active_tab == NonSeqDrawerTab::DetectorViewer;
+                        let det_label = if is_compact { "2D Detector" } else { "2D Detector Map" };
+                        let btn_det = ui.add(
+                            Button::new(
+                                RichText::new(det_label)
+                                    .monospace()
+                                    .size(10.0)
+                                    .color(if det_active { tokens.text_primary } else { tokens.text_muted }),
+                            )
+                            .fill(if det_active { tokens.bg_control_active } else { tokens.bg_control })
+                            .stroke(if det_active { tokens.border_hovered } else { tokens.border })
+                            .corner_radius(CornerRadius::ZERO),
+                        );
+                        if btn_det.clicked() {
+                            state.active_tab = NonSeqDrawerTab::DetectorViewer;
+                        }
+
+                        let ghost_active = state.active_tab == NonSeqDrawerTab::GhostFocusMatrix;
+                        let ghost_label = if is_compact { "Ghost Matrix" } else { "Ghost Focus Matrix (2-Bounce)" };
+                        let btn_ghost = ui.add(
+                            Button::new(
+                                RichText::new(ghost_label)
+                                    .monospace()
+                                    .size(10.0)
+                                    .color(if ghost_active { tokens.text_primary } else { tokens.text_muted }),
+                            )
+                            .fill(if ghost_active { tokens.bg_control_active } else { tokens.bg_control })
+                            .stroke(if ghost_active { tokens.border_hovered } else { tokens.border })
+                            .corner_radius(CornerRadius::ZERO),
+                        );
+                        if btn_ghost.clicked() {
+                            state.active_tab = NonSeqDrawerTab::GhostFocusMatrix;
+                            if state.ghost_analysis.is_none() {
+                                state.compute_ghost_matrix(prescription, catalog);
+                            }
+                        }
+
+                        if avail_w > 920.0 {
+                            if let Some(msg) = &state.status_message {
+                                ui.label(RichText::new("|").size(9.0).color(tokens.border.color));
+                                let short_msg = if msg.len() > 36 { &msg[..36] } else { msg.as_str() };
+                                ui.label(
+                                    RichText::new(short_msg)
+                                        .monospace()
+                                        .size(9.5)
+                                        .color(tokens.text_muted),
+                                );
+                            }
+                        }
+                    });
                 });
             });
         });
@@ -665,7 +680,7 @@ fn render_detector_viewer_tab(
 
     ui.add_space(2.0);
 
-    // Row 2: Filtering, Palette, Scale, Quantity, and Slice Axis
+    // Row 2: Filtering & Physical Metric (Radiometric vs Photometric)
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;
 
@@ -673,7 +688,7 @@ fn render_detector_viewer_tab(
         ui.label(RichText::new("Filter:").monospace().size(9.5).color(tokens.text_muted));
         egui::ComboBox::from_id_salt("ns_ray_filter_cb")
             .selected_text(RichText::new(state.ray_filter.display_name()).monospace().size(9.5))
-            .width(105.0)
+            .width(110.0)
             .show_ui(ui, |ui| {
                 for f in [
                     RayPathFilter::All,
@@ -688,11 +703,33 @@ fn render_detector_viewer_tab(
                 }
             });
 
+        ui.separator();
+
+        // Radiometric vs Photometric
+        ui.label(RichText::new("Metric:").monospace().size(9.5).color(tokens.text_muted));
+        egui::ComboBox::from_id_salt("ns_quantity_cb")
+            .selected_text(RichText::new(state.quantity.display_name()).monospace().size(9.5))
+            .width(105.0)
+            .show_ui(ui, |ui| {
+                for q in [DetectorQuantity::Irradiance, DetectorQuantity::Illuminance] {
+                    if ui.selectable_label(state.quantity == q, q.display_name()).clicked() {
+                        state.quantity = q;
+                    }
+                }
+            });
+    });
+
+    ui.add_space(2.0);
+
+    // Row 3: Color Palette, Scale, and 1D Profile Slice Axis
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
+
         // Palette dropdown
         ui.label(RichText::new("Palette:").monospace().size(9.5).color(tokens.text_muted));
         egui::ComboBox::from_id_salt("ns_palette_cb")
             .selected_text(RichText::new(state.palette.display_name()).monospace().size(9.5))
-            .width(65.0)
+            .width(72.0)
             .show_ui(ui, |ui| {
                 for p in [
                     HeatmapPalette::Inferno,
@@ -707,6 +744,7 @@ fn render_detector_viewer_tab(
             });
 
         // Scale dropdown (Linear vs Log)
+        ui.label(RichText::new("Scale:").monospace().size(9.5).color(tokens.text_muted));
         egui::ComboBox::from_id_salt("ns_scale_cb")
             .selected_text(RichText::new(state.color_scale.display_name()).monospace().size(9.5))
             .width(75.0)
@@ -718,23 +756,11 @@ fn render_detector_viewer_tab(
                 }
             });
 
-        // Radiometric vs Photometric
-        egui::ComboBox::from_id_salt("ns_quantity_cb")
-            .selected_text(RichText::new(state.quantity.display_name()).monospace().size(9.5))
-            .width(95.0)
-            .show_ui(ui, |ui| {
-                for q in [DetectorQuantity::Irradiance, DetectorQuantity::Illuminance] {
-                    if ui.selectable_label(state.quantity == q, q.display_name()).clicked() {
-                        state.quantity = q;
-                    }
-                }
-            });
-
         // 1D Slice Axis
         ui.label(RichText::new("Slice:").monospace().size(9.5).color(tokens.text_muted));
         egui::ComboBox::from_id_salt("ns_cs_axis_cb")
             .selected_text(RichText::new(state.cross_section_axis.display_name()).monospace().size(9.5))
-            .width(85.0)
+            .width(88.0)
             .show_ui(ui, |ui| {
                 for axis in [CrossSectionAxis::Horizontal, CrossSectionAxis::Vertical, CrossSectionAxis::Both] {
                     if ui.selectable_label(state.cross_section_axis == axis, axis.display_name()).clicked() {
@@ -871,6 +897,19 @@ fn render_ghost_matrix_table(
             RichText::new("Focused Only").monospace().size(9.5),
         );
 
+        let ghost_text_color = if state.show_ghost_rays_in_viewport {
+            tokens.warning
+        } else {
+            tokens.text_primary
+        };
+        ui.checkbox(
+            &mut state.show_ghost_rays_in_viewport,
+            RichText::new("Show Ghost Rays")
+                .monospace()
+                .size(9.5)
+                .color(ghost_text_color),
+        ).on_hover_text("Toggle display of 2-bounce ghost reflections overlay in 2D and 3D viewports");
+
         if let Some(ga) = &state.ghost_analysis {
             ui.label(RichText::new("|").size(9.0).color(tokens.border.color));
             ui.label(
@@ -899,7 +938,7 @@ fn render_ghost_matrix_table(
 
     ScrollArea::both()
         .auto_shrink([false, false])
-        .max_height(145.0)
+        .max_height(155.0)
         .show(ui, |ui| {
             ui.set_min_width(total_table_w);
 

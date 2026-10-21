@@ -178,6 +178,7 @@ impl eframe::App for OpticsWorkbenchApp {
         visuals.widgets.noninteractive.fg_stroke = egui::Stroke::new(1.0, tokens.text_muted);
         visuals.widgets.noninteractive.corner_radius = egui::CornerRadius::ZERO;
         visuals.widgets.inactive.bg_fill = tokens.bg_control;
+        visuals.widgets.inactive.bg_stroke = tokens.border_hovered;
         visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, tokens.text_primary);
         visuals.widgets.inactive.corner_radius = egui::CornerRadius::ZERO;
 
@@ -527,7 +528,7 @@ impl eframe::App for OpticsWorkbenchApp {
         // 7b. Non-Sequential & Stray Light Bottom Drawer (Docked under viewport)
         // -------------------------------------------------------------------
         let drawer_height = if self.nonseq_state.drawer_open {
-            236.0_f32.min(window_size.y * 0.35)
+            248.0_f32.min(window_size.y * 0.38)
         } else {
             28.0
         };
