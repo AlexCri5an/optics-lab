@@ -81,6 +81,8 @@ pub enum TopBarAction {
     ShowPolarization,
     /// Open Optical Tolerancing and Monte Carlo simulation hub.
     OpenTolerancing,
+    /// Toggle Non-Sequential & Stray Light detector viewer bottom drawer.
+    ToggleNonSeqDrawer,
 }
 
 /// State for the TopBar component.
@@ -100,6 +102,8 @@ pub struct TopBarState {
     pub is_dirty: bool,
     /// List of recently opened or saved files.
     pub recent_files: Vec<std::path::PathBuf>,
+    /// Whether the bottom drawer (Non-Sequential & Stray Light) is open.
+    pub nonseq_drawer_open: bool,
 }
 
 impl Default for TopBarState {
@@ -112,6 +116,7 @@ impl Default for TopBarState {
             current_file_name: "Cooke Triplet F/4.5.zmx".to_string(),
             is_dirty: false,
             recent_files: Vec::new(),
+            nonseq_drawer_open: false,
         }
     }
 }
@@ -281,6 +286,11 @@ pub fn render_topbar(
                         triggered_action = Some(TopBarAction::OpenTolerancing);
                         ui.close();
                     }
+                    ui.separator();
+                    if ui.button("Non-Sequential & Stray Light Detector").clicked() {
+                        triggered_action = Some(TopBarAction::ToggleNonSeqDrawer);
+                        ui.close();
+                    }
                 });
 
                 ui.menu_button("Optimize", |ui| {
@@ -331,6 +341,10 @@ pub fn render_topbar(
                     }
                     if ui.button(if state.right_panel_open { "Hide Analysis Panel" } else { "Show Analysis Panel" }).clicked() {
                         triggered_action = Some(TopBarAction::ToggleRightPanel);
+                        ui.close();
+                    }
+                    if ui.button(if state.nonseq_drawer_open { "Hide Non-Seq Detector Drawer" } else { "Show Non-Seq Detector Drawer" }).clicked() {
+                        triggered_action = Some(TopBarAction::ToggleNonSeqDrawer);
                         ui.close();
                     }
                     ui.separator();
@@ -453,6 +467,16 @@ pub fn render_topbar(
                 tokens,
             ).clicked() {
                 triggered_action = Some(TopBarAction::ToggleRightPanel);
+            }
+
+            if lucide_toolbar_button(
+                ui,
+                LucideIcon::PanelBottom,
+                if state.nonseq_drawer_open { "Hide Non-Seq Detector Drawer" } else { "Show Non-Seq Detector Drawer" },
+                state.nonseq_drawer_open,
+                tokens,
+            ).clicked() {
+                triggered_action = Some(TopBarAction::ToggleNonSeqDrawer);
             }
 
             // Right side of toolbar: Retro Theme Selector Dropdown + Quick Cycle Button

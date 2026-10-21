@@ -16,6 +16,7 @@ optics-core = { workspace = true }
 optics-engine = { workspace = true }
 optics-glass = { workspace = true }
 optics-optimize = { workspace = true }
+optics-nonseq = { workspace = true }
 optics-tolerance = { workspace = true }
 optics-zemax = { workspace = true }
 rfd = { workspace = true }

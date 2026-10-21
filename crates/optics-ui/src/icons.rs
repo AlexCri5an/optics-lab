@@ -31,6 +31,8 @@ pub enum LucideIcon {
     PanelLeft,
     /// Toggle right panel (Aberration & Analysis).
     PanelRight,
+    /// Toggle bottom panel (Non-Sequential & Stray Light Drawer).
+    PanelBottom,
     /// System and simulation properties.
     SlidersHorizontal,
     /// Switch to light paper mode.
@@ -104,6 +106,9 @@ impl LucideIcon {
             }
             Self::PanelRight => {
                 r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg>"#
+            }
+            Self::PanelBottom => {
+                r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 15h18"/></svg>"#
             }
             Self::SlidersHorizontal => {
                 r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg>"#
@@ -181,6 +186,7 @@ impl LucideIcon {
             Self::Maximize2 => "bytes://lucide/maximize-2.svg",
             Self::PanelLeft => "bytes://lucide/panel-left.svg",
             Self::PanelRight => "bytes://lucide/panel-right.svg",
+            Self::PanelBottom => "bytes://lucide/panel-bottom.svg",
             Self::SlidersHorizontal => "bytes://lucide/sliders-horizontal.svg",
             Self::Sun => "bytes://lucide/sun.svg",
             Self::Moon => "bytes://lucide/moon.svg",
@@ -316,6 +322,7 @@ mod tests {
             LucideIcon::Maximize2,
             LucideIcon::PanelLeft,
             LucideIcon::PanelRight,
+            LucideIcon::PanelBottom,
             LucideIcon::SlidersHorizontal,
             LucideIcon::Sun,
             LucideIcon::Moon,

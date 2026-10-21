@@ -16,6 +16,7 @@ use crate::glass_browser::render_materials_panel;
 use crate::icons::{LucideIcon, lucide_small_icon_button};
 use crate::layout::{Breakpoint, LayoutMetrics};
 use crate::lens_editor::{LeftPanelTab, LensEditorState, render_lens_editor};
+use crate::nonseq::{render_nonseq_bottom_drawer, NonSeqUiState};
 use crate::optimization::{OptimizationModalState, render_optimization_panel};
 use crate::theme::OpticsTokens;
 use crate::tolerancing::{TolerancingAction, TolerancingModalState};
@@ -53,6 +54,8 @@ pub struct OpticsWorkbenchApp {
     pub optimization_state: OptimizationModalState,
     /// State of the manufacturing tolerancing and Monte Carlo hub.
     pub tolerancing_state: TolerancingModalState,
+    /// State of the non-sequential ray tracing & detector viewer drawer.
+    pub nonseq_state: NonSeqUiState,
     /// Last action dispatched from the top bar.
     pub last_action_msg: String,
     /// Current ray count or optical status info.
@@ -104,6 +107,7 @@ impl Default for OpticsWorkbenchApp {
             analysis_state: AnalysisPanelState::default(),
             optimization_state: OptimizationModalState::default(),
             tolerancing_state: TolerancingModalState::default(),
+            nonseq_state: NonSeqUiState::default(),
             last_action_msg: "Loaded preset: Cooke Triplet F/4.5".to_string(),
             status_text: format!("Surfaces: {} | EPD: {:.1} mm | Status: Ready", surf_count, epd),
             current_file_path: None,
@@ -510,10 +514,35 @@ impl eframe::App for OpticsWorkbenchApp {
         }
 
         // -------------------------------------------------------------------
+        // 7b. Non-Sequential & Stray Light Bottom Drawer (Docked under viewport)
+        // -------------------------------------------------------------------
+        TopBottomPanel::bottom("nonseq_bottom_drawer")
+            .resizable(false)
+            .show_separator_line(false)
+            .frame(
+                egui::Frame::NONE
+                    .fill(tokens.bg_panel)
+                    .inner_margin(egui::Margin::ZERO),
+            )
+            .show(ctx, |ui| {
+                render_nonseq_bottom_drawer(
+                    ui,
+                    &mut self.nonseq_state,
+                    &self.prescription,
+                    &self.catalog,
+                    &tokens,
+                );
+            });
+
+        // -------------------------------------------------------------------
         // 8. Central Viewport (2D Optical Canvas)
         // -------------------------------------------------------------------
         // Synchronize ray aiming mode bidirectionally between System Explorer and Viewport
         self.viewport_state.ray_aiming_mode = self.lens_editor_state.ray_aiming_mode;
+        // Synchronize ghost ray trajectories from NonSeq state to Viewport state
+        self.viewport_state.ghost_rays = self.nonseq_state.ghost_ray_paths().to_vec();
+        // Synchronize drawer toggle with topbar
+        self.topbar_state.nonseq_drawer_open = self.nonseq_state.drawer_open;
 
         CentralPanel::default()
             .frame(egui::Frame::NONE.fill(tokens.bg_canvas))
@@ -1142,6 +1171,15 @@ impl OpticsWorkbenchApp {
                 self.analysis_state.active_tab = crate::analysis::AnalysisTab::Tolerancing;
                 self.tolerancing_state.init_if_needed(&self.prescription, &self.catalog);
                 self.last_action_msg = "Analysis: Switched to Tolerancing & Monte Carlo tab.".to_string();
+            }
+            TopBarAction::ToggleNonSeqDrawer => {
+                self.nonseq_state.drawer_open = !self.nonseq_state.drawer_open;
+                self.topbar_state.nonseq_drawer_open = self.nonseq_state.drawer_open;
+                self.last_action_msg = if self.nonseq_state.drawer_open {
+                    "Opened Non-Sequential Detector Drawer.".to_string()
+                } else {
+                    "Closed Non-Sequential Detector Drawer.".to_string()
+                };
             }
         }
     }

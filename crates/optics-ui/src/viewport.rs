@@ -35,6 +35,8 @@ pub struct ViewportState {
     pub ray_count: usize,
     /// Ray aiming mode (Paraxial vs Real Iterative pupil aiming).
     pub ray_aiming_mode: optics_core::RayAimingMode,
+    /// Optional non-sequential ghost ray path segments to overlay in the viewport.
+    pub ghost_rays: Vec<optics_nonseq::trace::RayPathSegment>,
 }
 
 impl Default for ViewportState {
@@ -46,6 +48,7 @@ impl Default for ViewportState {
             show_rays: true, // Visible by default
             ray_count: 5,    // Standard 5-ray beam
             ray_aiming_mode: optics_core::RayAimingMode::Paraxial,
+            ghost_rays: Vec::new(),
         }
     }
 }
@@ -235,6 +238,11 @@ pub fn render_optical_viewport(
     // Layer E: Multi-Wavelength Ray Tracing (Real-Time Refraction)
     if state.show_rays {
         draw_sequential_rays(&painter, prescription, state.ray_count, state.ray_aiming_mode, to_screen, tokens);
+    }
+
+    // Layer E2: Non-Sequential Ghost Rays & Internal Reflections
+    if !state.ghost_rays.is_empty() {
+        draw_ghost_rays(&painter, &state.ghost_rays, to_screen, tokens);
     }
 
     // Layer F: High-Contrast Plane Markers (STO, IMAGE)
@@ -902,6 +910,36 @@ fn draw_sequential_rays(
                 trace_ray(frac * semi_epd, u_neg, primary_wl, col.gamma_multiply(0.7), 1.0);
             }
         }
+    }
+}
+
+/// Draws non-sequential ghost rays and internal reflections with intensity-based alpha and color coding.
+fn draw_ghost_rays(
+    painter: &Painter,
+    ghost_rays: &[optics_nonseq::trace::RayPathSegment],
+    to_screen: impl Fn(f64, f64) -> Pos2,
+    _tokens: &OpticsTokens,
+) {
+    for seg in ghost_rays {
+        let p1 = to_screen(seg.start.z, seg.start.y);
+        let p2 = to_screen(seg.end.z, seg.end.y);
+
+        // Color and stroke based on interaction type and power
+        let (color, width) = if seg.interaction == "FresnelReflect" {
+            // Internal ghost reflection: amber-orange with intensity-modulated alpha
+            let alpha = ((seg.power_watts * 8.0).clamp(0.20, 0.95) * 255.0) as u8;
+            (Color32::from_rgba_unmultiplied(255, 130, 30, alpha), 1.25)
+        } else if seg.interaction == "TIR" {
+            // Total internal reflection: bright gold
+            let alpha = ((seg.power_watts * 3.0).clamp(0.35, 0.95) * 255.0) as u8;
+            (Color32::from_rgba_unmultiplied(255, 215, 0, alpha), 1.3)
+        } else {
+            // Refracted non-sequential ray path: subtle cyan
+            let alpha = ((seg.power_watts * 2.0).clamp(0.12, 0.65) * 255.0) as u8;
+            (Color32::from_rgba_unmultiplied(70, 180, 220, alpha), 0.9)
+        };
+
+        painter.line_segment([p1, p2], Stroke::new(width, color));
     }
 }
 

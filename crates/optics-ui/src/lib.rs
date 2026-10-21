@@ -6,6 +6,7 @@ pub mod glass_browser;
 pub mod icons;
 pub mod layout;
 pub mod lens_editor;
+pub mod nonseq;
 pub mod optimization;
 pub mod theme;
 pub mod tolerancing;
@@ -23,6 +24,10 @@ pub use icons::{
 };
 pub use layout::{Breakpoint, LayoutMetrics};
 pub use lens_editor::{LeftPanelTab, LensEditorState, render_lens_editor};
+pub use nonseq::{
+    render_nonseq_bottom_drawer, ColorScale, CrossSectionAxis, DetectorQuantity, HeatmapPalette,
+    NonSeqUiState,
+};
 pub use optimization::{DlsRunSummary, OptimizationModalState, render_optimization_panel};
 pub use theme::{OpticsTokens, ThemeMode};
 pub use tolerancing::{
