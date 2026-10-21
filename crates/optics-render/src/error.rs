@@ -24,4 +24,8 @@ pub enum RenderError {
     /// Ray generation singularity or invalid camera configuration.
     #[error("Camera configuration error: {0}")]
     CameraError(String),
+
+    /// Readback or buffer mapping failed.
+    #[error("Readback error: {0}")]
+    ReadbackError(String),
 }

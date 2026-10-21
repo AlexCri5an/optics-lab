@@ -108,7 +108,7 @@ impl ThemeMode {
     #[must_use]
     pub const fn display_name(self) -> &'static str {
         match self {
-            Self::ZemaxClassic => "Zemax Classic 95",
+            Self::ZemaxClassic => "Classic CAD 95",
             Self::AmberPhosphor => "Amber CRT (VT220)",
             Self::GreenPhosphor => "Green CRT (VT100)",
             Self::SgiIrix => "SGI IRIX Unix",

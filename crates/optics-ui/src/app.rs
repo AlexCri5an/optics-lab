@@ -21,7 +21,10 @@ use crate::optimization::{OptimizationModalState, render_optimization_panel};
 use crate::theme::OpticsTokens;
 use crate::tolerancing::{TolerancingAction, TolerancingModalState};
 use crate::topbar::{TopBarAction, TopBarState, render_topbar};
-use crate::viewport::{ViewportState, render_optical_viewport, render_optical_viewport_3d};
+use crate::raytrace_viewport::render_raytrace_viewport;
+use crate::viewport::{
+    ViewportMode, ViewportState, render_optical_viewport, render_optical_viewport_3d,
+};
 
 /// Complete snapshot of the application state for synchronized undo/redo.
 #[derive(Clone, Debug, PartialEq)]
@@ -235,14 +238,19 @@ impl eframe::App for OpticsWorkbenchApp {
             self.handle_topbar_action(TopBarAction::OpenTolerancing);
         }
         if cmd && !shift && ctx.input(|i| i.key_pressed(egui::Key::Num2)) {
-            self.viewport_state.is_3d = false;
+            self.viewport_state.set_mode_2d();
             self.topbar_state.viewport_3d_mode = false;
             self.last_action_msg = "Viewport: 2D Cross-Section CAD mode active.".to_string();
         }
         if cmd && !shift && ctx.input(|i| i.key_pressed(egui::Key::Num3)) {
-            self.viewport_state.is_3d = true;
+            self.viewport_state.set_mode_3d_cad();
             self.topbar_state.viewport_3d_mode = true;
             self.last_action_msg = "Viewport: 3D Hardware Perspective mode active.".to_string();
+        }
+        if cmd && !shift && ctx.input(|i| i.key_pressed(egui::Key::Num4)) {
+            self.viewport_state.set_mode_raytrace();
+            self.topbar_state.viewport_3d_mode = true;
+            self.last_action_msg = "Viewport: 3D Photorealistic GPU Path Tracing mode active.".to_string();
         }
 
         // 2.5. Receive any files selected asynchronously from background file picker
@@ -528,7 +536,8 @@ impl eframe::App for OpticsWorkbenchApp {
         // 7b. Non-Sequential & Stray Light Bottom Drawer (Docked under viewport)
         // -------------------------------------------------------------------
         let drawer_height = if self.nonseq_state.drawer_open {
-            248.0_f32.min(window_size.y * 0.38)
+            // Header (28px) + body margin (8px) + controls (22*2 + 5px) + vis (165px) = 250px
+            250.0_f32.min(window_size.y * 0.40)
         } else {
             28.0
         };
@@ -570,20 +579,31 @@ impl eframe::App for OpticsWorkbenchApp {
         CentralPanel::default()
             .frame(egui::Frame::NONE.fill(tokens.bg_canvas))
             .show(ctx, |ui| {
-                if self.viewport_state.is_3d {
-                    render_optical_viewport_3d(
-                        ui,
-                        &self.prescription,
-                        &mut self.viewport_state,
-                        &tokens,
-                    );
-                } else {
-                    render_optical_viewport(
-                        ui,
-                        &self.prescription,
-                        &mut self.viewport_state,
-                        &tokens,
-                    );
+                match self.viewport_state.mode {
+                    ViewportMode::Cad2D => {
+                        render_optical_viewport(
+                            ui,
+                            &self.prescription,
+                            &mut self.viewport_state,
+                            &tokens,
+                        );
+                    }
+                    ViewportMode::Cad3D => {
+                        render_optical_viewport_3d(
+                            ui,
+                            &self.prescription,
+                            &mut self.viewport_state,
+                            &tokens,
+                        );
+                    }
+                    ViewportMode::Raytrace3D => {
+                        render_raytrace_viewport(
+                            ui,
+                            &self.prescription,
+                            &mut self.viewport_state,
+                            &tokens,
+                        );
+                    }
                 }
             });
 
@@ -819,7 +839,7 @@ impl OpticsWorkbenchApp {
                             "Optical Prescriptions (*.zmx, *.len, *.seq)",
                             &["zmx", "ZMX", "len", "LEN", "seq", "SEQ"],
                         )
-                        .add_filter("Zemax Prescription (*.zmx)", &["zmx", "ZMX"])
+                        .add_filter("Optical Prescription (*.zmx)", &["zmx", "ZMX"])
                         .add_filter("OSLO Lens File (*.len)", &["len", "LEN"])
                         .add_filter("CODE V Sequence (*.seq)", &["seq", "SEQ"])
                         .add_filter("All Files (*.*)", &["*"]);
@@ -847,9 +867,9 @@ impl OpticsWorkbenchApp {
                     format!("{}.zmx", sanitized_name)
                 };
                 let dialog = rfd::FileDialog::new()
-                    .set_title("Save Zemax Prescription")
+                    .set_title("Save Optical Prescription")
                     .set_file_name(&default_file)
-                    .add_filter("Zemax Prescription (*.zmx)", &["zmx"]);
+                    .add_filter("Optical Prescription (*.zmx)", &["zmx"]);
 
                 if let Some(path) = dialog.save_file() {
                     self.save_prescription_to_path(&path);
@@ -1215,12 +1235,16 @@ impl OpticsWorkbenchApp {
                 };
             }
             TopBarAction::ToggleViewport3DMode => {
-                self.viewport_state.is_3d = !self.viewport_state.is_3d;
+                match self.viewport_state.mode {
+                    ViewportMode::Cad2D => self.viewport_state.set_mode_3d_cad(),
+                    ViewportMode::Cad3D => self.viewport_state.set_mode_raytrace(),
+                    ViewportMode::Raytrace3D => self.viewport_state.set_mode_2d(),
+                }
                 self.topbar_state.viewport_3d_mode = self.viewport_state.is_3d;
-                self.last_action_msg = if self.viewport_state.is_3d {
-                    "Switched to 3D Hardware Perspective Viewport.".to_string()
-                } else {
-                    "Switched to 2D Cross-Section CAD Viewport.".to_string()
+                self.last_action_msg = match self.viewport_state.mode {
+                    ViewportMode::Cad2D => "Switched to 2D Cross-Section CAD Viewport.".to_string(),
+                    ViewportMode::Cad3D => "Switched to 3D CAD Wireframe/Solid Viewport.".to_string(),
+                    ViewportMode::Raytrace3D => "Switched to 3D Photorealistic GPU Path Tracing Viewport.".to_string(),
                 };
             }
         }

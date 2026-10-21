@@ -1,6 +1,6 @@
 //! GPU buffer allocation and upload routines for BVH nodes and triangle primitives.
 
-use optics_bvh::{BvhScene, pack_bvh_to_gpu_buffer, pack_triangles_to_gpu_buffer};
+use optics_bvh::{BvhScene, pack_bvh_to_gpu_buffer, pack_triangles_to_gpu_buffer, Triangle};
 use wgpu::util::DeviceExt;
 
 use crate::context::GpuContext;
@@ -22,17 +22,30 @@ impl BvhBuffer {
     /// Uploads a [`BvhScene`] into GPU storage buffers.
     #[must_use]
     pub fn upload(ctx: &GpuContext, scene: &BvhScene) -> Self {
-        // Collect all TLAS and BLAS nodes
-        let mut all_nodes = scene.tlas.clone();
-        for mesh_nodes in &scene.blas {
-            all_nodes.extend_from_slice(mesh_nodes);
-        }
-
-        // Collect all mesh triangles
-        let mut all_triangles = Vec::new();
-        for mesh_tris in &scene.triangles {
-            all_triangles.extend_from_slice(mesh_tris);
-        }
+        // GPU shader implements direct BLAS triangle BVH traversal starting from root node 0.
+        // If scene has BLAS geometry, upload the primary BLAS hierarchy and reordered triangle pool.
+        let (all_nodes, all_triangles) = if let Some(blas_nodes) = scene.blas.first() {
+            let sorted_tris: Vec<Triangle> = if let Some(indices) = scene.blas_indices.first() {
+                if let Some(mesh_tris) = scene.triangles.first() {
+                    indices
+                        .iter()
+                        .filter_map(|&idx| mesh_tris.get(idx).cloned())
+                        .collect()
+                } else {
+                    Vec::new()
+                }
+            } else if let Some(mesh_tris) = scene.triangles.first() {
+                mesh_tris.clone()
+            } else {
+                Vec::new()
+            };
+            (blas_nodes.clone(), sorted_tris)
+        } else {
+            (
+                scene.tlas.clone(),
+                scene.triangles.iter().flatten().cloned().collect(),
+            )
+        };
 
         let node_bytes = pack_bvh_to_gpu_buffer(&all_nodes);
         let tri_bytes = pack_triangles_to_gpu_buffer(&all_triangles);

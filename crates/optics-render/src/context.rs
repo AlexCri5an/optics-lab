@@ -66,4 +66,20 @@ impl GpuContext {
             queue,
         })
     }
+
+    /// Creates a GPU context synchronously by running the acquisition future to completion.
+    ///
+    /// # Errors
+    /// Returns [`RenderError`] if adapter or device acquisition fails.
+    pub fn create_sync() -> Result<Self, RenderError> {
+        let mut fut = std::pin::pin!(Self::create_headless());
+        let waker = std::task::Waker::noop();
+        let mut cx = std::task::Context::from_waker(waker);
+        loop {
+            match fut.as_mut().poll(&mut cx) {
+                std::task::Poll::Ready(res) => return res,
+                std::task::Poll::Pending => std::thread::yield_now(),
+            }
+        }
+    }
 }

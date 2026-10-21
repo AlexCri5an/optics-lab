@@ -352,7 +352,7 @@ pub fn render_topbar(
                         triggered_action = Some(TopBarAction::ToggleNonSeqDrawer);
                         ui.close();
                     }
-                    if ui.button(if state.viewport_3d_mode { "Switch to 2D Cross-Section (Ctrl+2)" } else { "Switch to 3D Hardware View (Ctrl+3)" }).clicked() {
+                    if ui.button(if state.viewport_3d_mode { "Switch to 2D Cross-Section (Ctrl+2)" } else { "Switch to 3D CAD / Photo Raytrace (Ctrl+3/4)" }).clicked() {
                         triggered_action = Some(TopBarAction::ToggleViewport3DMode);
                         ui.close();
                     }
@@ -456,9 +456,9 @@ pub fn render_topbar(
             }
 
             let (view_3d_tooltip, view_3d_active) = if state.viewport_3d_mode {
-                ("Active: 3D Hardware Perspective (Click or Ctrl+2 for 2D CAD)", true)
+                ("Active: 3D Viewport (Click or Ctrl+2 for 2D CAD, Ctrl+4 for Photo Raytrace)", true)
             } else {
-                ("Switch to 3D Hardware Perspective Viewport (Ctrl+3)", false)
+                ("Switch to 3D Viewport (Ctrl+3 for 3D CAD, Ctrl+4 for Photo Raytrace)", false)
             };
             if lucide_toolbar_button(ui, LucideIcon::Box, view_3d_tooltip, view_3d_active, tokens).clicked() {
                 triggered_action = Some(TopBarAction::ToggleViewport3DMode);
@@ -497,16 +497,8 @@ pub fn render_topbar(
                 triggered_action = Some(TopBarAction::ToggleNonSeqDrawer);
             }
 
-            // Right side of toolbar: Retro Theme Selector Dropdown + Quick Cycle Button
+            // Right side of toolbar: Retro Theme Selector Dropdown
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                let icon = if state.theme_mode.is_dark() {
-                    LucideIcon::Moon
-                } else {
-                    LucideIcon::Sun
-                };
-                if lucide_toolbar_button(ui, icon, "Cycle Theme", false, tokens).clicked() {
-                    triggered_action = Some(TopBarAction::ToggleTheme);
-                }
 
                 egui::ComboBox::from_id_salt("topbar_theme_dropdown")
                     .selected_text(

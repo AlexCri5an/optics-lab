@@ -6,7 +6,7 @@
 //! - Automatic Zoom-Fit calculation for arbitrary optical prescriptions.
 //! - Engineering scale indicator (metric scale bar).
 
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
 use egui::{
     Color32, CornerRadius, Frame, Margin, Painter, Pos2, Rect, Response, RichText, Sense, Stroke,
@@ -68,10 +68,24 @@ impl Viewport3DCamera {
         }
         let mut min_z = 0.0f64;
         let mut max_z = 0.0f64;
+        let mut glass_max_z = 0.0f64;
+        let mut has_glass = false;
         let mut max_semi_d = 5.0f64;
         let mut cum_z = 0.0f64;
 
         for surf in &prescription.surfaces {
+            let is_glass = !surf.material_name.trim().is_empty()
+                && !surf.material_name.trim().eq_ignore_ascii_case("air");
+            if is_glass {
+                has_glass = true;
+                let th = if surf.thickness_mm.is_finite() && surf.thickness_mm >= 0.0 {
+                    surf.thickness_mm
+                } else {
+                    0.0
+                };
+                glass_max_z = cum_z + th;
+            }
+
             min_z = min_z.min(cum_z);
             max_z = max_z.max(cum_z);
             let sd = if surf.semi_diameter_mm.is_finite() && surf.semi_diameter_mm > 0.0 {
@@ -89,15 +103,34 @@ impl Viewport3DCamera {
         }
         max_z = max_z.max(cum_z);
 
-        let system_length = (max_z - min_z).clamp(1.0, 10000.0) as f32;
-        let center_z = ((min_z + max_z) * 0.5) as f32;
+        // Center on physical glass lens elements if present, otherwise on overall optical track
+        let (focus_min_z, focus_max_z) = if has_glass && glass_max_z > 0.001 {
+            (min_z, glass_max_z)
+        } else {
+            (min_z, max_z)
+        };
+
+        let system_length = (focus_max_z - focus_min_z).clamp(1.0, 10000.0) as f32;
+        let center_z = ((focus_min_z + focus_max_z) * 0.5) as f32;
 
         self.target_mm = [0.0, 0.0, center_z];
         self.pan_screen_mm = Vec2::ZERO;
-        let extent = system_length.max(max_semi_d as f32 * 2.5);
-        self.distance_mm = (extent * 2.1).clamp(20.0, 5000.0);
+        let extent = system_length.max(max_semi_d as f32 * 2.2);
+        self.distance_mm = (extent * 2.0).clamp(15.0, 5000.0);
         self.initialized = true;
     }
+}
+
+/// Active Viewport visualization mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ViewportMode {
+    /// 2D Cross-Section CAD schematic.
+    #[default]
+    Cad2D,
+    /// 3D Interactive CAD perspective with wireframe and solid surfaces.
+    Cad3D,
+    /// 3D Physical Path Traced hardware GPU photorealistic view.
+    Raytrace3D,
 }
 
 /// Persistent state for the 2D/3D optical canvas viewport.
@@ -123,8 +156,12 @@ pub struct ViewportState {
     pub show_ghost_rays: bool,
     /// Whether the viewport is in 3D Hardware Perspective mode (false = 2D CAD).
     pub is_3d: bool,
+    /// Active viewport visualization mode.
+    pub mode: ViewportMode,
     /// 3D Camera navigation state.
     pub camera_3d: Viewport3DCamera,
+    /// Persistent GPU Raytracer state.
+    pub raytrace_engine: Arc<std::sync::Mutex<Option<crate::raytrace_viewport::RaytraceEngine>>>,
 }
 
 impl Default for ViewportState {
@@ -140,12 +177,31 @@ impl Default for ViewportState {
             selected_ghost_pair: None,
             show_ghost_rays: true,
             is_3d: false,
+            mode: ViewportMode::Cad2D,
             camera_3d: Viewport3DCamera::default(),
+            raytrace_engine: Arc::new(std::sync::Mutex::new(None)),
         }
     }
 }
 
 impl ViewportState {
+    /// Switches viewport to 2D CAD mode.
+    pub fn set_mode_2d(&mut self) {
+        self.mode = ViewportMode::Cad2D;
+        self.is_3d = false;
+    }
+
+    /// Switches viewport to 3D CAD mode.
+    pub fn set_mode_3d_cad(&mut self) {
+        self.mode = ViewportMode::Cad3D;
+        self.is_3d = true;
+    }
+
+    /// Switches viewport to 3D Photorealistic Raytrace mode.
+    pub fn set_mode_raytrace(&mut self) {
+        self.mode = ViewportMode::Raytrace3D;
+        self.is_3d = true;
+    }
     /// Centers and fits the entire optical prescription into the given screen rect.
     pub fn zoom_fit(&mut self, prescription: &OpticalPrescription, viewport_size: Vec2) {
         if prescription.surfaces.is_empty() || viewport_size.x <= 10.0 || viewport_size.y <= 10.0 {
@@ -217,7 +273,7 @@ pub fn render_optical_viewport(
     }
 
     let overlay_padding = 10.0;
-    let overlay_width = if rect.width() < 720.0 { 325.0 } else { 385.0 };
+    let overlay_width = if rect.width() < 720.0 { 355.0 } else { 425.0 };
     let overlay_height = 28.0;
     let overlay_rect = Rect::from_min_size(
         Pos2::new(rect.max.x - overlay_width - overlay_padding, rect.min.y + overlay_padding),
@@ -1168,36 +1224,42 @@ fn draw_viewport_controls(
 
                 ui.separator();
 
-                let ghost_active = state.show_ghost_rays && !state.ghost_rays.is_empty();
-                let ghost_count = state.ghost_rays.len();
-                let ghost_label = if ghost_count > 0 {
-                    format!("GHOSTS ({})", ghost_count)
-                } else {
-                    "GHOSTS".to_string()
-                };
-                let (ghost_bg, ghost_stroke, ghost_text_color) = if ghost_active {
-                    (tokens.bg_control_active, tokens.border_hovered, tokens.warning)
-                } else {
-                    (tokens.bg_control, tokens.border, tokens.text_muted)
-                };
-
-                let ghost_btn = egui::Button::new(
-                    RichText::new(ghost_label)
+                let switch_3d_btn = egui::Button::new(
+                    RichText::new("3D CAD")
                         .size(10.0)
                         .monospace()
                         .strong()
-                        .color(ghost_text_color),
+                        .color(tokens.accent),
                 )
-                .fill(ghost_bg)
-                .stroke(ghost_stroke)
+                .fill(tokens.bg_control)
+                .stroke(tokens.border)
                 .corner_radius(CornerRadius::ZERO);
 
                 if ui
-                    .add(ghost_btn)
-                    .on_hover_text("Toggle non-sequential ghost rays & internal reflections overlay in 2D viewport")
+                    .add(switch_3d_btn)
+                    .on_hover_text("Switch to 3D CAD Wireframe/Solid Viewport (Ctrl+3)")
                     .clicked()
                 {
-                    state.show_ghost_rays = !state.show_ghost_rays;
+                    state.set_mode_3d_cad();
+                }
+
+                let switch_photo_btn = egui::Button::new(
+                    RichText::new("PHOTO")
+                        .size(10.0)
+                        .monospace()
+                        .strong()
+                        .color(tokens.warning),
+                )
+                .fill(tokens.bg_control)
+                .stroke(tokens.border)
+                .corner_radius(CornerRadius::ZERO);
+
+                if ui
+                    .add(switch_photo_btn)
+                    .on_hover_text("Switch to 3D Photorealistic Raytrace Viewport (Ctrl+4)")
+                    .clicked()
+                {
+                    state.set_mode_raytrace();
                 }
             });
         });
@@ -1416,7 +1478,7 @@ pub fn render_optical_viewport_3d(
 
     // Top-right HUD bounds
     let is_compact_hud = rect.width() < 640.0;
-    let overlay_w = if is_compact_hud { 220.0 } else { 340.0 };
+    let overlay_w = if is_compact_hud { 210.0 } else { 275.0 };
     let overlay_h = 28.0;
     let overlay_rect = Rect::from_min_size(
         Pos2::new(rect.max.x - overlay_w - 10.0, rect.min.y + 10.0),
@@ -1756,24 +1818,7 @@ pub fn render_optical_viewport_3d(
     draw_axis_vector(Vec3::new(0.0, 0.0, 1.0), "+Z", Color32::from_rgb(60, 160, 240));
 
     // -----------------------------------------------------------------------
-    // 8. 3D Top-Left Mode Badge
-    // -----------------------------------------------------------------------
-    let badge_rect = Rect::from_min_size(
-        Pos2::new(rect.min.x + 10.0, rect.min.y + 10.0),
-        Vec2::new(230.0, 22.0),
-    );
-    painter.rect_filled(badge_rect, CornerRadius::ZERO, tokens.bg_panel.gamma_multiply(0.92));
-    painter.rect_stroke(badge_rect, CornerRadius::ZERO, tokens.border, egui::StrokeKind::Inside);
-    painter.text(
-        badge_rect.center(),
-        egui::Align2::CENTER_CENTER,
-        "3D HARDWARE VIEWPORT (Ctrl+2: 2D CAD)",
-        egui::FontId::monospace(9.5),
-        tokens.text_primary,
-    );
-
-    // -----------------------------------------------------------------------
-    // 9. 3D Top-Right Camera Navigation HUD
+    // 8. 3D Top-Right Camera Navigation HUD
     // -----------------------------------------------------------------------
     let overlay_frame = Frame::NONE
         .fill(tokens.bg_panel.gamma_multiply(0.95))
@@ -1817,41 +1862,41 @@ pub fn render_optical_viewport_3d(
 
                 ui.separator();
 
-                let ghost_active_3d = state.show_ghost_rays && !state.ghost_rays.is_empty();
-                let (ghost_3d_text, ghost_3d_color) = if ghost_active_3d {
-                    ("GHOSTS", tokens.warning)
-                } else {
-                    ("GHOSTS", tokens.text_muted)
-                };
-                if ui.button(
-                    RichText::new(ghost_3d_text)
-                        .monospace()
+                let switch_2d_btn = egui::Button::new(
+                    RichText::new("2D")
                         .size(10.0)
-                        .color(ghost_3d_color),
-                ).on_hover_text("Toggle non-sequential ghost rays in 3D viewport").clicked() {
-                    state.show_ghost_rays = !state.show_ghost_rays;
-                }
-
-                if ui.button(
-                    RichText::new("2D CAD")
                         .monospace()
-                        .size(10.0)
-                        .color(tokens.accent),
-                ).clicked() {
-                    state.is_3d = false;
-                }
-
-                if !is_compact_hud {
-                    ui.label(
-                        RichText::new(format!(
-                            "Az:{:.0}° El:{:.0}°",
-                            state.camera_3d.azimuth_rad.to_degrees(),
-                            state.camera_3d.elevation_rad.to_degrees()
-                        ))
-                        .monospace()
-                        .size(9.0)
                         .color(tokens.text_muted),
-                    );
+                )
+                .fill(tokens.bg_control)
+                .stroke(tokens.border)
+                .corner_radius(CornerRadius::ZERO);
+
+                if ui
+                    .add(switch_2d_btn)
+                    .on_hover_text("Switch to 2D CAD Viewport (Ctrl+2)")
+                    .clicked()
+                {
+                    state.set_mode_2d();
+                }
+
+                let switch_photo_btn = egui::Button::new(
+                    RichText::new("PHOTO")
+                        .size(10.0)
+                        .monospace()
+                        .strong()
+                        .color(tokens.warning),
+                )
+                .fill(tokens.bg_control)
+                .stroke(tokens.border)
+                .corner_radius(CornerRadius::ZERO);
+
+                if ui
+                    .add(switch_photo_btn)
+                    .on_hover_text("Switch to 3D Photorealistic Raytrace Viewport (Ctrl+4)")
+                    .clicked()
+                {
+                    state.set_mode_raytrace();
                 }
             });
         },
@@ -1952,5 +1997,102 @@ mod tests {
         let sag = sample_surface_sag(&curved_surf, 10.0);
         // Exact sag for sphere r=50, y=10: 50 - sqrt(2500 - 100) = 50 - sqrt(2400) ≈ 1.0102
         assert!((sag - (50.0 - (2400.0f64).sqrt())).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_viewport_mode_transitions() {
+        let mut state = ViewportState::default();
+        assert_eq!(state.mode, ViewportMode::Cad2D);
+
+        state.set_mode_3d_cad();
+        assert_eq!(state.mode, ViewportMode::Cad3D);
+
+        state.set_mode_raytrace();
+        assert_eq!(state.mode, ViewportMode::Raytrace3D);
+
+        state.set_mode_2d();
+        assert_eq!(state.mode, ViewportMode::Cad2D);
+    }
+
+    #[test]
+    fn test_cooke_triplet_tessellation_and_camera() {
+        let rx = optics_zemax::presets::cooke_triplet_f4_5().expect("cooke triplet parse");
+        let (triangles, materials) =
+            optics_bvh::prescription_to_trimesh_with_materials(&rx, 32, 16);
+        assert!(!triangles.is_empty());
+        assert_eq!(materials, vec!["SK16", "F2"]);
+
+        let mut cam = Viewport3DCamera::default();
+        cam.zoom_fit(&rx, Vec2::new(800.0, 600.0));
+        assert!((cam.target_mm[2] - 8.98).abs() < 1.0);
+        assert!(cam.distance_mm > 20.0 && cam.distance_mm < 150.0);
+
+        let thin_cam = crate::raytrace_viewport::build_thin_lens_camera(&cam);
+        let _basis = thin_cam.basis().expect("basis");
+
+        let aabb = optics_bvh::Aabb::from_points(
+            &triangles
+                .iter()
+                .flat_map(|t| [t.v0, t.v1, t.v2])
+                .collect::<Vec<_>>(),
+        );
+        assert!(aabb.min.z >= 0.0 && aabb.max.z <= 20.0);
+
+        let inst = optics_bvh::BlasInstance::new(0, &aabb, nalgebra::Matrix4::identity());
+        let scene = optics_bvh::BvhScene::build(vec![triangles], vec![inst]);
+
+        let glass_center_z = 8.98;
+        let test_ray = optics_core::Ray::new(
+            optics_core::Vec3::new(15.0, 15.0, glass_center_z + 25.0),
+            (optics_core::Vec3::new(0.0, 0.0, glass_center_z)
+                - optics_core::Vec3::new(15.0, 15.0, glass_center_z + 25.0))
+            .normalize(),
+            587.56,
+            1.0,
+        )
+        .expect("ray");
+        let glass_hit = scene.intersect(&test_ray);
+        assert!(glass_hit.is_some(), "Ray directed at glass center must hit a lens!");
+    }
+
+    #[test]
+    fn test_cooke_triplet_render_image() {
+        let rx = optics_zemax::presets::cooke_triplet_f4_5().expect("cooke triplet parse");
+        let mut cam = Viewport3DCamera::default();
+        cam.zoom_fit(&rx, Vec2::new(256.0, 256.0));
+        let thin_cam = crate::raytrace_viewport::build_thin_lens_camera(&cam);
+        let ctx = optics_render::GpuContext::create_sync().unwrap();
+        let (triangles, materials) =
+            optics_bvh::prescription_to_trimesh_with_materials(&rx, 32, 16);
+        let aabb = optics_bvh::Aabb::from_points(
+            &triangles
+                .iter()
+                .flat_map(|t| [t.v0, t.v1, t.v2])
+                .collect::<Vec<_>>(),
+        );
+        let inst = optics_bvh::BlasInstance::new(0, &aabb, nalgebra::Matrix4::identity());
+        let scene = optics_bvh::BvhScene::build(vec![triangles], vec![inst]);
+        let mut renderer = optics_render::PathTracingRenderer::new(
+            ctx,
+            &scene,
+            &thin_cam,
+            256,
+            256,
+            wgpu::TextureFormat::Rgba8Unorm,
+        )
+        .unwrap();
+        let gpu_materials: Vec<optics_render::GpuMaterial> = materials
+            .iter()
+            .map(|name| optics_render::GpuMaterial::from_name(name))
+            .collect();
+        renderer.update_materials(&gpu_materials);
+        renderer.render_mode = optics_render::RenderMode::Standard;
+        for _ in 0..32 {
+            renderer.render_frame();
+        }
+        let rgba = renderer.read_display_rgba().unwrap();
+        assert_eq!(rgba.len(), 256 * 256 * 4);
+        let non_zero = rgba.iter().filter(|&&b| b > 0).count();
+        assert!(non_zero > 10000, "Rendered frame must contain populated pixels");
     }
 }

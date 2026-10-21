@@ -306,6 +306,35 @@ fn sample_ggx(normal: vec3<f32>, roughness: f32, rng: ptr<function, u32>) -> vec
     return normalize(tangent * h.x + normal * h.y + bitangent * h.z);
 }
 
+fn evaluate_studio_environment(dir: vec3<f32>, bounce: u32) -> vec3<f32> {
+    let t = 0.5 * (dir.y + 1.0);
+    // Dark professional studio gradient background
+    var base = mix(vec3<f32>(0.04, 0.045, 0.06), vec3<f32>(0.11, 0.13, 0.17), t);
+
+    // Studio Key Light (soft box upper-left-front)
+    let key_dir = normalize(vec3<f32>(0.6, 0.8, 0.5));
+    let key_dot = max(0.0, dot(dir, key_dir));
+    let key_light = pow(key_dot, 28.0) * vec3<f32>(6.0, 5.8, 5.5)
+                  + pow(key_dot, 4.0) * vec3<f32>(0.8, 0.8, 0.75);
+
+    // Studio Rim Light (rear top-right edge highlight)
+    let rim_dir = normalize(vec3<f32>(-0.6, 0.7, -0.6));
+    let rim_dot = max(0.0, dot(dir, rim_dir));
+    let rim_light = pow(rim_dot, 48.0) * vec3<f32>(4.5, 4.8, 5.5)
+                  + pow(rim_dot, 6.0) * vec3<f32>(0.5, 0.55, 0.65);
+
+    // Soft Fill Light from below
+    let fill_dir = normalize(vec3<f32>(0.0, -0.9, 0.3));
+    let fill_dot = max(0.0, dot(dir, fill_dir));
+    let fill_light = pow(fill_dot, 6.0) * vec3<f32>(0.25, 0.25, 0.3);
+
+    if (bounce == 0u) {
+        return base + key_light * 0.15 + rim_light * 0.10;
+    } else {
+        return base + key_light + rim_light + fill_light;
+    }
+}
+
 @compute @workgroup_size(8, 8, 1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let dims = textureDimensions(accum_texture);
@@ -347,9 +376,8 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         total_cost += hit.traversal_cost;
 
         if (!hit.hit) {
-            let t = 0.5 * (ray_dir.y + 1.0);
-            let sky_color = mix(vec3<f32>(0.02, 0.025, 0.035), vec3<f32>(0.06, 0.07, 0.10), t);
-            radiance += throughput * sky_color;
+            let env_color = evaluate_studio_environment(ray_dir, bounce);
+            radiance += throughput * env_color;
             break;
         }
 
@@ -379,14 +407,21 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         }
 
         if (mat_type == 0u) {
-            // Material 0: Dielectric with Sellmeier spectral dispersion
-            let hit_n = eval_material_ior(hit.mat_id, hero_wl);
-            var next_dir: vec3<f32>;
-            let attenuation = evaluate_dielectric(ray_dir, hit.normal, 1.0, hit_n, &rng, &next_dir);
-            throughput *= attenuation * mat_albedo;
-            ray_dir = next_dir;
-            let nudge = sign(dot(ray_dir, hit.normal)) * hit.normal * 1e-4;
-            ray_orig = hit.point + nudge;
+            let is_rim = abs(hit.normal.z) < 0.15;
+            if (is_rim) {
+                let h = sample_ggx(hit.normal, 0.20, &rng);
+                ray_dir = reflect(ray_dir, h);
+                throughput *= vec3<f32>(0.35, 0.38, 0.42);
+                ray_orig = hit.point + hit.normal * 1e-4;
+            } else {
+                let hit_n = eval_material_ior(hit.mat_id, hero_wl);
+                var next_dir: vec3<f32>;
+                let attenuation = evaluate_dielectric(ray_dir, hit.normal, 1.0, hit_n, &rng, &next_dir);
+                throughput *= attenuation * mat_albedo;
+                ray_dir = next_dir;
+                let nudge = sign(dot(ray_dir, hit.normal)) * hit.normal * 1e-4;
+                ray_orig = hit.point + nudge;
+            }
         } else if (mat_type == 1u) {
             // Material 1: Glossy Dark Floor Plane (GGX reflection + subtle floor grid)
             let h = sample_ggx(hit.normal, mat_roughness, &rng);
@@ -438,7 +473,10 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         radiance = vec3<f32>(r, g, b);
     }
 
-    let color_sample = radiance * spectral_weight * 2.5;
+    var color_sample = radiance;
+    if (params.render_mode == 0u) {
+        color_sample = mix(radiance, radiance * spectral_weight * 2.5, 0.40);
+    }
 
     let pixel_idx = global_id.x + global_id.y * dims.x;
     var accumulated: vec4<f32>;

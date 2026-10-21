@@ -639,6 +639,97 @@ impl PathTracingRenderer {
         self.sample_count += 1;
         self.frame_counter += 1;
     }
+
+    /// Reads back the current tone-mapped display image as tightly-packed RGBA8 (4 bytes per pixel).
+    ///
+    /// # Errors
+    /// Returns [`RenderError`] if buffer allocation or GPU mapping fails.
+    pub fn read_display_rgba(&self) -> Result<Vec<u8>, RenderError> {
+        let width = self.display_target.width;
+        let height = self.display_target.height;
+        if width == 0 || height == 0 {
+            return Ok(Vec::new());
+        }
+
+        let unpadded_bytes_per_row = width * 4;
+        let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let padded_bytes_per_row = (unpadded_bytes_per_row + align - 1) / align * align;
+        let buffer_size = (padded_bytes_per_row * height) as u64;
+
+        let staging_buffer = self.context.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Staging Buffer for Readback"),
+            size: buffer_size.max(64),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+
+        let mut encoder =
+            self.context
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Readback Command Encoder"),
+                });
+
+        encoder.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture: &self.display_target.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer: &staging_buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded_bytes_per_row),
+                    rows_per_image: Some(height),
+                },
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+        );
+
+        self.context.queue.submit(Some(encoder.finish()));
+
+        let slice = staging_buffer.slice(..);
+        let (tx, rx) = std::sync::mpsc::channel();
+        slice.map_async(wgpu::MapMode::Read, move |res| {
+            let _ = tx.send(res);
+        });
+
+        let _ = self.context.device.poll(wgpu::PollType::Wait);
+
+        rx.recv()
+            .map_err(|e| RenderError::ReadbackError(e.to_string()))?
+            .map_err(|e| RenderError::ReadbackError(e.to_string()))?;
+
+        let mapped = slice.get_mapped_range();
+        let mut output = Vec::with_capacity((width * height * 4) as usize);
+        let is_bgra = self.display_format == wgpu::TextureFormat::Bgra8Unorm
+            || self.display_format == wgpu::TextureFormat::Bgra8UnormSrgb;
+
+        for y in 0..height {
+            let start = (y * padded_bytes_per_row) as usize;
+            let end = start + (unpadded_bytes_per_row as usize);
+            if is_bgra {
+                for chunk in mapped[start..end].chunks_exact(4) {
+                    output.push(chunk[2]);
+                    output.push(chunk[1]);
+                    output.push(chunk[0]);
+                    output.push(chunk[3]);
+                }
+            } else {
+                output.extend_from_slice(&mapped[start..end]);
+            }
+        }
+
+        drop(mapped);
+        staging_buffer.unmap();
+        Ok(output)
+    }
 }
 
 #[cfg(test)]
@@ -884,6 +975,11 @@ mod tests {
                 renderer.render_frame();
             }
             assert_eq!(renderer.get_sample_count(), 4);
+
+            let rgba = renderer.read_display_rgba()?;
+            assert_eq!(rgba.len(), 64 * 64 * 4);
+            let non_zero = rgba.iter().filter(|&&b| b > 0).count();
+            assert!(non_zero > 1000, "Rendered frame must contain valid pixel data");
 
             Ok(())
         };

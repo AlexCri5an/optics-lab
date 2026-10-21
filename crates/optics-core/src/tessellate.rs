@@ -244,7 +244,6 @@ pub fn prescription_to_trimesh_with_materials(
 
     let start_idx = if prescription.surfaces[0].thickness_mm.is_infinite()
         || prescription.surfaces[0].thickness_mm > 1e5
-        || prescription.surfaces[0].surface_index == 0
     {
         vertex_z.push(0.0);
         1
@@ -334,9 +333,11 @@ pub fn prescription_to_trimesh_with_materials(
             // Advance past the back surface of this element
             i += 2;
         } else {
-            // Standalone surface (e.g. aperture stop, flat image plane, or mirror)
-            let z_surf = vertex_z.get(i).copied().unwrap_or(0.0);
-            if surf.semi_diameter_mm > 0.0 && i > 0 {
+            // Standalone surface: tessellate physical reflective mirrors
+            let is_mirror = surf.material_name.eq_ignore_ascii_case("mirror");
+            let is_image_plane = i == num_surfaces.saturating_sub(1);
+            if is_mirror && !is_image_plane && surf.semi_diameter_mm > 0.0 {
+                let z_surf = vertex_z.get(i).copied().unwrap_or(0.0);
                 let surf_triangles = tessellate_conic_surface(
                     surf.radius_mm,
                     surf.conic_constant,
@@ -346,7 +347,7 @@ pub fn prescription_to_trimesh_with_materials(
                     rings,
                     true,
                     i,
-                    100, // Non-glass index
+                    100, // Non-glass mirror index
                     0,
                 );
                 all_triangles.extend(surf_triangles);

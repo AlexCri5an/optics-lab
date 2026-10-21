@@ -13,6 +13,7 @@ eframe = { workspace = true }
 egui = { workspace = true }
 egui_extras = { workspace = true }
 nalgebra = { workspace = true }
+optics-bvh = { workspace = true }
 optics-core = { workspace = true }
 optics-engine = { workspace = true }
 optics-glass = { workspace = true }
@@ -24,6 +25,7 @@ optics-zemax = { workspace = true }
 rfd = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+wgpu = { workspace = true }
 
 [lints]
 workspace = true

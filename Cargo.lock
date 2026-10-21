@@ -2602,6 +2602,7 @@ dependencies = [
  "egui",
  "egui_extras",
  "nalgebra",
+ "optics-bvh",
  "optics-core",
  "optics-engine",
  "optics-glass",
@@ -2613,6 +2614,7 @@ dependencies = [
  "rfd",
  "serde",
  "serde_json",
+ "wgpu",
 ]
 
 [[package]]

@@ -8,10 +8,13 @@ pub mod layout;
 pub mod lens_editor;
 pub mod nonseq;
 pub mod optimization;
+pub mod raytrace_viewport;
 pub mod theme;
 pub mod tolerancing;
 pub mod topbar;
 pub mod viewport;
+
+pub use raytrace_viewport::{RaytraceEngine, render_raytrace_viewport};
 
 pub use analysis::{AnalysisPanelState, AnalysisTab, render_analysis_panel};
 pub use app::OpticsWorkbenchApp;
