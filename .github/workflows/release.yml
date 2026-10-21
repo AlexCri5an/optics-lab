@@ -51,7 +51,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           mkdir -p dist staging/OpticsLab.app/Contents/MacOS staging/OpticsLab.app/Contents/Resources
-          cp target/${{ matrix.target }}/release/optics-desktop staging/OpticsLab.app/Contents/MacOS/OpticsLab
+          cp target/${{ matrix.target }}/release/OpticsLab staging/OpticsLab.app/Contents/MacOS/OpticsLab
           cp packaging/macos/OpticsLab.icns staging/OpticsLab.app/Contents/Resources/OpticsLab.icns
           chmod +x staging/OpticsLab.app/Contents/MacOS/OpticsLab
           VERSION=${GITHUB_REF_NAME#v}
@@ -68,7 +68,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           mkdir -p dist staging
-          cp target/${{ matrix.target }}/release/optics-desktop staging/
+          cp target/${{ matrix.target }}/release/OpticsLab staging/
           cp target/${{ matrix.target }}/release/optics-cli staging/
           cd staging && tar -czvf "../dist/${{ matrix.artifact_name }}.tar.gz" *
 
@@ -77,7 +77,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist staging
-          cp target/${{ matrix.target }}/release/optics-desktop.exe staging/
+          cp target/${{ matrix.target }}/release/OpticsLab.exe staging/
           cp target/${{ matrix.target }}/release/optics-cli.exe staging/
           cd staging && 7z a -tzip "../dist/${{ matrix.artifact_name }}.zip" *
 
