@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Community Discussions & Questions
+    url: https://github.com/AlexCri5an/optics-lab/discussions
+    about: For questions regarding optical prescriptions, simulation setups, and general help, please use GitHub Discussions.
