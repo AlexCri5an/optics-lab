@@ -8,6 +8,7 @@ pub mod layout;
 pub mod lens_editor;
 pub mod optimization;
 pub mod theme;
+pub mod tolerancing;
 pub mod topbar;
 pub mod viewport;
 
@@ -24,5 +25,9 @@ pub use layout::{Breakpoint, LayoutMetrics};
 pub use lens_editor::{LeftPanelTab, LensEditorState, render_lens_editor};
 pub use optimization::{DlsRunSummary, OptimizationModalState, render_optimization_panel};
 pub use theme::{OpticsTokens, ThemeMode};
+pub use tolerancing::{
+    render_tolerancing_dialog, render_tolerancing_panel_view, TolerancingAction,
+    TolerancingModalState, TolerancingSubtab,
+};
 pub use topbar::{TopBarAction, TopBarState, render_topbar};
 pub use viewport::{ViewportState, render_optical_viewport};

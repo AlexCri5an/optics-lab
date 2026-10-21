@@ -2605,6 +2605,7 @@ dependencies = [
  "optics-engine",
  "optics-glass",
  "optics-optimize",
+ "optics-tolerance",
  "optics-zemax",
  "rfd",
  "serde",

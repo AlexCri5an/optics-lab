@@ -18,6 +18,7 @@ use crate::layout::{Breakpoint, LayoutMetrics};
 use crate::lens_editor::{LeftPanelTab, LensEditorState, render_lens_editor};
 use crate::optimization::{OptimizationModalState, render_optimization_panel};
 use crate::theme::OpticsTokens;
+use crate::tolerancing::{TolerancingAction, TolerancingModalState};
 use crate::topbar::{TopBarAction, TopBarState, render_topbar};
 use crate::viewport::{ViewportState, render_optical_viewport};
 
@@ -50,6 +51,8 @@ pub struct OpticsWorkbenchApp {
     pub analysis_state: AnalysisPanelState,
     /// State of the automatic DLS optimization dialog hub.
     pub optimization_state: OptimizationModalState,
+    /// State of the manufacturing tolerancing and Monte Carlo hub.
+    pub tolerancing_state: TolerancingModalState,
     /// Last action dispatched from the top bar.
     pub last_action_msg: String,
     /// Current ray count or optical status info.
@@ -100,6 +103,7 @@ impl Default for OpticsWorkbenchApp {
             viewport_state: ViewportState::default(),
             analysis_state: AnalysisPanelState::default(),
             optimization_state: OptimizationModalState::default(),
+            tolerancing_state: TolerancingModalState::default(),
             last_action_msg: "Loaded preset: Cooke Triplet F/4.5".to_string(),
             status_text: format!("Surfaces: {} | EPD: {:.1} mm | Status: Ready", surf_count, epd),
             current_file_path: None,
@@ -221,6 +225,9 @@ impl eframe::App for OpticsWorkbenchApp {
             || (cmd && !shift && ctx.input(|i| i.key_pressed(egui::Key::Y)))
         {
             self.handle_topbar_action(TopBarAction::Redo);
+        }
+        if cmd && !shift && ctx.input(|i| i.key_pressed(egui::Key::T)) {
+            self.handle_topbar_action(TopBarAction::OpenTolerancing);
         }
 
         // 2.5. Receive any files selected asynchronously from background file picker
@@ -479,13 +486,26 @@ impl eframe::App for OpticsWorkbenchApp {
                     });
                     ui.separator();
 
-                    render_analysis_panel(
+                    if let Some(action) = render_analysis_panel(
                         ui,
-                        &self.prescription,
+                        &mut self.prescription,
                         &self.catalog,
                         &mut self.analysis_state,
+                        &mut self.tolerancing_state,
                         &tokens,
-                    );
+                    ) {
+                        match action {
+                            TolerancingAction::PrescriptionModified(new_presc) => {
+                                self.push_undo_snapshot();
+                                self.redo_stack.clear();
+                                self.prescription = new_presc;
+                                self.is_dirty = true;
+                                self.topbar_state.is_dirty = true;
+                                self.last_action_msg =
+                                    "Loaded worst-case Monte Carlo prescription into editor.".to_string();
+                            }
+                        }
+                    }
                 });
         }
 
@@ -1116,6 +1136,12 @@ impl OpticsWorkbenchApp {
                 self.topbar_state.right_panel_open = true;
                 self.analysis_state.active_tab = crate::analysis::AnalysisTab::Polarization;
                 self.last_action_msg = "Analysis: Switched to Polarization Ray Tracing & Stokes tab.".to_string();
+            }
+            TopBarAction::OpenTolerancing => {
+                self.topbar_state.right_panel_open = true;
+                self.analysis_state.active_tab = crate::analysis::AnalysisTab::Tolerancing;
+                self.tolerancing_state.init_if_needed(&self.prescription, &self.catalog);
+                self.last_action_msg = "Analysis: Switched to Tolerancing & Monte Carlo tab.".to_string();
             }
         }
     }

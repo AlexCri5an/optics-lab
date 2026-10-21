@@ -79,6 +79,8 @@ pub enum TopBarAction {
     OpenOptimizationAlgorithm(crate::optimization::OptimizationAlgorithm),
     /// Show Polarization Ray Tracing tab in right analysis panel.
     ShowPolarization,
+    /// Open Optical Tolerancing and Monte Carlo simulation hub.
+    OpenTolerancing,
 }
 
 /// State for the TopBar component.
@@ -274,6 +276,11 @@ pub fn render_topbar(
                         triggered_action = Some(TopBarAction::ShowPolarization);
                         ui.close();
                     }
+                    ui.separator();
+                    if ui.button("Tolerancing & Monte Carlo").clicked() {
+                        triggered_action = Some(TopBarAction::OpenTolerancing);
+                        ui.close();
+                    }
                 });
 
                 ui.menu_button("Optimize", |ui| {
@@ -404,6 +411,9 @@ pub fn render_topbar(
             }
             if lucide_toolbar_button(ui, LucideIcon::Wand2, "Automatic Optimization Engine (DLS, Anneal, Global, Glass)", false, tokens).clicked() {
                 triggered_action = Some(TopBarAction::OpenOptimization);
+            }
+            if lucide_toolbar_button(ui, LucideIcon::BarChart2, "Optical Tolerancing & Monte Carlo Simulation", false, tokens).clicked() {
+                triggered_action = Some(TopBarAction::OpenTolerancing);
             }
 
             draw_toolbar_separator(ui, tokens.border);
