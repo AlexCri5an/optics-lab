@@ -52,7 +52,7 @@
   <p align="center"><sub><b>3D Raytracing & Detector Analysis</b>: 3D interactive ray paths, 646-material catalog browser, and non-sequential 2D false-color irradiance heatmap</sub></p>
 </td>
 <td width="50%" valign="top">
-  <img src="docs/images/screenshot-photoreal-montecarlo.png" alt="OpticsLab 3D Photorealistic Lens Assembly Render, Damped Least Squares Optimizer, and Monte Carlo Tolerancing Yield Histogram" width="100%">
+  <img src="docs/images/lens.png" alt="OpticsLab 3D Photorealistic Lens Assembly Render, Damped Least Squares Optimizer, and Monte Carlo Tolerancing Yield Histogram" width="100%">
   <p align="center"><sub><b>Photorealistic Shading & Statistical Tolerancing</b>: 3D refractive path-traced lens assembly (SPP 128), live DLS optimizer, and Monte Carlo tolerance yield distribution</sub></p>
 </td>
 </tr>
