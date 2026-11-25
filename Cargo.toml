@@ -48,7 +48,7 @@ panic        = "warn"
 # ---------------------------------------------------------------------------
 [workspace.dependencies]
 # Math
-nalgebra   = { version = "0.33", features = ["serde-serialize"] }
+nalgebra   = { version = "0.34", features = ["serde-serialize"] }
 
 # Serialisation
 serde      = { version = "1", features = ["derive"] }
@@ -64,7 +64,7 @@ clap       = { version = "4", features = ["derive"] }
 egui        = "0.32"
 eframe      = "0.32.3"
 egui_extras = { version = "0.32.3", features = ["svg"] }
-rfd         = "0.15"
+rfd         = "0.17"
 
 # GPU / rendering
 wgpu       = { version = "25", features = ["fragile-send-sync-non-atomic-wasm"] }      # Locked to match eframe 0.32.3 (egui-wgpu 0.32.3 → wgpu 25.0.2)
